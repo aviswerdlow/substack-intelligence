@@ -1,0 +1,5 @@
+{
+  "dir": "apps/email/emails",
+  "port": 3001,
+  "hostname": "localhost"
+}

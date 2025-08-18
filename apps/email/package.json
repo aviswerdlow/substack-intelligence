@@ -1,0 +1,27 @@
+{
+  "name": "@substack-intelligence/email",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "dev": "react-email dev",
+    "export": "react-email export"
+  },
+  "dependencies": {
+    "@react-email/components": "^0.5.0",
+    "@react-email/render": "^1.2.0",
+    "@react-email/tailwind": "^1.2.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@substack-intelligence/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "react-email": "^4.2.8",
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "typescript": "^5.2.2"
+  }
+}

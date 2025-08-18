@@ -1,0 +1,23 @@
+{
+  "name": "@substack-intelligence/ai",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.9.1",
+    "@upstash/redis": "^1.25.1",
+    "@upstash/ratelimit": "^0.4.4",
+    "openai": "^4.20.1",
+    "zod": "^3.22.4",
+    "@substack-intelligence/shared": "workspace:*",
+    "@substack-intelligence/database": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  }
+}

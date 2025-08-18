@@ -1,0 +1,55 @@
+# ZAP Security Scan Rules
+# Format: RULE_ID	THRESHOLD	ACTION
+10020	MEDIUM	IGNORE	# Missing Anti-clickjacking Header (handled by middleware)
+10021	LOW	IGNORE	# X-Content-Type-Options Header Missing (handled by middleware)
+10023	MEDIUM	IGNORE	# Information Disclosure - Debug Error Messages (handled in production)
+10024	MEDIUM	IGNORE	# Information Disclosure - Sensitive Information in URL (expected for API)
+10025	MEDIUM	IGNORE	# Information Disclosure - Sensitive Information in HTTP Referrer Header
+10026	MEDIUM	IGNORE	# HTTP Parameter Override
+10027	MEDIUM	IGNORE	# Information Disclosure - Suspicious Comments
+10028	MEDIUM	IGNORE	# Open Redirect
+10029	MEDIUM	IGNORE	# Cookie Poisoning
+10030	MEDIUM	IGNORE	# User Controllable Charset
+10031	MEDIUM	IGNORE	# User Controllable HTML Element Attribute (Potential XSS)
+10032	MEDIUM	IGNORE	# Viewstate Scanner
+10033	MEDIUM	IGNORE	# Directory Browsing
+10034	MEDIUM	IGNORE	# Heartbleed OpenSSL Vulnerability
+10035	LOW	IGNORE	# Strict-Transport-Security Header Not Set (handled by Vercel)
+10036	MEDIUM	IGNORE	# Server Leaks Version Information via "Server" HTTP Response Header Field
+10037	MEDIUM	IGNORE	# Server Leaks Information via "X-Powered-By" HTTP Response Header Field(s)
+10038	MEDIUM	IGNORE	# Content Security Policy (CSP) Header Not Set (handled by middleware)
+10039	LOW	IGNORE	# X-Frame-Options Header Not Set (handled by middleware)
+10040	LOW	IGNORE	# Secure Pages Include Mixed Content
+10041	LOW	IGNORE	# HTTP to HTTPS Insecure Transition in Form Post
+10042	MEDIUM	IGNORE	# HTTPS to HTTP Insecure Transition in Form Post
+10043	MEDIUM	IGNORE	# User Controllable JavaScript Event (XSS)
+10044	MEDIUM	IGNORE	# Big Redirect Detected (Potential Sensitive Information Leak)
+10045	LOW	IGNORE	# Source Code Disclosure - /WEB-INF folder
+10046	MEDIUM	IGNORE	# Source Code Disclosure - Git
+10047	LOW	IGNORE	# Source Code Disclosure - SVN
+10048	MEDIUM	IGNORE	# Remote Code Execution - Shell Shock
+10049	HIGH	FAIL	# Content Cacheability
+10050	LOW	IGNORE	# Retrieved from Cache
+10051	LOW	IGNORE	# Relative Path Confusion
+10052	LOW	IGNORE	# X-ChromeLogger-Data (XCOLD) Header Information Leak
+10053	LOW	IGNORE	# Apache Range Header DoS (CVE-2011-3192)
+10054	LOW	IGNORE	# Cookie Without SameSite Attribute
+10055	LOW	IGNORE	# CSP Scanner
+10056	MEDIUM	IGNORE	# X-Debug-Token Information Leak
+10057	LOW	IGNORE	# Username Hash Found
+10058	MEDIUM	IGNORE	# GET for POST
+10059	LOW	IGNORE	# Source Code Disclosure - PHP
+10060	LOW	IGNORE	# Source Code Disclosure - ASP
+10061	MEDIUM	IGNORE	# XSLT Injection
+10062	LOW	IGNORE	# PII Disclosure
+10063	MEDIUM	IGNORE	# Permissions Policy Header Not Set
+10095	LOW	IGNORE	# Backup File Disclosure
+10096	HIGH	FAIL	# Timestamp Disclosure
+10097	LOW	IGNORE	# Hash Disclosure
+10098	LOW	IGNORE	# Cross-Domain Misconfiguration
+10099	LOW	IGNORE	# Source Code Disclosure
+10101	HIGH	FAIL	# Unexpected Content-Type was returned
+10102	HIGH	FAIL	# JSON Hijacking (Prototype Pollution)
+10103	HIGH	FAIL	# Weak Authentication Method
+10104	HIGH	FAIL	# User Agent Fuzzer
+10105	LOW	IGNORE	# Weak HTTP Authentication over an Unsecured Connection

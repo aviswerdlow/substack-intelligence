@@ -1,0 +1,100 @@
+{
+  "name": "substack-intelligence",
+  "version": "1.0.0",
+  "description": "AI-powered venture intelligence platform for consumer VC deal sourcing",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "start": "turbo start",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "turbo test:e2e",
+    "clean": "turbo clean",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "env:generate": "node scripts/setup-environment.js generate",
+    "env:validate": "node scripts/setup-environment.js validate",
+    "env:secrets": "node scripts/setup-environment.js secrets",
+    "env:dev": "node scripts/setup-environment.js generate development .env.local",
+    "env:staging": "node scripts/setup-environment.js generate staging .env.staging",
+    "env:prod": "node scripts/setup-environment.js generate production .env.production",
+    "db:generate": "supabase gen types typescript --project-id $NEXT_PUBLIC_SUPABASE_PROJECT_ID --schema public > packages/database/types/supabase.ts",
+    "db:reset": "supabase db reset",
+    "db:migrate": "supabase db push",
+    "db:seed": "supabase db seed",
+    "security:audit": "npm audit --audit-level moderate && pnpm audit --audit-level moderate",
+    "security:check": "node scripts/security-check.js",
+    "deploy": "vercel",
+    "deploy:prod": "vercel --prod",
+    "postinstall": "turbo build --filter=@substack-intelligence/database",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "@turbo/gen": "^1.10.12",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.6.1",
+    "eslint": "^8.0.0",
+    "husky": "^8.0.0",
+    "lint-staged": "^13.0.0",
+    "prettier": "^3.0.0",
+    "turbo": "^1.10.12",
+    "typescript": "^5.2.2",
+    "vitest": "^1.6.1"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged",
+      "pre-push": "npm run security:audit"
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.6",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/substack-intelligence.git"
+  },
+  "keywords": [
+    "venture-capital",
+    "intelligence",
+    "ai",
+    "substack",
+    "startups",
+    "nextjs",
+    "typescript"
+  ],
+  "author": "Substack Intelligence Team",
+  "license": "PROPRIETARY",
+  "bugs": {
+    "url": "https://github.com/your-org/substack-intelligence/issues"
+  },
+  "homepage": "https://substack-intelligence.vercel.app",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.59.0",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "googleapis": "^126.0.1",
+    "open": "^10.2.0",
+    "puppeteer": "^21.5.2"
+  }
+}
