@@ -2,7 +2,13 @@
 
 const express = require('express');
 const { google } = require('googleapis');
-const open = require('open');
+let open;
+try {
+  open = require('open');
+} catch (e) {
+  console.log('Note: open module not available, please open URL manually');
+  open = () => Promise.resolve();
+}
 
 // Gmail OAuth Setup Helper
 // This script helps you get a refresh token for server-side Gmail access
@@ -141,9 +147,11 @@ server = app.listen(8080, () => {
   console.log('');
   
   // Open browser automatically
-  open(authUrl).catch(() => {
-    console.log('⚠️  Could not open browser automatically. Please open the URL manually.');
-  });
+  if (typeof open === 'function') {
+    open(authUrl).catch(() => {
+      console.log('⚠️  Could not open browser automatically. Please open the URL manually.');
+    });
+  }
 });
 
 // Handle process termination

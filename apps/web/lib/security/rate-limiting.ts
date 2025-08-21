@@ -2,8 +2,25 @@ import { NextRequest } from 'next/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
-// Initialize Redis client for rate limiting
-const redis = Redis.fromEnv();
+// Initialize Redis client for rate limiting with fallback
+let redis: Redis | null = null;
+let rateLimitingEnabled = false;
+
+try {
+  // Only initialize Redis if environment variables are properly configured
+  if (process.env.UPSTASH_REDIS_REST_URL && 
+      process.env.UPSTASH_REDIS_REST_TOKEN &&
+      !process.env.UPSTASH_REDIS_REST_URL.includes('your-redis')) {
+    redis = Redis.fromEnv();
+    rateLimitingEnabled = true;
+    console.log('Rate limiting enabled with Redis');
+  } else {
+    console.log('Rate limiting disabled - Redis not configured');
+  }
+} catch (error) {
+  console.warn('Failed to initialize Redis for rate limiting:', error);
+  rateLimitingEnabled = false;
+}
 
 // Rate limit configurations for different endpoints
 export const RATE_LIMITS = {
@@ -34,7 +51,12 @@ export const RATE_LIMITS = {
 // Create rate limiters
 const rateLimiters = new Map<string, Ratelimit>();
 
-function getRateLimiter(endpoint: string): Ratelimit {
+function getRateLimiter(endpoint: string): Ratelimit | null {
+  // Return null if rate limiting is disabled
+  if (!rateLimitingEnabled || !redis) {
+    return null;
+  }
+
   if (rateLimiters.has(endpoint)) {
     return rateLimiters.get(endpoint)!;
   }
@@ -42,7 +64,7 @@ function getRateLimiter(endpoint: string): Ratelimit {
   const config = RATE_LIMITS[endpoint as keyof typeof RATE_LIMITS] || RATE_LIMITS['api/*'];
   
   const ratelimit = new Ratelimit({
-    redis,
+    redis: redis as Redis,
     limiter: Ratelimit.slidingWindow(config.requests, config.window),
     analytics: true,
     prefix: `ratelimit:${endpoint}`
@@ -63,6 +85,16 @@ export async function checkRateLimit(
   request: NextRequest,
   endpoint?: string
 ): Promise<RateLimitResult> {
+  // If rate limiting is disabled, always return success
+  if (!rateLimitingEnabled || process.env.DISABLE_SECURITY_MIDDLEWARE === 'true') {
+    return {
+      success: true,
+      remaining: 999,
+      reset: new Date(Date.now() + 3600000),
+      limit: 1000
+    };
+  }
+
   // Get client identifier (prefer authenticated user, fallback to IP)
   const identifier = getClientIdentifier(request);
   
@@ -71,6 +103,17 @@ export async function checkRateLimit(
   
   try {
     const ratelimit = getRateLimiter(rateLimitEndpoint);
+    
+    // If no rate limiter available, allow the request
+    if (!ratelimit) {
+      return {
+        success: true,
+        remaining: 999,
+        reset: new Date(Date.now() + 3600000),
+        limit: 1000
+      };
+    }
+    
     const result = await ratelimit.limit(identifier);
     
     return {

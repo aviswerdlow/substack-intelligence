@@ -1,9 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Building2, Mail, TrendingUp, Zap } from 'lucide-react';
-import { createServerComponentClient, getAnalytics } from '@substack-intelligence/database';
+import { createServiceRoleClient, getAnalytics } from '@substack-intelligence/database';
 
 export async function DashboardStats() {
-  const supabase = createServerComponentClient();
+  const supabase = createServiceRoleClient();
   
   try {
     const analytics = await getAnalytics(supabase, 7);

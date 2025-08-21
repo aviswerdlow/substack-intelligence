@@ -3,6 +3,10 @@ import { auth } from '@clerk/nextjs';
 import { createServerComponentClient, getCompanies } from '@substack-intelligence/database';
 import { z } from 'zod';
 
+// Disable Next.js caching for this route
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const GetCompaniesSchema = z.object({
   limit: z.string().optional().transform(val => val ? parseInt(val) : 20),
   offset: z.string().optional().transform(val => val ? parseInt(val) : 0),

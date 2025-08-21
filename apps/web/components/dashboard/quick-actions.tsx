@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -9,18 +10,26 @@ import {
   FileText, 
   Settings, 
   Database,
-  Mail
+  Mail,
+  Brain
 } from 'lucide-react';
 
 export function QuickActions() {
   const [isTriggering, setIsTriggering] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const router = useRouter();
   const { toast } = useToast();
 
   const triggerPipeline = async () => {
     setIsTriggering(true);
     try {
-      const response = await fetch('/api/trigger/intelligence', {
-        method: 'POST'
+      // First try the test Gmail endpoint for development
+      // Add timestamp to bypass cache
+      const response = await fetch(`/api/test/gmail?_t=${Date.now()}`, {
+        method: 'POST',
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
       });
       
       const data = await response.json();
@@ -28,10 +37,26 @@ export function QuickActions() {
       if (data.success) {
         toast({
           title: 'Pipeline Triggered',
-          description: 'Intelligence processing has been started manually.',
+          description: `Successfully fetched ${data.data.emailsProcessed} emails from Gmail.`,
         });
+        // Refresh the router to show new data
+        router.refresh();
+        setTimeout(() => router.refresh(), 1500);
       } else {
-        throw new Error(data.error || 'Failed to trigger pipeline');
+        // Fallback to original trigger endpoint
+        const fallbackResponse = await fetch('/api/trigger/intelligence', {
+          method: 'POST'
+        });
+        const fallbackData = await fallbackResponse.json();
+        
+        if (fallbackData.success) {
+          toast({
+            title: 'Pipeline Triggered',
+            description: 'Intelligence processing has been started manually.',
+          });
+        } else {
+          throw new Error(fallbackData.error || 'Failed to trigger pipeline');
+        }
       }
     } catch (error) {
       toast({
@@ -92,13 +117,54 @@ export function QuickActions() {
     }
   };
 
+  const extractCompanies = async () => {
+    setIsExtracting(true);
+    try {
+      const response = await fetch(`/api/emails/extract?_t=${Date.now()}`, {
+        method: 'POST',
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        toast({
+          title: 'Extraction Complete',
+          description: `Extracted ${data.data.companiesExtracted} companies from ${data.data.emailsProcessed} emails.`,
+        });
+        // Refresh the router to show new companies
+        router.refresh();
+        setTimeout(() => router.refresh(), 1500);
+      } else {
+        throw new Error(data.error || 'Extraction failed');
+      }
+    } catch (error) {
+      toast({
+        title: 'Extraction Failed',
+        description: error instanceof Error ? error.message : 'Failed to extract companies',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
   const actions = [
     {
       title: 'Trigger Pipeline',
-      description: 'Run intelligence extraction manually',
-      icon: Play,
+      description: 'Fetch emails from Gmail',
+      icon: Mail,
       action: triggerPipeline,
       loading: isTriggering,
+      variant: 'default' as const
+    },
+    {
+      title: 'Extract Companies',
+      description: 'Run AI extraction on emails',
+      icon: Brain,
+      action: extractCompanies,
+      loading: isExtracting,
       variant: 'default' as const
     },
     {

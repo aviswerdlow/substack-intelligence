@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ClaudeExtractor } from '@substack-intelligence/ai';
 import { z } from 'zod';
 
+// Disable Next.js caching for this route
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const TestExtractionSchema = z.object({
   content: z.string().min(1),
   newsletterName: z.string().min(1)

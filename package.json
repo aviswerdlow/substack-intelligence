@@ -91,10 +91,12 @@
   "homepage": "https://substack-intelligence.vercel.app",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.59.0",
+    "@supabase/supabase-js": "^2.38.4",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "googleapis": "^126.0.1",
     "open": "^10.2.0",
-    "puppeteer": "^21.5.2"
+    "puppeteer": "^21.5.2",
+    "tailwindcss-animate": "^1.0.7"
   }
 }

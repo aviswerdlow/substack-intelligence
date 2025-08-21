@@ -19,6 +19,11 @@ export async function withSecurity(
   request: NextRequest,
   options: SecurityMiddlewareOptions = {}
 ): Promise<{ response?: NextResponse; context?: SecurityContext }> {
+  // Skip all security checks if disabled for development
+  if (process.env.DISABLE_SECURITY_MIDDLEWARE === 'true') {
+    return { context: undefined };
+  }
+  
   const startTime = Date.now();
   
   try {

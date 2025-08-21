@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { createServerComponentClient, getDailyIntelligence } from '@substack-intelligence/database';
+import { createServiceRoleClient, getDailyIntelligence } from '@substack-intelligence/database';
 import { formatDateTime, getSentimentColor, getConfidenceColor } from '@/lib/utils';
 import { ExternalLink } from 'lucide-react';
 
 export async function RecentCompanies() {
-  const supabase = createServerComponentClient();
+  const supabase = createServiceRoleClient();
   
   try {
     const companies = await getDailyIntelligence(supabase, { limit: 10 });

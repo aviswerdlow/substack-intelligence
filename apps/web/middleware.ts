@@ -1,7 +1,18 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { authMiddleware } from '@clerk/nextjs';
 import { NextRequest, NextResponse } from 'next/server';
 import { withSecurity } from './lib/security/middleware';
-import { getSecurityHeaders, generateNonce } from './lib/security/auth';
+import { getSecurityHeaders } from './lib/security/auth';
+
+// Helper function to create route matchers
+const createRouteMatcher = (patterns: string[]) => {
+  return (req: NextRequest) => {
+    const pathname = req.nextUrl.pathname;
+    return patterns.some(pattern => {
+      const regex = new RegExp(`^${pattern.replace('(.*)', '.*')}$`);
+      return regex.test(pathname);
+    });
+  };
+};
 
 // Define route matchers
 const isProtectedRoute = createRouteMatcher([
@@ -36,27 +47,66 @@ const isSensitiveRoute = createRouteMatcher([
   '/dashboard/admin(.*)'
 ]);
 
-export default clerkMiddleware(async (auth, request: NextRequest) => {
-  const { pathname } = new URL(request.url);
-  
-  // Skip middleware for static files and certain paths
-  if (
-    pathname.startsWith('/_next/') ||
-    pathname.startsWith('/favicon.') ||
-    pathname.startsWith('/static/') ||
-    pathname.includes('.')
-  ) {
-    return NextResponse.next();
-  }
+// Generate a nonce for CSP
+const generateNonce = () => {
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return Buffer.from(array).toString('base64');
+};
 
-  try {
-    // Generate nonce for CSP
-    const nonce = generateNonce();
-    
-    // Apply Clerk authentication first for protected routes
-    if (isProtectedRoute(request)) {
-      auth().protect();
+export default authMiddleware({
+  publicRoutes: [
+    '/',
+    '/dashboard(.*)',
+    '/emails(.*)',
+    '/reports(.*)',
+    '/analytics(.*)',
+    '/settings(.*)',
+    '/intelligence(.*)',
+    '/api/monitoring/health',
+    '/api/health',
+    '/api/test/(.*)',
+    '/api/auth/webhook',
+    '/api/inngest',
+    '/api/webhooks/(.*)',
+    '/sign-in(.*)',
+    '/sign-up(.*)'
+  ],
+  
+  beforeAuth: (req) => {
+    // Skip middleware for static files
+    const { pathname } = req.nextUrl;
+    if (
+      pathname.startsWith('/_next/') ||
+      pathname.startsWith('/favicon.') ||
+      pathname.startsWith('/static/') ||
+      pathname.includes('.')
+    ) {
+      return NextResponse.next();
     }
+  },
+  
+  afterAuth: async (auth, request: NextRequest) => {
+    const { pathname } = new URL(request.url);
+    
+    // Skip security middleware entirely in development if disabled
+    if (process.env.DISABLE_SECURITY_MIDDLEWARE === 'true' && process.env.NODE_ENV === 'development') {
+      const response = NextResponse.next();
+      response.headers.set('X-Security-Disabled', 'true');
+      return response;
+    }
+    
+    try {
+      // Generate nonce for CSP
+      const nonce = generateNonce();
+      
+      // Check if user is authenticated for protected routes
+      if (isProtectedRoute(request) && !auth.userId) {
+        // Redirect to sign-in
+        const signInUrl = new URL('/sign-in', request.url);
+        signInUrl.searchParams.set('redirect_url', request.url);
+        return NextResponse.redirect(signInUrl);
+      }
 
     // Apply security middleware
     const securityOptions = {
@@ -138,6 +188,7 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
         }
       }
     );
+  }
   }
 });
 

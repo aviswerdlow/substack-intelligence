@@ -5,7 +5,14 @@ class AxiomLogger {
   private isEnabled: boolean = false;
 
   constructor() {
-    if (process.env.AXIOM_TOKEN && process.env.AXIOM_ORG_ID) {
+    // Skip Axiom initialization in test environment
+    const isTestEnv = process.env.NODE_ENV === 'test' || process.env.PLAYWRIGHT_TEST === 'true';
+    
+    if (isTestEnv) {
+      console.log('Axiom disabled in test environment');
+      this.isEnabled = false;
+    } else if (process.env.AXIOM_TOKEN && process.env.AXIOM_ORG_ID && 
+               process.env.AXIOM_TOKEN !== 'xaat-your-axiom-token') {
       this.axiom = new Axiom({
         token: process.env.AXIOM_TOKEN,
         orgId: process.env.AXIOM_ORG_ID,
@@ -93,6 +100,22 @@ class AxiomLogger {
       ...data,
       component: 'supabase'
     });
+  }
+
+  // Security Events
+  async logSecurityEvent(event: string, request?: any, data: Record<string, any> = {}) {
+    const securityData = {
+      ...data,
+      component: 'security-middleware'
+    };
+    
+    if (request) {
+      securityData.method = request.method;
+      securityData.path = request.url;
+      securityData.ip = request.headers?.get?.('x-forwarded-for') || request.ip;
+    }
+    
+    await this.log('security', event, securityData);
   }
 
   // Report Generation Events

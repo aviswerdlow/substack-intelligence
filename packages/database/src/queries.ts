@@ -144,16 +144,25 @@ export const getRecentEmails = cache(async (
 });
 
 export const getTopNewsletters = cache(async (supabase: SupabaseClient) => {
-  const { data, error } = await supabase
+  // Supabase JS client doesn't support GROUP BY directly, so we'll fetch and group in JS
+  const { data: emails, error } = await supabase
     .from('emails')
-    .select('newsletter_name, count(*)')
+    .select('newsletter_name')
     .gte('received_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-    .group('newsletter_name')
-    .order('count', { ascending: false })
-    .limit(10);
+    .limit(100);
 
   if (error) throw error;
-  return data;
+  
+  // Manual grouping in JavaScript
+  const grouped = emails?.reduce((acc: any, email: any) => {
+    acc[email.newsletter_name] = (acc[email.newsletter_name] || 0) + 1;
+    return acc;
+  }, {});
+  
+  return Object.entries(grouped || {})
+    .map(([newsletter_name, count]) => ({ newsletter_name, count }))
+    .sort((a: any, b: any) => b.count - a.count)
+    .slice(0, 10);
 });
 
 export const searchCompanies = async (

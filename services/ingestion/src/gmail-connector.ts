@@ -1,13 +1,12 @@
 import { google, gmail_v1 } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import { z } from 'zod';
 import { JSDOM } from 'jsdom';
 import pMap from 'p-map';
 import { GmailMessageSchema } from '@substack-intelligence/shared';
-import { axiomLogger } from '../../apps/web/lib/monitoring/axiom';
-import { redactSensitiveData } from '../../apps/web/lib/security/validation';
-import { burstProtection } from '../../apps/web/lib/security/rate-limiting';
+import { axiomLogger } from './utils/logging';
+import { redactSensitiveData } from './utils/validation';
+import { burstProtection } from './utils/rate-limiting';
 
 interface ProcessedEmail {
   id: string;
@@ -27,7 +26,7 @@ export class GmailConnector {
   
   constructor() {
     // Set up OAuth2 client
-    const auth = new OAuth2Client(
+    const auth = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID!,
       process.env.GOOGLE_CLIENT_SECRET!
     );
@@ -41,7 +40,7 @@ export class GmailConnector {
     this.supabase = createServiceRoleClient();
   }
 
-  async fetchDailySubstacks(): Promise<ProcessedEmail[]> {
+  async fetchDailySubstacks(daysBack: number = 30): Promise<ProcessedEmail[]> {
     const startTime = Date.now();
     
     try {
@@ -57,24 +56,25 @@ export class GmailConnector {
         throw new Error('Gmail API rate limit exceeded for daily fetch');
       }
       
-      console.log('Starting daily Substack email fetch...');
+      console.log(`Starting Substack email fetch for the past ${daysBack} days...`);
       await axiomLogger.logEmailEvent('fetch_started', {
-        operation: 'fetchDailySubstacks'
+        operation: 'fetchDailySubstacks',
+        daysBack
       });
       
-      // Calculate date range for yesterday
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      yesterday.setHours(0, 0, 0, 0);
+      // Calculate date range for the past N days
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - daysBack);
+      startDate.setHours(0, 0, 0, 0);
       
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const endDate = new Date();
+      endDate.setHours(23, 59, 59, 999);
       
       // Build Gmail search query
       const query = [
         'from:substack.com',
-        `after:${this.formatGmailDate(yesterday)}`,
-        `before:${this.formatGmailDate(today)}`,
+        `after:${this.formatGmailDate(startDate)}`,
+        `before:${this.formatGmailDate(endDate)}`,
         '-in:spam',
         '-in:trash'
       ].join(' ');
@@ -88,7 +88,9 @@ export class GmailConnector {
       await axiomLogger.logEmailEvent('messages_found', {
         count: messages.length,
         query,
-        date: yesterday.toISOString().split('T')[0]
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0],
+        daysBack
       });
 
       if (messages.length === 0) {
@@ -155,7 +157,7 @@ export class GmailConnector {
           messages.push(...response.data.messages);
         }
         
-        nextPageToken = response.data.nextPageToken;
+        nextPageToken = response.data.nextPageToken || undefined;
         pageCount++;
         
         await axiomLogger.logEmailEvent('gmail_api_page_fetched', {

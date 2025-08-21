@@ -1,27 +1,16 @@
 import { Suspense } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Activity, Building2, Mail, TrendingUp, Zap } from 'lucide-react';
 import { DashboardStats } from '@/components/dashboard/stats';
 import { RecentCompanies } from '@/components/dashboard/recent-companies';
 import { QuickActions } from '@/components/dashboard/quick-actions';
+import { DashboardHeader } from '@/components/dashboard/header';
 
 export default function DashboardPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Daily venture intelligence from your curated Substack sources
-          </p>
-        </div>
-        <Button className="gap-2">
-          <Zap className="h-4 w-4" />
-          Trigger Manual Sync
-        </Button>
-      </div>
+      <DashboardHeader />
 
       {/* Stats Cards */}
       <Suspense fallback={<StatsLoading />}>
