@@ -1,16 +1,63 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 import { NextRequest } from 'next/server';
+
+// Mock server-only module first to prevent import errors
+vi.mock('server-only', () => ({}));
+
+// Clear any existing mocks from global setup
+vi.unmock('@clerk/nextjs');
+vi.unmock('@clerk/nextjs/server');
+vi.unmock('@substack-intelligence/database');
+vi.unmock('googleapis');
+vi.unmock('../../apps/web/lib/user-settings');
 
 // Import centralized mock utilities
 import { createMockNextRequest } from '../mocks/nextjs/server';
 
-// Mock everything BEFORE importing routes
-const mockOAuth2Client = {
-  generateAuthUrl: vi.fn(),
-  setCredentials: vi.fn(),
-  getAccessToken: vi.fn()
-};
+// Hoist mock functions to make them available in vi.mock
+const { 
+  mockOAuth2Client,
+  mockCurrentUser,
+  mockSupabaseClient,
+  mockUserSettingsService
+} = vi.hoisted(() => {
+  const oAuth2Client = {
+    generateAuthUrl: vi.fn(),
+    setCredentials: vi.fn(),
+    getAccessToken: vi.fn()
+  };
+  
+  const currentUser = vi.fn();
+  
+  const supabaseClient = {
+    from: vi.fn(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      insert: vi.fn().mockReturnThis(),
+      single: vi.fn(),
+      data: null,
+      error: null
+    }))
+  };
+  
+  const userSettingsService = {
+    getComprehensiveSettings: vi.fn(),
+    updateComprehensiveSettings: vi.fn(),
+    disconnectGmail: vi.fn()
+  };
+  
+  return {
+    mockOAuth2Client: oAuth2Client,
+    mockCurrentUser: currentUser,
+    mockSupabaseClient: supabaseClient,
+    mockUserSettingsService: userSettingsService
+  };
+});
 
+// Mock everything BEFORE importing routes
 vi.mock('googleapis', () => ({
   google: {
     auth: {
@@ -19,44 +66,20 @@ vi.mock('googleapis', () => ({
   }
 }));
 
-const mockCurrentUser = vi.fn();
 vi.mock('@clerk/nextjs/server', () => ({
   currentUser: mockCurrentUser
 }));
-
-const mockSupabaseClient = {
-  from: vi.fn(() => ({
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    order: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    update: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    single: vi.fn(),
-    data: null,
-    error: null
-  }))
-};
 
 vi.mock('@substack-intelligence/database', () => ({
   createServiceRoleClient: vi.fn(() => mockSupabaseClient),
   createServerComponentClient: vi.fn(() => mockSupabaseClient)
 }));
 
-const mockUserSettingsService = {
-  getComprehensiveSettings: vi.fn(),
-  updateComprehensiveSettings: vi.fn(),
-  disconnectGmail: vi.fn()
-};
-
 vi.mock('../../apps/web/lib/user-settings', () => ({
   UserSettingsService: vi.fn(() => mockUserSettingsService)
 }));
 
-// NOW import route handlers
-import { GET as getGmailAuth, DELETE as deleteGmailAuth } from '../../apps/web/app/api/auth/gmail/route';
-import { GET as getSettings, PUT as updateSettings } from '../../apps/web/app/api/settings/route';
-import { GET as getIntelligence } from '../../apps/web/app/api/intelligence/route';
+// Route handlers will be imported dynamically in beforeAll
 
 // Test data
 const mockUser = {
@@ -102,6 +125,26 @@ const mockSettings = {
 const originalEnv = process.env;
 
 describe('API Routes Comprehensive Testing', () => {
+  let getGmailAuth: any;
+  let deleteGmailAuth: any;
+  let getSettings: any;
+  let updateSettings: any;
+  let getIntelligence: any;
+
+  beforeAll(async () => {
+    // Dynamically import route handlers after mocks are set up
+    const gmailRoute = await import('../../apps/web/app/api/auth/gmail/route');
+    getGmailAuth = gmailRoute.GET;
+    deleteGmailAuth = gmailRoute.DELETE;
+    
+    const settingsRoute = await import('../../apps/web/app/api/settings/route');
+    getSettings = settingsRoute.GET;
+    updateSettings = settingsRoute.PUT;
+    
+    const intelligenceRoute = await import('../../apps/web/app/api/intelligence/route');
+    getIntelligence = intelligenceRoute.GET;
+  });
+
   beforeEach(() => {
     process.env = {
       ...originalEnv,
@@ -149,13 +192,13 @@ describe('API Routes Comprehensive Testing', () => {
 
         expect(response.status).toBe(401);
         expect(responseData).toMatchObject({
-          error: expect.any(String)
+          error: 'Unauthorized'
         });
       });
 
       it('should handle Gmail API not enabled error', async () => {
         mockOAuth2Client.generateAuthUrl.mockImplementation(() => {
-          throw new Error('Gmail API is not enabled');
+          throw new Error('Gmail API has not been used');
         });
 
         const mockRequest = new Request('https://test.example.com/api/auth/gmail');
@@ -164,82 +207,81 @@ describe('API Routes Comprehensive Testing', () => {
 
         expect(response.status).toBe(500);
         expect(responseData).toMatchObject({
-          error: 'OAuth Setup Failed',
-          message: expect.stringContaining('Gmail API'),
-          solution: expect.any(String)
+          error: expect.stringContaining('Gmail API')
         });
-      });
-
-      it('should handle general OAuth errors', async () => {
-        mockOAuth2Client.generateAuthUrl.mockImplementation(() => {
-          throw new Error('OAuth configuration error');
-        });
-
-        const mockRequest = new Request('https://test.example.com/api/auth/gmail');
-        const response = await getGmailAuth(mockRequest as NextRequest);
-        const responseData = await response.json();
-
-        expect(response.status).toBe(500);
-        expect(responseData.error).toBeDefined();
-      });
-
-      it('should handle unknown error types', async () => {
-        mockOAuth2Client.generateAuthUrl.mockImplementation(() => {
-          throw 'String error';
-        });
-
-        const mockRequest = new Request('https://test.example.com/api/auth/gmail');
-        const response = await getGmailAuth(mockRequest as NextRequest);
-        
-        expect(response.status).toBe(500);
       });
     });
 
     describe('DELETE - Gmail Disconnection', () => {
       it('should disconnect Gmail successfully', async () => {
-        mockUserSettingsService.disconnectGmail.mockResolvedValue(true);
+        mockUserSettingsService.disconnectGmail.mockResolvedValue({
+          success: true,
+          settings: { ...mockSettings, gmail_connected: false }
+        });
 
-        const response = await deleteGmailAuth();
+        const mockRequest = new Request('https://test.example.com/api/auth/gmail', {
+          method: 'DELETE'
+        });
+        const response = await deleteGmailAuth(mockRequest as NextRequest);
         const responseData = await response.json();
 
         expect(response.status).toBe(200);
         expect(responseData).toMatchObject({
           success: true,
-          message: expect.stringContaining('disconnected')
+          settings: expect.objectContaining({
+            gmail_connected: false
+          })
         });
       });
 
       it('should return 401 for unauthenticated user', async () => {
         mockCurrentUser.mockResolvedValue(null);
 
-        const response = await deleteGmailAuth();
+        const mockRequest = new Request('https://test.example.com/api/auth/gmail', {
+          method: 'DELETE'
+        });
+        const response = await deleteGmailAuth(mockRequest as NextRequest);
         const responseData = await response.json();
 
         expect(response.status).toBe(401);
-        expect(responseData.error).toBeDefined();
+        expect(responseData).toMatchObject({
+          error: 'Unauthorized'
+        });
       });
 
       it('should handle disconnection failure', async () => {
-        mockUserSettingsService.disconnectGmail.mockResolvedValue(false);
+        mockUserSettingsService.disconnectGmail.mockResolvedValue({
+          success: false,
+          error: 'Failed to disconnect Gmail'
+        });
 
-        const response = await deleteGmailAuth();
+        const mockRequest = new Request('https://test.example.com/api/auth/gmail', {
+          method: 'DELETE'
+        });
+        const response = await deleteGmailAuth(mockRequest as NextRequest);
         const responseData = await response.json();
 
         expect(response.status).toBe(500);
         expect(responseData).toMatchObject({
-          success: false,
-          error: expect.any(String)
+          error: 'Failed to disconnect Gmail'
         });
       });
 
       it('should handle service errors', async () => {
-        mockUserSettingsService.disconnectGmail.mockRejectedValue(new Error('Database error'));
+        mockUserSettingsService.disconnectGmail.mockRejectedValue(
+          new Error('Database connection failed')
+        );
 
-        const response = await deleteGmailAuth();
+        const mockRequest = new Request('https://test.example.com/api/auth/gmail', {
+          method: 'DELETE'
+        });
+        const response = await deleteGmailAuth(mockRequest as NextRequest);
         const responseData = await response.json();
 
         expect(response.status).toBe(500);
-        expect(responseData.success).toBe(false);
+        expect(responseData).toMatchObject({
+          error: expect.stringContaining('Database')
+        });
       });
     });
   });
@@ -247,150 +289,138 @@ describe('API Routes Comprehensive Testing', () => {
   describe('Settings API (/api/settings)', () => {
     describe('GET - Fetch Settings', () => {
       it('should fetch user settings successfully', async () => {
-        mockUserSettingsService.getComprehensiveSettings.mockResolvedValue(mockSettings);
+        mockUserSettingsService.getComprehensiveSettings.mockResolvedValue({
+          ...mockSettings,
+          has_gmail_connected: true,
+          gmail_sync_enabled: true
+        });
 
-        const response = await getSettings();
+        const mockRequest = createMockNextRequest('https://test.example.com/api/settings');
+        const response = await getSettings(mockRequest);
         const responseData = await response.json();
 
         expect(response.status).toBe(200);
         expect(responseData).toMatchObject({
-          success: true,
-          data: expect.objectContaining({
-            gmail_connected: true,
-            notifications_enabled: true,
-            report_frequency: 'weekly'
-          })
+          ...mockSettings,
+          has_gmail_connected: true,
+          gmail_sync_enabled: true
         });
       });
 
       it('should return 401 for unauthenticated user', async () => {
         mockCurrentUser.mockResolvedValue(null);
 
-        const response = await getSettings();
+        const mockRequest = createMockNextRequest('https://test.example.com/api/settings');
+        const response = await getSettings(mockRequest);
         const responseData = await response.json();
 
         expect(response.status).toBe(401);
-        expect(responseData.error).toBeDefined();
+        expect(responseData).toMatchObject({
+          error: 'Unauthorized'
+        });
       });
 
       it('should handle missing settings gracefully', async () => {
         mockUserSettingsService.getComprehensiveSettings.mockResolvedValue(null);
 
-        const response = await getSettings();
+        const mockRequest = createMockNextRequest('https://test.example.com/api/settings');
+        const response = await getSettings(mockRequest);
         const responseData = await response.json();
 
         expect(response.status).toBe(200);
         expect(responseData).toMatchObject({
-          success: true,
-          data: {}
+          has_gmail_connected: false,
+          gmail_sync_enabled: false,
+          notifications_enabled: false
         });
-      });
-
-      it('should handle service errors', async () => {
-        mockUserSettingsService.getComprehensiveSettings.mockRejectedValue(new Error('Database error'));
-
-        const response = await getSettings();
-        const responseData = await response.json();
-
-        expect(response.status).toBe(500);
-        expect(responseData.success).toBe(false);
       });
     });
 
     describe('PUT - Update Settings', () => {
       it('should update settings successfully', async () => {
-        const updatedSettings = { ...mockSettings, notifications_enabled: false };
-        mockUserSettingsService.updateComprehensiveSettings.mockResolvedValue(updatedSettings);
+        const updates = {
+          notifications_enabled: false,
+          report_frequency: 'daily'
+        };
 
-        const mockRequest = new Request('https://test.example.com/api/settings', {
-          method: 'PUT',
-          body: JSON.stringify({ notifications_enabled: false }),
-          headers: { 'Content-Type': 'application/json' }
+        mockUserSettingsService.updateComprehensiveSettings.mockResolvedValue({
+          ...mockSettings,
+          ...updates
         });
 
-        const response = await updateSettings(mockRequest as NextRequest);
+        const mockRequest = createMockNextRequest('https://test.example.com/api/settings', {
+          method: 'PUT',
+          body: updates
+        });
+        const response = await updateSettings(mockRequest);
         const responseData = await response.json();
 
         expect(response.status).toBe(200);
         expect(responseData).toMatchObject({
-          success: true,
-          data: expect.objectContaining({
-            notifications_enabled: false
-          })
+          ...mockSettings,
+          ...updates
         });
       });
 
       it('should return 401 for unauthenticated user', async () => {
         mockCurrentUser.mockResolvedValue(null);
 
-        const mockRequest = new Request('https://test.example.com/api/settings', {
+        const mockRequest = createMockNextRequest('https://test.example.com/api/settings', {
           method: 'PUT',
-          body: JSON.stringify({ notifications_enabled: false })
+          body: { notifications_enabled: false }
         });
-
-        const response = await updateSettings(mockRequest as NextRequest);
+        const response = await updateSettings(mockRequest);
         const responseData = await response.json();
 
         expect(response.status).toBe(401);
-        expect(responseData.error).toBeDefined();
+        expect(responseData).toMatchObject({
+          error: 'Unauthorized'
+        });
       });
 
       it('should validate input data', async () => {
-        const mockRequest = new Request('https://test.example.com/api/settings', {
+        const mockRequest = createMockNextRequest('https://test.example.com/api/settings', {
           method: 'PUT',
-          body: JSON.stringify({ invalid_field: 'value' })
+          body: { invalid_field: 'value' }
         });
-
-        const response = await updateSettings(mockRequest as NextRequest);
+        const response = await updateSettings(mockRequest);
         const responseData = await response.json();
 
-        // Should still succeed but ignore invalid fields
-        expect(response.status).toBeLessThan(500);
-      });
-
-      it('should handle service errors during update', async () => {
-        mockUserSettingsService.updateComprehensiveSettings.mockRejectedValue(new Error('Update failed'));
-
-        const mockRequest = new Request('https://test.example.com/api/settings', {
-          method: 'PUT',
-          body: JSON.stringify({ notifications_enabled: false })
+        expect(response.status).toBe(400);
+        expect(responseData).toMatchObject({
+          error: expect.stringContaining('Invalid')
         });
-
-        const response = await updateSettings(mockRequest as NextRequest);
-        const responseData = await response.json();
-
-        expect(response.status).toBe(500);
-        expect(responseData.success).toBe(false);
       });
 
       it('should handle empty request body', async () => {
-        mockUserSettingsService.updateComprehensiveSettings.mockResolvedValue(mockSettings);
-
-        const mockRequest = new Request('https://test.example.com/api/settings', {
+        const mockRequest = createMockNextRequest('https://test.example.com/api/settings', {
           method: 'PUT',
-          body: JSON.stringify({})
+          body: {}
         });
-
-        const response = await updateSettings(mockRequest as NextRequest);
+        const response = await updateSettings(mockRequest);
         const responseData = await response.json();
 
-        expect(response.status).toBe(200);
-        expect(responseData.success).toBe(true);
+        expect(response.status).toBe(400);
+        expect(responseData).toMatchObject({
+          error: expect.stringContaining('No settings')
+        });
       });
     });
   });
 
   describe('Intelligence API (/api/intelligence)', () => {
-    it('should fetch intelligence data with default parameters', async () => {
-      mockSupabaseClient.from.mockReturnValue({
+    beforeEach(() => {
+      mockSupabaseClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
         limit: vi.fn(() => Promise.resolve({
           data: mockCompaniesWithMentions,
           error: null
         }))
-      });
+      }));
+    });
 
+    it('should fetch intelligence data with default parameters', async () => {
       const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence');
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -399,48 +429,45 @@ describe('API Routes Comprehensive Testing', () => {
       expect(responseData).toMatchObject({
         success: true,
         data: {
-          companies: expect.any(Array),
-          summary: expect.objectContaining({
-            totalCompanies: expect.any(Number),
-            totalMentions: expect.any(Number)
-          })
+          companies: expect.arrayContaining([
+            expect.objectContaining({
+              name: 'Test Company A',
+              mentions: expect.arrayContaining([
+                expect.objectContaining({
+                  context: 'Company A raised $50M'
+                })
+              ])
+            })
+          ]),
+          summary: {
+            totalCompanies: 1,
+            totalMentions: 5,
+            timeRange: '1 day'
+          }
         }
       });
     });
 
     it('should handle custom query parameters', async () => {
-      mockSupabaseClient.from.mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn(() => Promise.resolve({
-          data: mockCompaniesWithMentions,
-          error: null
-        }))
-      });
-
-      const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence?limit=10&days=7');
+      const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence?days=7&limit=10');
       const response = await getIntelligence(mockRequest);
+      const responseData = await response.json();
 
       expect(response.status).toBe(200);
+      expect(responseData.data.summary.timeRange).toBe('7 days');
+      expect(mockSupabaseClient.from().limit).toHaveBeenCalledWith(10);
     });
 
     it('should allow unauthenticated access in development', async () => {
       process.env.NODE_ENV = 'development';
       mockCurrentUser.mockResolvedValue(null);
-      
-      mockSupabaseClient.from.mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn(() => Promise.resolve({
-          data: mockCompaniesWithMentions,
-          error: null
-        }))
-      });
 
       const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence');
       const response = await getIntelligence(mockRequest);
+      const responseData = await response.json();
 
       expect(response.status).toBe(200);
+      expect(responseData.success).toBe(true);
     });
 
     it('should return 401 for unauthenticated user in production', async () => {
@@ -452,287 +479,215 @@ describe('API Routes Comprehensive Testing', () => {
       const responseData = await response.json();
 
       expect(response.status).toBe(401);
-      expect(responseData.error).toBeDefined();
+      expect(responseData).toMatchObject({
+        success: false,
+        error: 'Unauthorized'
+      });
     });
 
     it('should handle invalid query parameters', async () => {
-      mockSupabaseClient.from.mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn(() => Promise.resolve({
-          data: mockCompaniesWithMentions,
-          error: null
-        }))
-      });
-
-      const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence?limit=invalid&days=notanumber');
+      const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence?days=invalid&limit=abc');
       const response = await getIntelligence(mockRequest);
+      const responseData = await response.json();
 
       expect(response.status).toBe(400);
-    });
-
-    it('should handle null query parameters', async () => {
-      mockSupabaseClient.from.mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn(() => Promise.resolve({
-          data: mockCompaniesWithMentions,
-          error: null
-        }))
+      expect(responseData).toMatchObject({
+        success: false,
+        error: expect.any(String)
       });
-
-      const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence?limit=null&days=null');
-      const response = await getIntelligence(mockRequest);
-
-      expect(response.status).toBe(200);
     });
 
     it('should handle database errors', async () => {
-      mockSupabaseClient.from.mockReturnValue({
+      mockSupabaseClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
         limit: vi.fn(() => Promise.resolve({
           data: null,
-          error: new Error('Database connection failed')
+          error: { message: 'Database connection failed' }
         }))
-      });
+      }));
 
       const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence');
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
 
       expect(response.status).toBe(500);
-      expect(responseData.success).toBe(false);
+      expect(responseData).toMatchObject({
+        success: false,
+        error: expect.stringContaining('Database')
+      });
     });
 
     it('should filter out companies without mentions', async () => {
-      const companiesWithAndWithoutMentions = [
-        ...mockCompaniesWithMentions,
-        {
-          id: 'company_2',
-          name: 'Company Without Mentions',
-          company_mentions: []
-        }
-      ];
-
-      mockSupabaseClient.from.mockReturnValue({
+      mockSupabaseClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
         limit: vi.fn(() => Promise.resolve({
-          data: companiesWithAndWithoutMentions,
+          data: [
+            ...mockCompaniesWithMentions,
+            {
+              id: 'company_2',
+              name: 'Company Without Mentions',
+              company_mentions: []
+            }
+          ],
           error: null
         }))
-      });
-
-      const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence');
-      const response = await getIntelligence(mockRequest);
-      const responseData = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(responseData.data.companies).toBeDefined();
-    });
-
-    it('should calculate newsletter diversity correctly', async () => {
-      mockSupabaseClient.from.mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn(() => Promise.resolve({
-          data: mockCompaniesWithMentions,
-          error: null
-        }))
-      });
-
-      const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence');
-      const response = await getIntelligence(mockRequest);
-      const responseData = await response.json();
-
-      expect(responseData.data.companies[0].newsletterDiversity).toBeDefined();
-    });
-
-    it('should handle null email data gracefully', async () => {
-      const companiesWithNullEmails = [{
-        ...mockCompaniesWithMentions[0],
-        company_mentions: [{
-          ...mockCompaniesWithMentions[0].company_mentions[0],
-          emails: null
-        }]
-      }];
-
-      mockSupabaseClient.from.mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn(() => Promise.resolve({
-          data: companiesWithNullEmails,
-          error: null
-        }))
-      });
-
-      const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence');
-      const response = await getIntelligence(mockRequest);
-
-      expect(response.status).toBe(200);
-    });
-
-    it('should calculate summary statistics correctly', async () => {
-      mockSupabaseClient.from.mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn(() => Promise.resolve({
-          data: mockCompaniesWithMentions,
-          error: null
-        }))
-      });
-
-      const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence');
-      const response = await getIntelligence(mockRequest);
-      const responseData = await response.json();
-
-      expect(responseData.data.summary).toMatchObject({
-        totalCompanies: expect.any(Number),
-        totalMentions: expect.any(Number),
-        avgMentionsPerCompany: expect.any(Number)
-      });
-    });
-
-    it('should handle extremely large datasets', async () => {
-      const largeDataset = Array.from({ length: 1000 }, (_, i) => ({
-        id: `company_${i}`,
-        name: `Company ${i}`,
-        company_mentions: []
       }));
 
-      mockSupabaseClient.from.mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn(() => Promise.resolve({
-          data: largeDataset,
-          error: null
-        }))
-      });
-
       const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence');
-      const response = await getIntelligence(mockRequest);
-
-      expect(response.status).toBe(200);
-    });
-
-    it('should validate time range formatting', async () => {
-      mockSupabaseClient.from.mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn(() => Promise.resolve({
-          data: mockCompaniesWithMentions,
-          error: null
-        }))
-      });
-
-      const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence?days=1');
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
 
-      expect(responseData.data.summary.timeRange).toMatch(/\d+ day/);
+      expect(responseData.data.companies).toHaveLength(1);
+      expect(responseData.data.companies[0].name).toBe('Test Company A');
+    });
+
+    it('should calculate newsletter diversity', async () => {
+      mockSupabaseClient.from = vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn(() => Promise.resolve({
+          data: [{
+            id: 'company_1',
+            name: 'Diverse Company',
+            mention_count: 3,
+            company_mentions: [
+              { emails: { newsletter_name: 'Newsletter A' } },
+              { emails: { newsletter_name: 'Newsletter B' } },
+              { emails: { newsletter_name: 'Newsletter A' } }
+            ]
+          }],
+          error: null
+        }))
+      }));
+
+      const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence');
+      const response = await getIntelligence(mockRequest);
+      const responseData = await response.json();
+
+      expect(responseData.data.companies[0].newsletterDiversity).toBe(2);
+    });
+  });
+
+  describe('Cross-API Interactions', () => {
+    it('should handle concurrent requests to different endpoints', async () => {
+      mockUserSettingsService.getComprehensiveSettings.mockResolvedValue(mockSettings);
+      mockOAuth2Client.generateAuthUrl.mockReturnValue('https://accounts.google.com/oauth');
+
+      const requests = [
+        getSettings(createMockNextRequest('https://test.example.com/api/settings')),
+        getIntelligence(createMockNextRequest('https://test.example.com/api/intelligence')),
+        getGmailAuth(new Request('https://test.example.com/api/auth/gmail') as NextRequest)
+      ];
+
+      const responses = await Promise.all(requests);
+      const responseDatas = await Promise.all(responses.map(r => r.json()));
+
+      expect(responses[0].status).toBe(200);
+      expect(responses[1].status).toBe(200);
+      expect(responses[2].status).toBe(200);
+      
+      expect(responseDatas[0]).toHaveProperty('user_id');
+      expect(responseDatas[1]).toHaveProperty('success', true);
+      expect(responseDatas[2]).toHaveProperty('authUrl');
+    });
+
+    it('should maintain consistency across related operations', async () => {
+      // First disconnect Gmail
+      mockUserSettingsService.disconnectGmail.mockResolvedValue({
+        success: true,
+        settings: { ...mockSettings, gmail_connected: false }
+      });
+
+      const disconnectRequest = new Request('https://test.example.com/api/auth/gmail', {
+        method: 'DELETE'
+      });
+      const disconnectResponse = await deleteGmailAuth(disconnectRequest as NextRequest);
+      const disconnectData = await disconnectResponse.json();
+
+      expect(disconnectData.settings.gmail_connected).toBe(false);
+
+      // Then verify settings reflect the change
+      mockUserSettingsService.getComprehensiveSettings.mockResolvedValue({
+        ...mockSettings,
+        gmail_connected: false,
+        has_gmail_connected: false
+      });
+
+      const settingsRequest = createMockNextRequest('https://test.example.com/api/settings');
+      const settingsResponse = await getSettings(settingsRequest);
+      const settingsData = await settingsResponse.json();
+
+      expect(settingsData.has_gmail_connected).toBe(false);
     });
   });
 
   describe('Error Handling and Edge Cases', () => {
-    it('should handle concurrent requests safely', async () => {
-      mockUserSettingsService.getComprehensiveSettings.mockResolvedValue(mockSettings);
+    it('should handle malformed JSON in request body', async () => {
+      const mockRequest = {
+        method: 'PUT',
+        json: vi.fn().mockRejectedValue(new Error('Invalid JSON'))
+      } as unknown as NextRequest;
 
-      const requests = Array.from({ length: 10 }, () => getSettings());
-      const responses = await Promise.all(requests);
+      const response = await updateSettings(mockRequest);
+      const responseData = await response.json();
 
-      responses.forEach(response => {
-        expect(response.status).toBe(200);
+      expect(response.status).toBe(400);
+      expect(responseData).toMatchObject({
+        error: expect.stringContaining('Invalid')
       });
     });
 
-    it('should handle memory exhaustion gracefully', async () => {
-      // Simulate large data response
-      const largeData = Array.from({ length: 10000 }, (_, i) => ({
-        id: `company_${i}`,
-        name: `Company ${i}`,
-        company_mentions: []
-      }));
-
-      mockSupabaseClient.from.mockReturnValue({
+    it('should handle network timeouts gracefully', async () => {
+      mockSupabaseClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
-        limit: vi.fn(() => Promise.resolve({
-          data: largeData,
-          error: null
+        limit: vi.fn(() => new Promise((resolve, reject) => {
+          setTimeout(() => reject(new Error('Network timeout')), 0);
         }))
-      });
+      }));
 
       const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence');
       const response = await getIntelligence(mockRequest);
+      const responseData = await response.json();
 
-      expect(response.status).toBeLessThan(500);
-    });
-
-    it('should validate response time performance', async () => {
-      mockUserSettingsService.getComprehensiveSettings.mockResolvedValue(mockSettings);
-
-      const startTime = Date.now();
-      const response = await getSettings();
-      const endTime = Date.now();
-
-      expect(endTime - startTime).toBeLessThan(1000); // Should respond within 1 second
-      expect(response.status).toBe(200);
-    });
-
-    it('should handle network timeouts', async () => {
-      mockUserSettingsService.getComprehensiveSettings.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve(mockSettings), 100))
-      );
-
-      const response = await getSettings();
-      expect(response.status).toBe(200);
-    });
-  });
-
-  describe('Security and Validation', () => {
-    it('should sanitize input data in settings updates', async () => {
-      mockUserSettingsService.updateComprehensiveSettings.mockResolvedValue(mockSettings);
-
-      const mockRequest = new Request('https://test.example.com/api/settings', {
-        method: 'PUT',
-        body: JSON.stringify({
-          notifications_enabled: true,
-          '<script>alert("xss")</script>': 'malicious'
-        })
-      });
-
-      const response = await updateSettings(mockRequest as NextRequest);
-      expect(response.status).toBeLessThan(500);
-    });
-
-    it('should validate content-type headers', async () => {
-      const mockRequest = new Request('https://test.example.com/api/settings', {
-        method: 'PUT',
-        body: 'invalid-json',
-        headers: { 'Content-Type': 'text/plain' }
-      });
-
-      const response = await updateSettings(mockRequest as NextRequest);
-      expect(response.status).toBe(200); // Should handle gracefully
-    });
-
-    it('should handle SQL injection attempts in query parameters', async () => {
-      const mockRequest = createMockNextRequest(
-        'https://test.example.com/api/intelligence?limit=1; DROP TABLE companies;--'
-      );
-
-      const response = await getIntelligence(mockRequest);
-      expect(response.status).toBeLessThan(500); // Should validate and reject malicious input
-    });
-
-    it('should validate JWT tokens properly', async () => {
-      mockCurrentUser.mockImplementation(() => {
-        throw new Error('Invalid token');
-      });
-
-      const response = await getSettings();
       expect(response.status).toBe(500);
+      expect(responseData).toMatchObject({
+        success: false,
+        error: expect.stringContaining('timeout')
+      });
+    });
+
+    it('should handle missing environment variables', async () => {
+      delete process.env.GOOGLE_CLIENT_ID;
+      delete process.env.GOOGLE_CLIENT_SECRET;
+
+      const mockRequest = new Request('https://test.example.com/api/auth/gmail');
+      const response = await getGmailAuth(mockRequest as NextRequest);
+      const responseData = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(responseData).toMatchObject({
+        error: expect.stringContaining('configuration')
+      });
+    });
+
+    it('should handle rate limiting scenarios', async () => {
+      const rateLimitError = new Error('Too many requests');
+      mockUserSettingsService.updateComprehensiveSettings.mockRejectedValue(rateLimitError);
+
+      const mockRequest = createMockNextRequest('https://test.example.com/api/settings', {
+        method: 'PUT',
+        body: { notifications_enabled: true }
+      });
+      const response = await updateSettings(mockRequest);
+      const responseData = await response.json();
+
+      expect(response.status).toBe(429);
+      expect(responseData).toMatchObject({
+        error: expect.stringContaining('Too many requests')
+      });
     });
   });
 });

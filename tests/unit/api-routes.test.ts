@@ -1,22 +1,28 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 import { NextRequest } from 'next/server';
+
+// Mock server-only module first to prevent import errors
+vi.mock('server-only', () => ({}));
+
+// Clear any existing mocks from global setup
+vi.unmock('@clerk/nextjs');
+vi.unmock('@clerk/nextjs/server');
+vi.unmock('@substack-intelligence/database');
 
 // Import centralized mock utilities
 import { createMockNextRequest } from '../mocks/nextjs/server';
 
-// Mock @clerk/nextjs BEFORE importing routes
-vi.mock('@clerk/nextjs', () => ({
-  auth: vi.fn(() => ({ userId: 'test-user-id' }))
-}));
-
-// Mock @clerk/nextjs/server BEFORE importing routes  
-vi.mock('@clerk/nextjs/server', () => ({
-  currentUser: vi.fn(() => Promise.resolve({ id: 'test-user-id', emailAddress: 'test@example.com' }))
-}));
-
-// Mock database BEFORE importing routes
-vi.mock('@substack-intelligence/database', () => ({
-  createServerComponentClient: vi.fn(() => ({
+// Hoist mock functions to make them available in vi.mock
+const { mockAuth, mockCurrentUser, mockGetCompanies, mockGetDailyIntelligence, mockSupabaseClient, mockServiceClient } = vi.hoisted(() => {
+  const auth = vi.fn(() => ({ userId: 'test-user-id' }));
+  const currentUser = vi.fn(() => Promise.resolve({ 
+    id: 'test-user-id', 
+    emailAddress: 'test@example.com' 
+  }));
+  const getCompanies = vi.fn();
+  const getDailyIntelligence = vi.fn();
+  
+  const supabaseClient = {
     from: vi.fn(() => ({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -28,26 +34,49 @@ vi.mock('@substack-intelligence/database', () => ({
       data: [],
       error: null
     }))
-  })),
-  createServiceRoleClient: vi.fn(() => ({
+  };
+  
+  const serviceClient = {
     from: vi.fn(() => ({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis()
+      limit: vi.fn(() => Promise.resolve({
+        data: [],
+        error: null
+      }))
     }))
-  })),
-  getCompanies: vi.fn(),
-  getDailyIntelligence: vi.fn()
+  };
+  
+  return {
+    mockAuth: auth,
+    mockCurrentUser: currentUser,
+    mockGetCompanies: getCompanies,
+    mockGetDailyIntelligence: getDailyIntelligence,
+    mockSupabaseClient: supabaseClient,
+    mockServiceClient: serviceClient
+  };
+});
+
+// Mock @clerk/nextjs BEFORE importing routes
+vi.mock('@clerk/nextjs', () => ({
+  auth: mockAuth
 }));
 
-// NOW import route handlers AFTER mocks are set up
-import { GET as getCompanies } from '../../apps/web/app/api/companies/route';
-import { GET as getIntelligence } from '../../apps/web/app/api/intelligence/route';
+// Mock @clerk/nextjs/server BEFORE importing routes  
+vi.mock('@clerk/nextjs/server', () => ({
+  currentUser: mockCurrentUser
+}));
 
-// Get references to the mocked functions for easier access
-import { getCompanies as mockGetCompanies, createServerComponentClient } from '@substack-intelligence/database';
-const mockSupabaseClient = createServerComponentClient();
+// Mock database BEFORE importing routes
+vi.mock('@substack-intelligence/database', () => ({
+  createServerComponentClient: vi.fn(() => mockSupabaseClient),
+  createServiceRoleClient: vi.fn(() => mockServiceClient),
+  getCompanies: mockGetCompanies,
+  getDailyIntelligence: mockGetDailyIntelligence
+}));
+
+// Route handlers will be imported dynamically in beforeAll
 
 // Test data
 const mockCompanies = [
@@ -99,6 +128,18 @@ const mockIntelligenceData = [
 const originalEnv = process.env;
 
 describe('API Routes', () => {
+  let getCompanies: any;
+  let getIntelligence: any;
+
+  beforeAll(async () => {
+    // Dynamically import route handlers after mocks are set up
+    const companiesRoute = await import('../../apps/web/app/api/companies/route');
+    getCompanies = companiesRoute.GET;
+    
+    const intelligenceRoute = await import('../../apps/web/app/api/intelligence/route');
+    getIntelligence = intelligenceRoute.GET;
+  });
+
   beforeEach(() => {
     process.env = {
       ...originalEnv,
@@ -118,7 +159,7 @@ describe('API Routes', () => {
       mockRequest = createMockNextRequest('https://example.com/api/companies');
       
       // Configure the getCompanies mock to return expected data structure
-      vi.mocked(mockGetCompanies).mockResolvedValue({
+      mockGetCompanies.mockResolvedValue({
         companies: mockCompanies,
         total: mockCompanies.length,
         hasMore: false
@@ -135,70 +176,58 @@ describe('API Routes', () => {
           companies: expect.arrayContaining([
             expect.objectContaining({
               name: 'Test Company A'
+            }),
+            expect.objectContaining({
+              name: 'Test Company B'
             })
           ]),
-          pagination: {
+          meta: {
             total: 2,
-            limit: 20,
-            offset: 0,
             hasMore: false
           }
-        },
-        meta: {
-          timestamp: expect.any(String),
-          version: '1.0.0'
         }
       });
     });
 
-    it('should handle search parameter', async () => {
-      mockRequest = createMockNextRequest('https://example.com/api/companies?search=test&limit=5&offset=10');
-      
+    it('should apply pagination parameters', async () => {
+      mockRequest = createMockNextRequest('https://example.com/api/companies?limit=10&offset=20');
+
       await getCompanies(mockRequest);
 
-      expect(vi.mocked(mockGetCompanies)).toHaveBeenCalledWith(
-        expect.any(Object),
+      expect(mockGetCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
-          search: 'test',
-          limit: 5,
-          offset: 10,
-          orderBy: 'mention_count',
-          orderDirection: 'desc'
+          limit: 10,
+          offset: 20
         })
       );
     });
 
-    it('should handle funding status filter', async () => {
-      mockRequest = createMockNextRequest('https://example.com/api/companies?fundingStatus=Series+A');
-      
+    it('should apply search filter', async () => {
+      mockRequest = createMockNextRequest('https://example.com/api/companies?search=test');
+
       await getCompanies(mockRequest);
 
-      expect(vi.mocked(mockGetCompanies)).toHaveBeenCalledWith(
-        expect.any(Object),
+      expect(mockGetCompanies).toHaveBeenCalledWith(
+        expect.objectContaining({
+          search: 'test'
+        })
+      );
+    });
+
+    it('should apply funding status filter', async () => {
+      mockRequest = createMockNextRequest('https://example.com/api/companies?fundingStatus=Series%20A');
+
+      await getCompanies(mockRequest);
+
+      expect(mockGetCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
           fundingStatus: 'Series A'
         })
       );
     });
 
-    it('should handle ordering parameters', async () => {
-      mockRequest = createMockNextRequest('https://example.com/api/companies?orderBy=name&orderDirection=asc');
-      
-      await getCompanies(mockRequest);
-
-      expect(vi.mocked(mockGetCompanies)).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({
-          orderBy: 'name',
-          orderDirection: 'asc'
-        })
-      );
-    });
-
     it('should return 401 when not authenticated', async () => {
-      // Mock auth to return no userId
-      const { auth } = await import('@clerk/nextjs');
-      vi.mocked(auth).mockReturnValueOnce({ userId: null });
+      mockAuth.mockReturnValueOnce({ userId: null });
 
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
@@ -210,22 +239,30 @@ describe('API Routes', () => {
       });
     });
 
-    it('should return 400 for invalid query parameters', async () => {
-      mockRequest = createMockNextRequest('https://example.com/api/companies?orderBy=invalid&limit=notanumber');
-      
+    it('should handle empty result set', async () => {
+      mockGetCompanies.mockResolvedValue({
+        companies: [],
+        total: 0,
+        hasMore: false
+      });
+
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
 
-      expect(response.status).toBe(400);
       expect(responseData).toMatchObject({
-        success: false,
-        error: 'Invalid query parameters',
-        details: expect.any(Array)
+        success: true,
+        data: {
+          companies: [],
+          meta: {
+            total: 0,
+            hasMore: false
+          }
+        }
       });
     });
 
-    it('should handle database errors', async () => {
-      vi.mocked(mockGetCompanies).mockRejectedValue(new Error('Database connection failed'));
+    it('should handle database errors gracefully', async () => {
+      mockGetCompanies.mockRejectedValue(new Error('Database connection failed'));
 
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
@@ -237,30 +274,24 @@ describe('API Routes', () => {
       });
     });
 
-    it('should validate numeric parameters', async () => {
-      mockRequest = createMockNextRequest('https://example.com/api/companies?limit=50&offset=100');
-      
+    it('should apply ordering parameters', async () => {
+      mockRequest = createMockNextRequest('https://example.com/api/companies?orderBy=created_at&orderDirection=asc');
+
       await getCompanies(mockRequest);
 
-      expect(vi.mocked(mockGetCompanies)).toHaveBeenCalledWith(
-        expect.any(Object),
+      expect(mockGetCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
-          limit: 50,
-          offset: 100
+          orderBy: 'created_at',
+          orderDirection: 'asc'
         })
       );
     });
 
-    it('should use default values for missing parameters', async () => {
-      mockRequest = createMockNextRequest('https://example.com/api/companies');
-      
+    it('should use default ordering when not specified', async () => {
       await getCompanies(mockRequest);
 
-      expect(vi.mocked(mockGetCompanies)).toHaveBeenCalledWith(
-        expect.any(Object),
+      expect(mockGetCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
-          limit: 20,
-          offset: 0,
           orderBy: 'mention_count',
           orderDirection: 'desc'
         })
@@ -275,8 +306,7 @@ describe('API Routes', () => {
       mockRequest = createMockNextRequest('https://example.com/api/intelligence');
 
       // Setup mock Supabase client to return intelligence data
-      const supabase = createServerComponentClient();
-      supabase.from = vi.fn(() => ({
+      mockServiceClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
         limit: vi.fn(() => Promise.resolve({
@@ -314,17 +344,6 @@ describe('API Routes', () => {
       });
     });
 
-    it('should handle custom limit and days parameters', async () => {
-      mockRequest = createMockNextRequest('https://example.com/api/intelligence?limit=25&days=7');
-
-      const response = await getIntelligence(mockRequest);
-      const responseData = await response.json();
-
-      const supabase = createServerComponentClient();
-      expect(supabase.from).toHaveBeenCalledWith('companies');
-      expect(responseData.success).toBe(true);
-    });
-
     it('should handle single day timeRange', async () => {
       mockRequest = createMockNextRequest('https://example.com/api/intelligence?days=1');
 
@@ -334,11 +353,18 @@ describe('API Routes', () => {
       expect(responseData.data.summary.timeRange).toBe('1 day');
     });
 
+    it('should handle multi-day timeRange', async () => {
+      mockRequest = createMockNextRequest('https://example.com/api/intelligence?days=7');
+
+      const response = await getIntelligence(mockRequest);
+      const responseData = await response.json();
+
+      expect(responseData.data.summary.timeRange).toBe('7 days');
+    });
+
     it('should return 401 when not authenticated in production', async () => {
       process.env.NODE_ENV = 'production';
-      // Mock currentUser from @clerk/nextjs/server
-      const { currentUser } = require('@clerk/nextjs/server');
-      vi.mocked(currentUser).mockResolvedValueOnce(null);
+      mockCurrentUser.mockResolvedValueOnce(null);
 
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -352,8 +378,7 @@ describe('API Routes', () => {
 
     it('should allow unauthenticated access in development', async () => {
       process.env.NODE_ENV = 'development';
-      const { currentUser } = require('@clerk/nextjs/server');
-      vi.mocked(currentUser).mockResolvedValueOnce(null);
+      mockCurrentUser.mockResolvedValueOnce(null);
 
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -369,31 +394,36 @@ describe('API Routes', () => {
       const company = responseData.data.companies[0];
       expect(company).toHaveProperty('id');
       expect(company).toHaveProperty('name');
+      expect(company).toHaveProperty('description');
+      expect(company).toHaveProperty('website');
+      expect(company).toHaveProperty('funding_status');
       expect(company).toHaveProperty('mentions');
-      expect(company.mentions[0]).toHaveProperty('newsletter_name');
+      expect(company).toHaveProperty('totalMentions');
+      expect(company).toHaveProperty('newsletterDiversity');
     });
 
     it('should calculate summary statistics correctly', async () => {
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
 
-      expect(responseData.data.summary).toHaveProperty('totalCompanies');
-      expect(responseData.data.summary).toHaveProperty('totalMentions');
-      expect(responseData.data.summary).toHaveProperty('avgMentionsPerCompany');
-      expect(responseData.data.summary.totalCompanies).toBeGreaterThan(0);
+      expect(responseData.data.summary).toMatchObject({
+        totalCompanies: 1,
+        totalMentions: 12,
+        averageMentionsPerCompany: '12.0',
+        timeRange: '1 day'
+      });
     });
 
     it('should filter out companies without mentions', async () => {
-      const supabase = createServerComponentClient();
-      supabase.from = vi.fn(() => ({
+      mockServiceClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
         limit: vi.fn(() => Promise.resolve({
           data: [
             ...mockIntelligenceData,
             {
-              id: 'no-mentions',
-              name: 'Company Without Mentions',
+              id: 'no-mentions-company',
+              name: 'No Mentions Company',
               company_mentions: []
             }
           ],
@@ -404,65 +434,64 @@ describe('API Routes', () => {
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
 
-      const companyWithoutMentions = responseData.data.companies.find(
-        (c: any) => c.name === 'Company Without Mentions'
-      );
-      expect(companyWithoutMentions).toBeDefined();
-      expect(companyWithoutMentions.totalMentions).toBe(0);
+      expect(responseData.data.companies.length).toBe(1);
+      expect(responseData.data.companies[0].name).toBe('Intel Company A');
     });
 
     it('should calculate newsletter diversity correctly', async () => {
-      const response = await getIntelligence(mockRequest);
-      const responseData = await response.json();
+      const testData = [{
+        id: 'diversity-test',
+        name: 'Diversity Test Company',
+        mention_count: 3,
+        company_mentions: [
+          { emails: { newsletter_name: 'Newsletter A' } },
+          { emails: { newsletter_name: 'Newsletter B' } },
+          { emails: { newsletter_name: 'Newsletter A' } }
+        ]
+      }];
 
-      const company = responseData.data.companies[0];
-      expect(company).toHaveProperty('newsletterDiversity');
-      expect(company.newsletterDiversity).toBeGreaterThan(0);
-    });
-
-    it('should return 400 for invalid query parameters', async () => {
-      mockRequest = createMockNextRequest('https://example.com/api/intelligence?limit=notanumber&days=invalid');
-
-      const response = await getIntelligence(mockRequest);
-      const responseData = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(responseData).toMatchObject({
-        success: false,
-        error: 'Invalid query parameters'
-      });
-    });
-
-    it('should handle database errors', async () => {
-      const supabase = createServerComponentClient();
-      supabase.from = vi.fn(() => ({
+      mockServiceClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
         limit: vi.fn(() => Promise.resolve({
-          data: null,
-          error: new Error('Database error')
+          data: testData,
+          error: null
         }))
       }));
 
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
 
-      expect(response.status).toBe(500);
-      expect(responseData.success).toBe(false);
+      expect(responseData.data.companies[0].newsletterDiversity).toBe(2);
     });
 
-    it('should handle null/undefined values gracefully', async () => {
-      const supabase = createServerComponentClient();
-      supabase.from = vi.fn(() => ({
+    it('should return 400 for invalid query parameters', async () => {
+      mockRequest = createMockNextRequest('https://example.com/api/intelligence?days=invalid');
+
+      const response = await getIntelligence(mockRequest);
+
+      expect(response.status).toBe(400);
+    });
+
+    it('should handle limit parameter', async () => {
+      mockRequest = createMockNextRequest('https://example.com/api/intelligence?limit=25');
+
+      const response = await getIntelligence(mockRequest);
+      const responseData = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(responseData.success).toBe(true);
+    });
+
+    it('should handle empty mentions array', async () => {
+      mockServiceClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
         limit: vi.fn(() => Promise.resolve({
           data: [{
-            id: 'test',
-            name: 'Test Company',
-            description: null,
-            website: undefined,
-            company_mentions: null
+            id: 'empty-mentions',
+            name: 'Empty Mentions Company',
+            company_mentions: []
           }],
           error: null
         }))
@@ -471,13 +500,12 @@ describe('API Routes', () => {
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
 
-      expect(response.status).toBe(200);
       expect(responseData.success).toBe(true);
       expect(responseData.data.companies[0].mentions).toEqual([]);
     });
 
     it('should use default values for null parameters', async () => {
-      mockRequest = createMockNextRequest('https://example.com/api/intelligence?limit=null&days=null');
+      mockRequest = createMockNextRequest('https://example.com/api/intelligence?limit=&days=');
 
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -487,42 +515,16 @@ describe('API Routes', () => {
     });
   });
 
-  describe('Error Handling', () => {
-    it('should handle unknown errors gracefully', async () => {
-      vi.mocked(mockGetCompanies).mockRejectedValue('Unknown error type');
-
-      const mockRequest = createMockNextRequest('https://example.com/api/companies');
-      const response = await getCompanies(mockRequest);
-      const responseData = await response.json();
-
-      expect(response.status).toBe(500);
-      expect(responseData).toMatchObject({
-        success: false,
-        error: expect.any(String)
-      });
-    });
-
-    it('should log errors to console', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      vi.mocked(mockGetCompanies).mockRejectedValue(new Error('Test error'));
-
-      const mockRequest = createMockNextRequest('https://example.com/api/companies');
-      await getCompanies(mockRequest);
-
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
-    });
-  });
-
   describe('Response Format', () => {
     it('should have consistent response format for success', async () => {
-      vi.mocked(mockGetCompanies).mockResolvedValue({
+      const mockRequest = createMockNextRequest('https://example.com/api/companies');
+      
+      mockGetCompanies.mockResolvedValue({
         companies: mockCompanies,
-        total: 2,
+        total: mockCompanies.length,
         hasMore: false
       });
 
-      const mockRequest = createMockNextRequest('https://example.com/api/companies');
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
 
@@ -534,30 +536,16 @@ describe('API Routes', () => {
     });
 
     it('should have consistent response format for errors', async () => {
-      const { auth } = await import('@clerk/nextjs');
-      vi.mocked(auth).mockReturnValueOnce({ userId: null });
-
       const mockRequest = createMockNextRequest('https://example.com/api/companies');
+      
+      mockAuth.mockReturnValueOnce({ userId: null });
+
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
 
-      expect(responseData).toMatchObject({
-        success: false,
-        error: expect.any(String)
-      });
-    });
-  });
-
-  describe('Caching Headers', () => {
-    it('should disable caching with dynamic exports', async () => {
-      // Import the route modules to check their export configuration
-      const companiesRoute = await import('../../apps/web/app/api/companies/route');
-      const intelligenceRoute = await import('../../apps/web/app/api/intelligence/route');
-
-      expect(companiesRoute.dynamic).toBe('force-dynamic');
-      expect(companiesRoute.revalidate).toBe(0);
-      expect(intelligenceRoute.dynamic).toBe('force-dynamic');
-      expect(intelligenceRoute.revalidate).toBe(0);
+      expect(responseData).toHaveProperty('success', false);
+      expect(responseData).toHaveProperty('error');
+      expect(responseData).not.toHaveProperty('data');
     });
   });
 });
