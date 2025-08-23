@@ -5,8 +5,10 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatDate(date: Date | string): string {
+export function formatDate(date: Date | string | null | undefined): string {
+  if (!date) return '';
   const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '';
   return d.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -14,8 +16,10 @@ export function formatDate(date: Date | string): string {
   });
 }
 
-export function formatDateTime(date: Date | string): string {
+export function formatDateTime(date: Date | string | null | undefined): string {
+  if (!date) return '';
   const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '';
   return d.toLocaleString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -25,13 +29,19 @@ export function formatDateTime(date: Date | string): string {
   });
 }
 
-export function capitalizeFirst(str: string): string {
+export function capitalizeFirst(str: string | null | undefined): string {
+  if (!str || typeof str !== 'string') return '';
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-export function truncateText(text: string, maxLength: number): string {
+export function truncateText(text: string | null | undefined, maxLength: number): string {
+  if (!text || typeof text !== 'string') return '';
   if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength) + '...';
+  
+  // Handle unicode characters properly
+  const chars = Array.from(text);
+  if (chars.length <= maxLength) return text;
+  return chars.slice(0, maxLength).join('') + '...';
 }
 
 export function getConfidenceColor(confidence: number): string {

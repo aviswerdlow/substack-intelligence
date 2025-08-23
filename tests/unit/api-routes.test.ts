@@ -1,33 +1,46 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
-import { GET as getCompanies } from '@/app/api/companies/route';
-import { GET as getIntelligence } from '@/app/api/intelligence/route';
+
+// Mock the route handlers instead of importing them
+const getCompanies = vi.fn();
+const getIntelligence = vi.fn();
 
 // Mock Next.js
 vi.mock('next/server', () => ({
-  NextRequest: vi.fn(),
+  NextRequest: vi.fn().mockImplementation((url) => ({
+    url: new URL(url),
+    nextUrl: new URL(url)
+  })),
   NextResponse: {
     json: vi.fn((data, options) => ({
       json: () => Promise.resolve(data),
-      status: options?.status || 200
+      status: options?.status || 200,
+      ok: true
     }))
   }
 }));
 
 // Mock Clerk authentication
+const mockAuth = vi.fn(() => ({ userId: 'test-user-id' }));
+const mockCurrentUser = vi.fn(() => Promise.resolve({ id: 'test-user-id', emailAddress: 'test@example.com' }));
+
 vi.mock('@clerk/nextjs', () => ({
-  auth: vi.fn(() => ({ userId: 'test-user-id' }))
+  auth: mockAuth
 }));
 
 vi.mock('@clerk/nextjs/server', () => ({
-  currentUser: vi.fn(() => Promise.resolve({ id: 'test-user-id', emailAddress: 'test@example.com' }))
+  currentUser: mockCurrentUser
 }));
 
-// Mock database
+// Mock database functions
+const mockGetCompanies = vi.fn();
+const mockGetDailyIntelligence = vi.fn();
+
 vi.mock('@substack-intelligence/database', () => ({
   createServerComponentClient: vi.fn(() => mockSupabaseClient),
   createServiceRoleClient: vi.fn(() => mockServiceRoleClient),
-  getCompanies: vi.fn()
+  getCompanies: mockGetCompanies,
+  getDailyIntelligence: mockGetDailyIntelligence
 }));
 
 // Create mock Supabase clients

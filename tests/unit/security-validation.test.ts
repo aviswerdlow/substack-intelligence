@@ -21,15 +21,7 @@ import {
 } from '@/lib/security/validation';
 import { z } from 'zod';
 
-// Mock crypto for testing
-global.crypto = {
-  getRandomValues: (array: Uint8Array) => {
-    for (let i = 0; i < array.length; i++) {
-      array[i] = Math.floor(Math.random() * 256);
-    }
-    return array;
-  }
-} as any;
+// Mock crypto is already set up in test setup
 
 describe('Security Validation Schemas', () => {
   describe('EmailSchema', () => {
