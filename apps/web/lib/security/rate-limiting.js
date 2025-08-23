@@ -29,26 +29,37 @@ catch (error) {
     console.warn('Failed to initialize Redis for rate limiting:', error);
     rateLimitingEnabled = false;
 }
-// Rate limit configurations for different endpoints
-exports.RATE_LIMITS = {
-    // Authentication endpoints
-    'auth/signin': { requests: 5, window: '1m' },
-    'auth/signup': { requests: 3, window: '5m' },
-    // API endpoints
-    'api/companies/search': { requests: 100, window: '1h' },
-    'api/emails/process': { requests: 10, window: '1m' },
-    'api/reports/generate': { requests: 5, window: '1h' },
-    // AI endpoints (more restrictive)
-    'api/ai/extract': { requests: 20, window: '1h' },
-    'api/ai/analyze': { requests: 10, window: '1h' },
-    // Monitoring endpoints
-    'api/monitoring/error': { requests: 50, window: '1m' },
-    'api/monitoring/performance': { requests: 100, window: '1m' },
-    // Generic API rate limit
-    'api/*': { requests: 200, window: '1h' },
-    // Global rate limit per IP
-    'global': { requests: 1000, window: '1h' }
+// Production-optimized rate limit configurations
+const getProductionLimits = () => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const multiplier = isProduction ? 0.7 : 1; // Stricter limits in production
+    return {
+        // Authentication endpoints (stricter in production)
+        'auth/signin': { requests: Math.floor(5 * multiplier), window: '1m' },
+        'auth/signup': { requests: Math.floor(3 * multiplier), window: '5m' },
+        // API endpoints
+        'api/companies': { requests: Math.floor(100 * multiplier), window: '1h' },
+        'api/emails/extract': { requests: Math.floor(10 * multiplier), window: '1m' },
+        'api/reports/generate': { requests: Math.floor(5 * multiplier), window: '1h' },
+        // AI endpoints (more restrictive due to cost)
+        'api/test/anthropic': { requests: Math.floor(5 * multiplier), window: '1h' },
+        'api/test/extract': { requests: Math.floor(10 * multiplier), window: '1h' },
+        // High-cost operations
+        'api/test/extract-all': { requests: Math.floor(2 * multiplier), window: '1h' },
+        'api/test/extract-batch': { requests: Math.floor(3 * multiplier), window: '1h' },
+        // Monitoring endpoints
+        'api/monitoring/error': { requests: Math.floor(50 * multiplier), window: '1m' },
+        'api/monitoring/performance': { requests: Math.floor(100 * multiplier), window: '1m' },
+        // Health and system endpoints (less restrictive)
+        'api/health': { requests: 500, window: '1m' },
+        'api/config/validate': { requests: Math.floor(20 * multiplier), window: '1h' },
+        // Generic API rate limit
+        'api/*': { requests: Math.floor(200 * multiplier), window: '1h' },
+        // Global rate limit per IP (stricter in production)
+        'global': { requests: Math.floor(1000 * multiplier), window: '1h' }
+    };
 };
+exports.RATE_LIMITS = getProductionLimits();
 // Create rate limiters
 const rateLimiters = new Map();
 function getRateLimiter(endpoint) {
