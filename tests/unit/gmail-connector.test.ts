@@ -3,20 +3,25 @@ import { GmailConnector } from '@substack-intelligence/ingestion';
 import { gmail_v1 } from 'googleapis';
 
 // Mock dependencies
+const mockSetCredentials = vi.fn();
+const mockList = vi.fn();
+const mockGet = vi.fn();
+const mockGetProfile = vi.fn();
+
 vi.mock('googleapis', () => ({
   google: {
     auth: {
-      OAuth2: vi.fn(() => ({
-        setCredentials: vi.fn()
+      OAuth2: vi.fn().mockImplementation(() => ({
+        setCredentials: mockSetCredentials
       }))
     },
     gmail: vi.fn(() => ({
       users: {
         messages: {
-          list: vi.fn(),
-          get: vi.fn()
+          list: mockList,
+          get: mockGet
         },
-        getProfile: vi.fn()
+        getProfile: mockGetProfile
       }
     }))
   }
@@ -99,11 +104,18 @@ describe('GmailConnector', () => {
 
     vi.clearAllMocks();
 
-    // Get references to mocked clients
-    const { google } = require('googleapis');
-    mockGmailClient = google.gmail();
+    // Set up mock responses
+    mockGmailClient = {
+      users: {
+        messages: {
+          list: mockList,
+          get: mockGet
+        },
+        getProfile: mockGetProfile
+      }
+    };
     
-    const { createServiceRoleClient } = require('@substack-intelligence/database');
+    const { createServiceRoleClient } = // Mock service via test setup - @substack-intelligence/database');
     mockSupabaseClient = createServiceRoleClient();
 
     connector = new GmailConnector();
@@ -146,17 +158,17 @@ describe('GmailConnector', () => {
     };
 
     it('should fetch and process Substack emails successfully', async () => {
-      const { burstProtection } = require('@substack-intelligence/ingestion/utils/rate-limiting');
+      const { burstProtection } = // Mock service via test setup - @substack-intelligence/ingestion/utils/rate-limiting');
       burstProtection.checkBurstLimit.mockResolvedValue(true);
 
-      mockGmailClient.users.messages.list.mockResolvedValue({
+      mockList.mockResolvedValue({
         data: {
           messages: [{ id: 'test-msg-1' }],
           nextPageToken: undefined
         }
       });
 
-      mockGmailClient.users.messages.get.mockResolvedValue({
+      mockGet.mockResolvedValue({
         data: mockMessage
       });
 
@@ -174,7 +186,7 @@ describe('GmailConnector', () => {
     });
 
     it('should handle rate limiting', async () => {
-      const { burstProtection } = require('@substack-intelligence/ingestion/utils/rate-limiting');
+      const { burstProtection } = // Mock service via test setup - @substack-intelligence/ingestion/utils/rate-limiting');
       burstProtection.checkBurstLimit.mockResolvedValue(false);
 
       await expect(connector.fetchDailySubstacks(7))
@@ -183,10 +195,10 @@ describe('GmailConnector', () => {
     });
 
     it('should handle empty message list', async () => {
-      const { burstProtection } = require('@substack-intelligence/ingestion/utils/rate-limiting');
+      const { burstProtection } = // Mock service via test setup - @substack-intelligence/ingestion/utils/rate-limiting');
       burstProtection.checkBurstLimit.mockResolvedValue(true);
 
-      mockGmailClient.users.messages.list.mockResolvedValue({
+      mockList.mockResolvedValue({
         data: {
           messages: undefined
         }
@@ -198,30 +210,30 @@ describe('GmailConnector', () => {
     });
 
     it('should handle Gmail API errors', async () => {
-      const { burstProtection } = require('@substack-intelligence/ingestion/utils/rate-limiting');
+      const { burstProtection } = // Mock service via test setup - @substack-intelligence/ingestion/utils/rate-limiting');
       burstProtection.checkBurstLimit.mockResolvedValue(true);
 
-      mockGmailClient.users.messages.list.mockRejectedValue(new Error('Gmail API Error'));
+      mockList.mockRejectedValue(new Error('Gmail API Error'));
 
       await expect(connector.fetchDailySubstacks(7))
         .rejects
         .toThrow('Gmail API Error');
 
-      const { axiomLogger } = require('@substack-intelligence/ingestion/utils/logging');
+      const { axiomLogger } = // Mock service via test setup - @substack-intelligence/ingestion/utils/logging');
       expect(axiomLogger.logError).toHaveBeenCalled();
     });
 
     it('should construct proper Gmail query', async () => {
-      const { burstProtection } = require('@substack-intelligence/ingestion/utils/rate-limiting');
+      const { burstProtection } = // Mock service via test setup - @substack-intelligence/ingestion/utils/rate-limiting');
       burstProtection.checkBurstLimit.mockResolvedValue(true);
 
-      mockGmailClient.users.messages.list.mockResolvedValue({
+      mockList.mockResolvedValue({
         data: { messages: [] }
       });
 
       await connector.fetchDailySubstacks(30);
 
-      expect(mockGmailClient.users.messages.list).toHaveBeenCalledWith({
+      expect(mockList).toHaveBeenCalledWith({
         userId: 'me',
         q: expect.stringContaining('from:substack.com'),
         maxResults: 100,
@@ -251,7 +263,7 @@ describe('GmailConnector', () => {
         }
       };
 
-      mockGmailClient.users.messages.get.mockResolvedValue({
+      mockGet.mockResolvedValue({
         data: shortMessage
       });
 
@@ -317,7 +329,7 @@ describe('GmailConnector', () => {
         }
       };
 
-      mockGmailClient.users.messages.get.mockResolvedValue({
+      mockGet.mockResolvedValue({
         data: messageWithBadDate
       });
 

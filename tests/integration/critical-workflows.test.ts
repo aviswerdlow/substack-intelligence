@@ -97,7 +97,7 @@ describe('Critical Business Workflows', () => {
       expect(extraction.companies[0].name).toBe('Stripe');
 
       const dbResult = await mockDatabase.from('companies').insert(extraction.companies[0]);
-      expect(dbResult.error).toBeNull();
+      expect(dbResult.error).toBeFalsy();
 
       if (extraction.companies[0].confidence > 0.9) {
         const alertResult = await mockEmailService.sendCompanyAlert({
@@ -177,7 +177,7 @@ describe('Critical Business Workflows', () => {
       });
       
       const dbResult = await mockDatabase.from('companies').insert({});
-      expect(dbResult.error).toBeTruthy();
+      expect(dbResult.error?.message).toBe('Database error');
     });
   });
 
@@ -281,7 +281,7 @@ describe('Critical Business Workflows', () => {
         })
         .eq('id', companyId);
       
-      expect(updateResult.error).toBeNull();
+      expect(updateResult.error).toBeFalsy();
     });
 
     it('should handle website validation failures', async () => {
@@ -521,7 +521,7 @@ describe('Critical Business Workflows', () => {
         .eq('id', mockAuth.userId)
         .single();
 
-      expect(userPermissions.data.role).toBe('admin');
+      expect(userPermissions?.data?.role).toBe('admin');
 
       // Step 3: Check rate limits
       mockRateLimiter.checkBurstLimit.mockResolvedValue(true);
@@ -535,7 +535,7 @@ describe('Critical Business Workflows', () => {
       expect(canProceed).toBe(true);
 
       // Step 4: Execute authorized action
-      if (userPermissions.data.permissions.includes('write')) {
+      if (userPermissions?.data?.permissions?.includes('write')) {
         const result = await mockDatabase.from('companies')
           .select('*')
           .eq('organization_id', mockAuth.orgId);

@@ -2,28 +2,41 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PDFGenerator } from '@substack-intelligence/reports/pdf-generator';
 import { ReportScheduler } from '@substack-intelligence/reports/report-scheduler';
 import { EmailService } from '@substack-intelligence/reports/email-service';
+import { createServiceRoleClient, getDailyIntelligence } from '@substack-intelligence/database';
+
+// Create mocks for the classes
+vi.mock('@substack-intelligence/reports/pdf-generator');
+vi.mock('@substack-intelligence/reports/email-service');
+vi.mock('@substack-intelligence/reports/report-scheduler');
+vi.mock('@substack-intelligence/database');
 
 // Mock dependencies
+const mockPage = {
+  setContent: vi.fn(),
+  pdf: vi.fn(() => Promise.resolve(Buffer.from('mock-pdf-content'))),
+  close: vi.fn()
+};
+
+const mockBrowser = {
+  newPage: vi.fn(() => Promise.resolve(mockPage)),
+  close: vi.fn()
+};
+
 vi.mock('puppeteer', () => ({
   default: {
-    launch: vi.fn(() => Promise.resolve({
-      newPage: vi.fn(() => Promise.resolve({
-        setContent: vi.fn(),
-        pdf: vi.fn(() => Promise.resolve(Buffer.from('mock-pdf-content'))),
-        close: vi.fn()
-      })),
-      close: vi.fn()
-    }))
+    launch: vi.fn(() => Promise.resolve(mockBrowser))
   }
 }));
 
+const mockSend = vi.fn(() => Promise.resolve({
+  data: { id: 'mock-email-id' },
+  error: null
+}));
+
 vi.mock('resend', () => ({
-  Resend: vi.fn(() => ({
+  Resend: vi.fn().mockImplementation(() => ({
     emails: {
-      send: vi.fn(() => Promise.resolve({
-        data: { id: 'mock-email-id' },
-        error: null
-      }))
+      send: mockSend
     }
   }))
 }));
@@ -96,11 +109,13 @@ describe('Report Services', () => {
 
     beforeEach(() => {
       pdfGenerator = new PDFGenerator();
-      const puppeteer = require('puppeteer');
-      mockBrowser = puppeteer.default.launch();
       mockPage = {
         setContent: vi.fn(),
         pdf: vi.fn(() => Promise.resolve(Buffer.from('mock-pdf-content'))),
+        close: vi.fn()
+      };
+      mockBrowser = {
+        newPage: vi.fn(() => Promise.resolve(mockPage)),
         close: vi.fn()
       };
     });
@@ -244,7 +259,7 @@ describe('Report Services', () => {
     describe('error handling', () => {
       it('should handle puppeteer launch failures', async () => {
         const puppeteer = require('puppeteer');
-        puppeteer.default.launch.mockRejectedValue(new Error('Browser launch failed'));
+        (puppeteer.default.launch as any).mockRejectedValue(new Error('Browser launch failed'));
 
         await expect(pdfGenerator.initialize()).rejects.toThrow('Browser launch failed');
       });
@@ -553,18 +568,19 @@ describe('Report Services', () => {
 
     beforeEach(() => {
       // Mock the services used by ReportScheduler
-      vi.mocked(PDFGenerator).mockImplementation(() => ({
+      const PDFGeneratorMock = PDFGenerator as any;
+      PDFGeneratorMock.mockImplementation(() => ({
         generateDailyReport: vi.fn(() => Promise.resolve(Buffer.from('mock-daily-pdf'))),
         generateWeeklyReport: vi.fn(() => Promise.resolve(Buffer.from('mock-weekly-pdf'))),
         cleanup: vi.fn()
-      } as any));
+      }));
 
-      vi.mocked(EmailService).mockImplementation(() => ({
+      const EmailServiceMock = EmailService as any;
+      EmailServiceMock.mockImplementation(() => ({
         sendDailyReport: vi.fn(() => Promise.resolve({ data: { id: 'email-id' } })),
         sendWeeklyReport: vi.fn(() => Promise.resolve({ data: { id: 'weekly-email-id' } }))
-      } as any));
+      }));
 
-      const { createServiceRoleClient } = require('@substack-intelligence/database');
       mockSupabase = createServiceRoleClient();
 
       scheduler = new ReportScheduler();
@@ -574,7 +590,6 @@ describe('Report Services', () => {
 
     describe('generateDailyReport', () => {
       it('should generate complete daily report', async () => {
-        const { getDailyIntelligence } = require('@substack-intelligence/database');
         
         const result = await scheduler.generateDailyReport('2024-01-01');
 
@@ -617,7 +632,6 @@ describe('Report Services', () => {
       });
 
       it('should handle database errors', async () => {
-        const { getDailyIntelligence } = require('@substack-intelligence/database');
         getDailyIntelligence.mockRejectedValue(new Error('Database connection failed'));
 
         await expect(scheduler.generateDailyReport('2024-01-01'))
@@ -643,7 +657,6 @@ describe('Report Services', () => {
 
     describe('generateWeeklyReport', () => {
       it('should generate complete weekly report', async () => {
-        const { getDailyIntelligence } = require('@substack-intelligence/database');
         
         const result = await scheduler.generateWeeklyReport('2024-01-01');
 
@@ -669,7 +682,6 @@ describe('Report Services', () => {
       });
 
       it('should aggregate company data correctly', async () => {
-        const { getDailyIntelligence } = require('@substack-intelligence/database');
         // Mock data with duplicate companies
         getDailyIntelligence.mockResolvedValue([
           {
@@ -802,7 +814,6 @@ describe('Report Services', () => {
 
     describe('industry classification', () => {
       it('should classify companies into industries', async () => {
-        const { getDailyIntelligence } = require('@substack-intelligence/database');
         getDailyIntelligence.mockResolvedValue([
           {
             company_id: 'beauty-1',
