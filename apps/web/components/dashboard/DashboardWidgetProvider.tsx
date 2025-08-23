@@ -13,7 +13,8 @@ export type WidgetType =
   | 'email-stats'
   | 'top-newsletters'
   | 'sentiment-analysis'
-  | 'pipeline-status';
+  | 'pipeline-status'
+  | 'todos';
 
 export interface WidgetConfig {
   id: string;
@@ -84,6 +85,7 @@ const AVAILABLE_WIDGETS: Omit<WidgetConfig, 'id' | 'position'>[] = [
   { type: 'recent-companies', title: 'Recent Companies', size: 'medium', isVisible: true },
   { type: 'quick-actions', title: 'Quick Actions', size: 'medium', isVisible: true },
   { type: 'system-status', title: 'System Status', size: 'full', isVisible: true },
+  { type: 'todos', title: 'Todo List', size: 'medium', isVisible: true },
   { type: 'chart', title: 'Analytics Chart', size: 'large', isVisible: true },
   { type: 'activity-feed', title: 'Activity Feed', size: 'medium', isVisible: true },
   { type: 'email-stats', title: 'Email Statistics', size: 'small', isVisible: true },
