@@ -10,86 +10,131 @@ export class ClaudeExtractor {
   private cache: Redis | null = null;
   private maxRetries: number = 3;
   private baseDelay: number = 1000; // 1 second base delay
+  private isInitialized: boolean = false;
   
   constructor(client?: Anthropic) {
-    if (client) {
-      // Use provided client (for testing)
-      this.client = client;
-    } else {
-      // Create new client (for production)
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      
-      // Enhanced API key validation
-      if (!apiKey) {
-        console.error('[ClaudeExtractor] ❌ ANTHROPIC_API_KEY not found in environment');
-        throw new Error('ANTHROPIC_API_KEY is required but not configured');
+    try {
+      if (client) {
+        // Use provided client (for testing)
+        this.client = client;
+        this.isInitialized = true;
+        console.log('[ClaudeExtractor] ✅ Initialized with provided client (test mode)');
+      } else {
+        // Create new client (for production)
+        this.initializeProductionClient();
       }
       
-      // API key validation successful
+      // Initialize optional services
+      this.initializeOptionalServices();
       
-      try {
-        // Initialize Anthropic client WITHOUT custom fetch (which may be causing issues)
-        this.client = new Anthropic({
-          apiKey,
-          maxRetries: 0, // We handle retries ourselves
-          timeout: 30000, // 30 second timeout
-          // Removed custom fetch - using default fetch
-        });
-        // Anthropic client initialized successfully
-      } catch (error) {
-        console.error('[ClaudeExtractor] ❌ Failed to initialize Anthropic client:', error);
-        throw error;
-      }
+    } catch (error) {
+      console.error('[ClaudeExtractor] ❌ Constructor failed:', error);
+      throw new Error(`ClaudeExtractor initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private initializeProductionClient() {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    
+    // Enhanced API key validation
+    if (!apiKey) {
+      console.error('[ClaudeExtractor] ❌ ANTHROPIC_API_KEY not found in environment');
+      throw new Error('ANTHROPIC_API_KEY is required but not configured');
     }
     
-    // Disable rate limiting for now due to fetch issues
-    console.log('[ClaudeExtractor] ℹ️ Rate limiting disabled (temporarily)');
-    // if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-    //   try {
-    //     this.cache = Redis.fromEnv();
-    //     this.ratelimit = new Ratelimit({
-    //       redis: this.cache,
-    //       limiter: Ratelimit.slidingWindow(100, '1 m'),
-    //       analytics: true
-    //     });
-    //     console.log('[ClaudeExtractor] ✅ Rate limiting initialized');
-    //   } catch (error) {
-    //     console.warn('[ClaudeExtractor] ⚠️ Rate limiting initialization failed:', error);
-    //     // Continue without rate limiting
-    //   }
-    // } else {
-    //   console.log('[ClaudeExtractor] ℹ️ Rate limiting disabled (Redis not configured)');
-    // }
+    // Validate API key format
+    if (!apiKey.startsWith('sk-ant-')) {
+      console.error('[ClaudeExtractor] ❌ Invalid ANTHROPIC_API_KEY format');
+      throw new Error('ANTHROPIC_API_KEY must start with sk-ant-');
+    }
+    
+    try {
+      // Initialize Anthropic client with proper configuration
+      this.client = new Anthropic({
+        apiKey,
+        maxRetries: 0, // We handle retries ourselves
+        timeout: 30000, // 30 second timeout
+      });
+      
+      this.isInitialized = true;
+      console.log('[ClaudeExtractor] ✅ Production client initialized successfully');
+      
+    } catch (error) {
+      console.error('[ClaudeExtractor] ❌ Failed to initialize Anthropic client:', error);
+      throw new Error(`Anthropic client initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private initializeOptionalServices() {
+    // Initialize Redis cache and rate limiting if available
+    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+      try {
+        this.cache = Redis.fromEnv();
+        this.ratelimit = new Ratelimit({
+          redis: this.cache,
+          limiter: Ratelimit.slidingWindow(100, '1 m'),
+          analytics: true
+        });
+        console.log('[ClaudeExtractor] ✅ Redis cache and rate limiting initialized');
+      } catch (error) {
+        console.warn('[ClaudeExtractor] ⚠️ Rate limiting initialization failed:', error);
+        this.cache = null;
+        this.ratelimit = null;
+      }
+    } else {
+      console.log('[ClaudeExtractor] ℹ️ Redis not configured - rate limiting disabled');
+    }
   }
 
   async extractCompanies(content: string, newsletterName: string) {
     const startTime = Date.now();
+    
+    // Validate inputs
+    if (!content || content.trim().length === 0) {
+      throw new Error('Content cannot be empty');
+    }
+    
+    if (!newsletterName || newsletterName.trim().length === 0) {
+      throw new Error('Newsletter name cannot be empty');
+    }
+    
+    // Check if extractor is properly initialized
+    if (!this.isInitialized) {
+      throw new Error('ClaudeExtractor not properly initialized');
+    }
+    
     console.log(`[ClaudeExtractor] 🎯 Starting extraction for newsletter: ${newsletterName}`);
     console.log(`[ClaudeExtractor] 📝 Content length: ${content.length} characters`);
     
-    // Skip rate limit check for now
-    // if (this.ratelimit) {
-    //   try {
-    //     const { success } = await this.ratelimit.limit('claude-extraction');
-    //     if (!success) {
-    //       console.error('[ClaudeExtractor] ❌ Rate limit exceeded');
-    //       throw new Error('Rate limit exceeded');
-    //     }
-    //     console.log('[ClaudeExtractor] ✅ Rate limit check passed');
-    //   } catch (error) {
-    //     console.warn('[ClaudeExtractor] ⚠️ Rate limit check failed:', error);
-    //     // Continue without rate limiting
-    //   }
-    // }
+    // Rate limit check if available
+    if (this.ratelimit) {
+      try {
+        const { success } = await this.ratelimit.limit('claude-extraction');
+        if (!success) {
+          console.error('[ClaudeExtractor] ❌ Rate limit exceeded');
+          throw new Error('Rate limit exceeded - please try again later');
+        }
+        console.log('[ClaudeExtractor] ✅ Rate limit check passed');
+      } catch (error) {
+        console.warn('[ClaudeExtractor] ⚠️ Rate limit check failed:', error);
+        // Continue without rate limiting if rate limit service fails
+      }
+    }
     
-    // Skip cache check for now
+    // Cache check if available
     const cacheKey = `extraction:${hashContent(content)}`;
-    // if (this.cache) {
-    //   const cached = await this.cache.get(cacheKey);
-    //   if (cached) {
-    //     return ExtractionResultSchema.parse(cached);
-    //   }
-    // }
+    if (this.cache) {
+      try {
+        const cached = await this.cache.get(cacheKey);
+        if (cached) {
+          console.log('[ClaudeExtractor] ✅ Cache hit - returning cached result');
+          return ExtractionResultSchema.parse(cached);
+        }
+      } catch (error) {
+        console.warn('[ClaudeExtractor] ⚠️ Cache read failed:', error);
+        // Continue without cache if cache service fails
+      }
+    }
     
     try {
       console.log('[ClaudeExtractor] 🚀 Making API call to Claude...');
@@ -221,16 +266,16 @@ export class ClaudeExtractor {
         throw validationError;
       }
       
-      // Skip caching for now
-      // if (this.cache) {
-      //   try {
-      //     await this.cache.set(cacheKey, validatedResult, { ex: 604800 });
-      //     console.log('[ClaudeExtractor] ✅ Result cached successfully');
-      //   } catch (cacheError) {
-      //     console.warn('[ClaudeExtractor] ⚠️ Cache write failed:', cacheError);
-      //     // Continue without caching
-      //   }
-      // }
+      // Cache the result if caching is available
+      if (this.cache) {
+        try {
+          await this.cache.set(cacheKey, validatedResult, { ex: 604800 }); // Cache for 7 days
+          console.log('[ClaudeExtractor] ✅ Result cached successfully');
+        } catch (cacheError) {
+          console.warn('[ClaudeExtractor] ⚠️ Cache write failed:', cacheError);
+          // Continue without caching - this is not a critical failure
+        }
+      }
       
       const processingTime = Date.now() - startTime;
       console.log(`[ClaudeExtractor] ✅ Extraction completed in ${processingTime}ms`);
