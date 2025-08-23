@@ -60,6 +60,7 @@ import { settingsSchema } from '@/schemas/settings.schema';
 import { useToast } from '@/hooks/use-toast';
 import { saveAs } from 'file-saver';
 import { format } from 'date-fns';
+import { createEncryptedExport, parseEncryptedImport, isEncryptedFile } from '@/lib/encryption';
 
 interface SettingsImportExportProps {
   className?: string;
@@ -83,6 +84,7 @@ export function SettingsImportExport({ className }: SettingsImportExportProps) {
     prettify: true,
     encrypt: false,
     password: '',
+    showPassword: false,
     sections: {
       account: true,
       newsletters: true,
@@ -117,6 +119,9 @@ export function SettingsImportExport({ className }: SettingsImportExportProps) {
     },
   });
   
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  
   // Dropzone for import
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -126,9 +131,17 @@ export function SettingsImportExport({ className }: SettingsImportExportProps) {
     
     try {
       const text = await file.text();
+      
+      // Check if file is encrypted
+      if (isEncryptedFile(text)) {
+        setPendingImportFile(file);
+        setShowPasswordDialog(true);
+        return;
+      }
+      
       let parsed;
       
-      if (file.name.endsWith('.json')) {
+      if (file.name.endsWith('.json') || file.name.endsWith('.enc.json')) {
         parsed = JSON.parse(text);
       } else if (file.name.endsWith('.env')) {
         // Parse env file
@@ -164,7 +177,7 @@ export function SettingsImportExport({ className }: SettingsImportExportProps) {
         variant: 'destructive',
       });
     }
-  }, [importOptions.validate]);
+  }, [importOptions.validate, toast]);
   
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -174,6 +187,38 @@ export function SettingsImportExport({ className }: SettingsImportExportProps) {
     },
     maxFiles: 1,
   });
+  
+  // Handle decryption with password
+  const handleDecryptFile = async (password: string) => {
+    if (!pendingImportFile) return;
+    
+    try {
+      const text = await pendingImportFile.text();
+      const decrypted = parseEncryptedImport(text, password);
+      
+      // Validate if enabled
+      if (importOptions.validate) {
+        const result = settingsSchema.safeParse(decrypted);
+        if (!result.success) {
+          const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+          setValidationErrors(errors);
+        } else {
+          setValidationErrors([]);
+        }
+      }
+      
+      setImportPreview(decrypted);
+      setShowPasswordDialog(false);
+      setShowImportDialog(true);
+      setPendingImportFile(null);
+    } catch (error: any) {
+      toast({
+        title: 'Decryption failed',
+        description: error.message || 'Invalid password or corrupted file',
+        variant: 'destructive',
+      });
+    }
+  };
   
   // Handle export
   const handleExportSettings = async () => {
@@ -235,10 +280,10 @@ export function SettingsImportExport({ className }: SettingsImportExportProps) {
           filename = `settings-export-${timestamp}.json`;
       }
       
-      // Encrypt if needed (would need actual encryption library)
+      // Encrypt if needed
       if (exportOptions.encrypt && exportOptions.password) {
-        // TODO: Implement actual encryption
-        content = btoa(content); // Base64 as placeholder
+        content = createEncryptedExport(filteredSettings, exportOptions.password);
+        filename = filename.replace(/\.(json|env|yaml)$/, '.enc.json');
       }
       
       const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -500,20 +545,50 @@ export function SettingsImportExport({ className }: SettingsImportExportProps) {
                   </div>
                   
                   {exportOptions.encrypt && (
-                    <div className="space-y-2">
-                      <Label htmlFor="export-password">Encryption password:</Label>
-                      <Input
-                        id="export-password"
-                        type="password"
-                        value={exportOptions.password}
-                        onChange={(e) =>
-                          setExportOptions(prev => ({ ...prev, password: e.target.value }))
-                        }
-                        placeholder="Enter a strong password"
-                      />
-                      <p className="text-xs text-gray-500">
-                        You\'ll need this password to import the file later
-                      </p>
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="export-password">Encryption password:</Label>
+                        <div className="relative">
+                          <Input
+                            id="export-password"
+                            type={exportOptions.showPassword ? 'text' : 'password'}
+                            value={exportOptions.password}
+                            onChange={(e) =>
+                              setExportOptions(prev => ({ ...prev, password: e.target.value }))
+                            }
+                            placeholder="Enter a strong password"
+                            className="pr-10"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                            onClick={() =>
+                              setExportOptions(prev => ({ ...prev, showPassword: !prev.showPassword }))
+                            }
+                          >
+                            {exportOptions.showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          You'll need this password to import the file later. Store it securely!
+                        </p>
+                      </div>
+                      
+                      <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <Shield className="h-4 w-4 text-green-600 mt-0.5" />
+                          <div className="text-xs text-green-700 dark:text-green-300">
+                            <p className="font-medium">Strong Encryption</p>
+                            <p>AES-256-CBC with PBKDF2 (100,000 iterations)</p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -537,6 +612,68 @@ export function SettingsImportExport({ className }: SettingsImportExportProps) {
                   Export
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Password Dialog for Encrypted Import */}
+      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enter Decryption Password</DialogTitle>
+            <DialogDescription>
+              This file is encrypted. Enter the password to decrypt it.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="decrypt-password">Password:</Label>
+              <Input
+                id="decrypt-password"
+                type="password"
+                value={importOptions.password}
+                onChange={(e) =>
+                  setImportOptions(prev => ({ ...prev, password: e.target.value }))
+                }
+                placeholder="Enter decryption password"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && importOptions.password) {
+                    handleDecryptFile(importOptions.password);
+                  }
+                }}
+              />
+            </div>
+            
+            <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+              <div className="flex items-start gap-2">
+                <Lock className="h-4 w-4 text-blue-600 mt-0.5" />
+                <div className="text-xs text-blue-700 dark:text-blue-300">
+                  <p className="font-medium">Security Note</p>
+                  <p>This file uses AES-256 encryption with PBKDF2 key derivation.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPasswordDialog(false);
+                setPendingImportFile(null);
+                setImportOptions(prev => ({ ...prev, password: '' }));
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => handleDecryptFile(importOptions.password)}
+              disabled={!importOptions.password}
+            >
+              <Unlock className="mr-2 h-4 w-4" />
+              Decrypt
             </Button>
           </DialogFooter>
         </DialogContent>
