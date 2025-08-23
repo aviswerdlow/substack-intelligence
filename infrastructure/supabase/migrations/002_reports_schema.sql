@@ -16,9 +16,9 @@ CREATE TABLE report_history (
 );
 
 -- Indexes for report history
-CREATE INDEX idx_report_history_type_date ON report_history(report_type, report_date DESC);
-CREATE INDEX idx_report_history_status ON report_history(status);
-CREATE INDEX idx_report_history_generated ON report_history(generated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_report_history_type_date ON report_history(report_type, report_date DESC);
+CREATE INDEX IF NOT EXISTS idx_report_history_status ON report_history(status);
+CREATE INDEX IF NOT EXISTS idx_report_history_generated ON report_history(generated_at DESC);
 
 -- User preferences table for report customization
 CREATE TABLE user_preferences (
