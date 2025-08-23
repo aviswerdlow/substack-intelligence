@@ -1,34 +1,54 @@
 #!/usr/bin/env node
 
-// Test database connection
+/**
+ * Database Connection Test Suite
+ * Tests Supabase database connectivity and table operations
+ */
+
 const { createClient } = require('@supabase/supabase-js');
+const { getLogger, logStep } = require('./libs/test-utils/logger');
 require('dotenv').config({ path: 'apps/web/.env.local' });
+
+const logger = getLogger();
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
-console.log('🔍 Testing Supabase connection...');
-console.log('URL:', supabaseUrl);
-console.log('Key exists:', !!supabaseKey);
+logger.group('Database Connection Test');
+logger.debug('Configuration', {
+  url: supabaseUrl,
+  hasKey: !!supabaseKey
+});
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function testConnection() {
+  const results = {
+    passed: [],
+    failed: [],
+    skipped: []
+  };
+  
   try {
     // Test 1: Check if tables exist
-    console.log('\n📊 Checking tables...');
+    logStep('Checking companies table');
     const { data: tables, error: tableError } = await supabase
       .from('companies')
       .select('count', { count: 'exact', head: true });
     
     if (tableError) {
-      console.error('❌ Error accessing companies table:', tableError.message);
+      logger.failure('Error accessing companies table', { error: tableError.message });
+      results.failed.push({
+        name: 'Companies table access',
+        error: tableError.message
+      });
     } else {
-      console.log('✅ Companies table exists. Count:', tables);
+      logger.success('Companies table exists', { count: tables });
+      results.passed.push('Companies table access');
     }
 
     // Test 2: Try to insert test data
-    console.log('\n📝 Inserting test company...');
+    logStep('Inserting test company');
     const { data: company, error: insertError } = await supabase
       .from('companies')
       .insert({
@@ -42,29 +62,45 @@ async function testConnection() {
       .single();
 
     if (insertError) {
-      console.error('❌ Error inserting company:', insertError.message);
+      logger.failure('Error inserting company', { error: insertError.message });
+      results.failed.push({
+        name: 'Company insertion',
+        error: insertError.message
+      });
     } else {
-      console.log('✅ Test company created:', company.name);
-      console.log('   ID:', company.id);
+      logger.success('Test company created', { 
+        name: company.name,
+        id: company.id 
+      });
+      results.passed.push('Company insertion');
     }
 
     // Test 3: Query the data
-    console.log('\n🔍 Querying companies...');
+    logStep('Querying companies');
     const { data: companies, error: queryError } = await supabase
       .from('companies')
       .select('id, name, funding_status')
       .limit(5);
 
     if (queryError) {
-      console.error('❌ Error querying companies:', queryError.message);
+      logger.failure('Error querying companies', { error: queryError.message });
+      results.failed.push({
+        name: 'Company query',
+        error: queryError.message
+      });
     } else {
-      console.log('✅ Found', companies.length, 'companies:');
-      companies.forEach(c => console.log(`   - ${c.name} (${c.funding_status})`));
+      logger.success(`Found ${companies.length} companies`);
+      if (logger.isVerbose) {
+        companies.forEach(c => {
+          logger.verbose(`Company: ${c.name}`, { funding_status: c.funding_status });
+        });
+      }
+      results.passed.push('Company query');
     }
 
     // Test 4: Check other tables
     const tablesToCheck = ['emails', 'company_mentions', 'report_history'];
-    console.log('\n📋 Checking other tables...');
+    logStep('Checking other tables');
     
     for (const table of tablesToCheck) {
       const { error } = await supabase
@@ -72,22 +108,40 @@ async function testConnection() {
         .select('count', { count: 'exact', head: true });
       
       if (error) {
-        console.log(`   ❌ ${table}: ${error.message}`);
+        logger.failure(`Table ${table} not accessible`, { error: error.message });
+        results.failed.push({
+          name: `Table ${table} access`,
+          error: error.message
+        });
       } else {
-        console.log(`   ✅ ${table}: accessible`);
+        logger.success(`Table ${table} accessible`);
+        results.passed.push(`Table ${table} access`);
       }
     }
 
-    console.log('\n🎉 Database connection successful!');
-    console.log('✨ All tables are created and accessible.');
-    console.log('\n💡 Next steps:');
-    console.log('   1. The database is ready for use');
-    console.log('   2. You may need to seed more test data');
-    console.log('   3. Check if API endpoints are properly configured');
+    if (results.failed.length === 0) {
+      logger.success('Database connection successful!');
+      logger.info('All tables are created and accessible');
+      
+      if (logger.isVerbose) {
+        logger.verbose('Next steps:', {
+          step1: 'The database is ready for use',
+          step2: 'You may need to seed more test data',
+          step3: 'Check if API endpoints are properly configured'
+        });
+      }
+    }
 
   } catch (err) {
-    console.error('❌ Unexpected error:', err.message);
+    logger.error('Unexpected error', { error: err.message });
+    results.failed.push({
+      name: 'Database connection',
+      error: err.message
+    });
   }
+  
+  logger.summary(results);
+  process.exit(results.failed.length > 0 ? 1 : 0);
 }
 
 testConnection();
