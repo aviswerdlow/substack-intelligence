@@ -235,11 +235,263 @@ export const getAnalytics = cache(async (supabase: SupabaseClient, days = 7) => 
   };
 });
 
+// Todo queries
+export interface TodoFilters {
+  completed?: boolean;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  category?: string;
+  tags?: string[];
+  search?: string;
+  dueDateStart?: string;
+  dueDateEnd?: string;
+  overdue?: boolean;
+}
+
+export const getTodos = cache(async (
+  supabase: SupabaseClient,
+  userId: string,
+  options: {
+    limit?: number;
+    offset?: number;
+    orderBy?: 'created_at' | 'updated_at' | 'due_date' | 'priority' | 'position';
+    orderDirection?: 'asc' | 'desc';
+    filters?: TodoFilters;
+  } = {}
+) => {
+  const {
+    limit = 50,
+    offset = 0,
+    orderBy = 'position',
+    orderDirection = 'asc',
+    filters = {}
+  } = options;
+
+  let query = supabase
+    .from('user_todos')
+    .select('*', { count: 'exact' })
+    .eq('user_id', userId)
+    .range(offset, offset + limit - 1);
+
+  // Apply filters
+  if (filters.completed !== undefined) {
+    query = query.eq('completed', filters.completed);
+  }
+
+  if (filters.priority) {
+    query = query.eq('priority', filters.priority);
+  }
+
+  if (filters.category) {
+    query = query.eq('category', filters.category);
+  }
+
+  if (filters.tags && filters.tags.length > 0) {
+    query = query.contains('tags', filters.tags);
+  }
+
+  if (filters.search) {
+    query = query.or(`title.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
+  }
+
+  if (filters.dueDateStart) {
+    query = query.gte('due_date', filters.dueDateStart);
+  }
+
+  if (filters.dueDateEnd) {
+    query = query.lte('due_date', filters.dueDateEnd);
+  }
+
+  if (filters.overdue) {
+    query = query.lt('due_date', new Date().toISOString()).eq('completed', false);
+  }
+
+  // Apply ordering
+  if (orderBy === 'priority') {
+    // Custom priority ordering
+    query = query.order('priority', { 
+      ascending: orderDirection === 'asc',
+      nullsFirst: false
+    });
+  } else {
+    query = query.order(orderBy, { ascending: orderDirection === 'asc' });
+  }
+
+  const { data, error, count } = await query;
+
+  if (error) throw error;
+
+  return {
+    todos: data || [],
+    total: count || 0,
+    hasMore: (offset + limit) < (count || 0)
+  };
+});
+
+export const getTodoById = cache(async (supabase: SupabaseClient, userId: string, todoId: string) => {
+  const { data, error } = await supabase
+    .from('user_todos')
+    .select('*')
+    .eq('id', todoId)
+    .eq('user_id', userId)
+    .single();
+
+  if (error) throw error;
+  return data;
+});
+
+export const createTodo = async (
+  supabase: SupabaseClient,
+  userId: string,
+  todo: {
+    title: string;
+    description?: string;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    due_date?: string;
+    category?: string;
+    tags?: string[];
+  }
+) => {
+  // Get the next position
+  const { count } = await supabase
+    .from('user_todos')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('completed', false);
+
+  const { data, error } = await supabase
+    .from('user_todos')
+    .insert({
+      user_id: userId,
+      position: count || 0,
+      ...todo
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const updateTodo = async (
+  supabase: SupabaseClient,
+  userId: string,
+  todoId: string,
+  updates: {
+    title?: string;
+    description?: string;
+    completed?: boolean;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    due_date?: string;
+    category?: string;
+    tags?: string[];
+    position?: number;
+  }
+) => {
+  const { data, error } = await supabase
+    .from('user_todos')
+    .update(updates)
+    .eq('id', todoId)
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const deleteTodo = async (supabase: SupabaseClient, userId: string, todoId: string) => {
+  const { error } = await supabase
+    .from('user_todos')
+    .delete()
+    .eq('id', todoId)
+    .eq('user_id', userId);
+
+  if (error) throw error;
+};
+
+export const toggleTodoCompletion = async (
+  supabase: SupabaseClient,
+  userId: string,
+  todoId: string
+) => {
+  // First get the current state
+  const { data: currentTodo, error: fetchError } = await supabase
+    .from('user_todos')
+    .select('completed')
+    .eq('id', todoId)
+    .eq('user_id', userId)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  // Toggle completion
+  const { data, error } = await supabase
+    .from('user_todos')
+    .update({ completed: !currentTodo.completed })
+    .eq('id', todoId)
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const getTodoStats = cache(async (supabase: SupabaseClient, userId: string) => {
+  const { data, error } = await supabase
+    .rpc('get_user_todo_stats', { p_user_id: userId })
+    .single();
+
+  if (error) throw error;
+  return data;
+});
+
+export const reorderTodos = async (
+  supabase: SupabaseClient,
+  userId: string,
+  todoUpdates: { id: string; position: number }[]
+) => {
+  const updates = todoUpdates.map(({ id, position }) => 
+    supabase
+      .from('user_todos')
+      .update({ position })
+      .eq('id', id)
+      .eq('user_id', userId)
+  );
+
+  const results = await Promise.all(updates);
+  
+  for (const result of results) {
+    if (result.error) throw result.error;
+  }
+
+  return true;
+};
+
 // Types for query responses
 export type CompanyWithMentions = Awaited<ReturnType<typeof getCompanyById>>;
 export type CompaniesResponse = Awaited<ReturnType<typeof getCompanies>>;
 export type EmailWithMentions = Awaited<ReturnType<typeof getEmailById>>;
 export type AnalyticsData = Awaited<ReturnType<typeof getAnalytics>>;
+export type TodosResponse = Awaited<ReturnType<typeof getTodos>>;
+export type TodoStats = Awaited<ReturnType<typeof getTodoStats>>;
+
+// Define Todo type based on our schema
+export type Todo = {
+  id: string;
+  user_id: string;
+  title: string;
+  description?: string;
+  completed: boolean;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  due_date?: string;
+  category?: string;
+  tags: string[];
+  position: number;
+  completed_at?: string;
+  created_at: string;
+  updated_at: string;
+};
 
 // Export row types
 export type { Email, Company, CompanyMention, DailyIntelligence };

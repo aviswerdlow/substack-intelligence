@@ -31,6 +31,7 @@ import { SystemStatus } from '@/components/dashboard/system-status';
 import { ActivityFeedWidget } from '@/components/dashboard/widgets/ActivityFeedWidget';
 import { EmailStatsWidget } from '@/components/dashboard/widgets/EmailStatsWidget';
 import { PipelineStatusWidget } from '@/components/dashboard/widgets/PipelineStatusWidget';
+import { TodoWidget } from '@/components/dashboard/widgets/TodoWidget';
 import { Breadcrumbs } from '@/components/navigation/Breadcrumbs';
 import { DataFreshness } from '@/components/dashboard/DataFreshness';
 import { cn } from '@/lib/utils';
@@ -74,6 +75,8 @@ function DashboardContent() {
         return <EmailStatsWidget />;
       case 'pipeline-status':
         return <PipelineStatusWidget />;
+      case 'todos':
+        return <TodoWidget size={widget.size} />;
       default:
         return (
           <div className="text-center py-8 text-muted-foreground">
