@@ -8,6 +8,14 @@ import axios from 'axios';
 import { useToast } from '@/hooks/use-toast';
 import { useSettings } from '@/contexts/SettingsContext';
 import type { Settings, ValidationError } from '@/contexts/SettingsContext';
+import { 
+  encryptSettings, 
+  decryptSettings, 
+  validatePassword,
+  createEncryptionMetadata,
+  SettingsEncryptionError,
+  type EncryptionResult
+} from '@/lib/security/settings-encryption';
 
 // Hook for real-time validation
 export function useSettingsValidation(schema?: z.ZodSchema) {
@@ -185,9 +193,69 @@ export function useSettingsExport() {
         };
       }
       
-      // TODO: Add encryption if needed
+      // Add encryption if needed
       if (options?.encrypt && options?.password) {
-        // Implement encryption logic
+        try {
+          // Validate password before encrypting
+          const passwordValidation = validatePassword(options.password);
+          if (!passwordValidation.valid) {
+            toast({
+              title: 'Weak password',
+              description: passwordValidation.errors[0],
+              variant: 'destructive',
+            });
+            return;
+          }
+          
+          // Encrypt the settings data
+          const encryptionResult = await encryptSettings(exportData, {
+            password: options.password
+          });
+          
+          // Create encrypted export with metadata
+          const encryptedExport = {
+            encrypted: true,
+            metadata: createEncryptionMetadata([]),
+            data: encryptionResult
+          };
+          
+          // Create and download encrypted file
+          const encryptedBlob = new Blob(
+            [JSON.stringify(encryptedExport, null, options?.prettify ? 2 : 0)],
+            { type: 'application/json' }
+          );
+          
+          const url = URL.createObjectURL(encryptedBlob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `settings-encrypted.${format}`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          
+          toast({
+            title: 'Export successful',
+            description: `Encrypted settings exported as ${format} file`,
+          });
+          return;
+          
+        } catch (error) {
+          if (error instanceof SettingsEncryptionError) {
+            toast({
+              title: 'Encryption failed',
+              description: error.message,
+              variant: 'destructive',
+            });
+          } else {
+            toast({
+              title: 'Export failed',
+              description: 'Encryption error occurred',
+              variant: 'destructive',
+            });
+          }
+          return;
+        }
       }
       
       exportSettings(format);
@@ -218,12 +286,69 @@ export function useSettingsExport() {
   ) => {
     setIsImporting(true);
     try {
-      // TODO: Add decryption if needed
-      if (options?.decrypt && options?.password) {
-        // Implement decryption logic
+      const text = await file.text();
+      let settingsData: any;
+      
+      // Check if file is encrypted
+      try {
+        const parsed = JSON.parse(text);
+        
+        if (parsed.encrypted && parsed.data) {
+          // Handle encrypted settings
+          if (!options?.decrypt || !options?.password) {
+            toast({
+              title: 'Password required',
+              description: 'This is an encrypted settings file. Please provide the decryption password.',
+              variant: 'destructive',
+            });
+            return;
+          }
+          
+          try {
+            // Decrypt the settings
+            settingsData = await decryptSettings(parsed.data, {
+              password: options.password
+            });
+            
+            toast({
+              title: 'Decryption successful',
+              description: 'Settings file has been decrypted',
+            });
+            
+          } catch (error) {
+            if (error instanceof SettingsEncryptionError) {
+              toast({
+                title: 'Decryption failed',
+                description: error.message,
+                variant: 'destructive',
+              });
+            } else {
+              toast({
+                title: 'Import failed',
+                description: 'Failed to decrypt settings file',
+                variant: 'destructive',
+              });
+            }
+            return;
+          }
+        } else {
+          // Handle unencrypted settings
+          settingsData = parsed;
+        }
+      } catch (parseError) {
+        toast({
+          title: 'Import failed',
+          description: 'Invalid settings file format',
+          variant: 'destructive',
+        });
+        return;
       }
       
-      await importSettings(file);
+      // Create a temporary file with the decrypted data for the standard import process
+      const decryptedBlob = new Blob([JSON.stringify(settingsData)], { type: 'application/json' });
+      const decryptedFile = new File([decryptedBlob], 'decrypted-settings.json', { type: 'application/json' });
+      
+      await importSettings(decryptedFile);
       
       toast({
         title: 'Import successful',
