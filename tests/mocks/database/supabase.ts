@@ -103,10 +103,21 @@ class MockSupabaseQueryBuilderImpl implements MockSupabaseQueryBuilder {
     return this;
   }
 
+  mockResolvedValueOnce(value: any): this {
+    // For now, treat this the same as mockResolvedValue
+    // In a more complex implementation, we could track call counts
+    return this.mockResolvedValue(value);
+  }
+
   mockRejectedValue(value: any): this {
     this._mockConfig.shouldResolve = false;
     this._mockConfig.rejectValue = value;
     return this;
+  }
+
+  mockRejectedValueOnce(value: any): this {
+    // For now, treat this the same as mockRejectedValue
+    return this.mockRejectedValue(value);
   }
 
   mockDelay(ms: number): this {
@@ -217,9 +228,7 @@ export class MockSupabaseClientImpl implements MockSupabaseClient {
     return new MockSupabaseQueryBuilderImpl(this._defaultQueryConfig);
   }
 
-  async rpc(fn: string, args?: any): Promise<MockSupabaseResponse> {
-    return { data: null, error: null };
-  }
+  rpc = vi.fn().mockResolvedValue({ data: null, error: null });
 
   auth = {
     getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
