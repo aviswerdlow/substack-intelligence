@@ -16,6 +16,7 @@ process.env.GOOGLE_REFRESH_TOKEN = 'test-refresh-token';
 // Mock console methods to reduce noise in test output
 const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
+const originalConsoleLog = console.log;
 
 console.error = vi.fn((message, ...args) => {
   // Still log actual test errors
@@ -25,11 +26,33 @@ console.error = vi.fn((message, ...args) => {
 });
 
 console.warn = vi.fn();
+console.log = vi.fn();
+
+// Mock axiomLogger module
+vi.mock('../apps/web/lib/monitoring/axiom', () => ({
+  axiomLogger: {
+    log: vi.fn().mockResolvedValue(undefined),
+    logError: vi.fn().mockResolvedValue(undefined),
+    logAppEvent: vi.fn().mockResolvedValue(undefined),
+    logEmailEvent: vi.fn().mockResolvedValue(undefined),
+    logExtractionEvent: vi.fn().mockResolvedValue(undefined),
+    logApiRequest: vi.fn().mockResolvedValue(undefined),
+    logDatabaseEvent: vi.fn().mockResolvedValue(undefined),
+    logSecurityEvent: vi.fn().mockResolvedValue(undefined),
+    logReportEvent: vi.fn().mockResolvedValue(undefined),
+    logPerformance: vi.fn().mockResolvedValue(undefined),
+    logBusinessMetric: vi.fn().mockResolvedValue(undefined),
+    logUserActivity: vi.fn().mockResolvedValue(undefined),
+    logHealthCheck: vi.fn().mockResolvedValue(undefined),
+    logBatch: vi.fn().mockResolvedValue(undefined)
+  }
+}));
 
 // Restore console methods after tests
 afterAll(() => {
   console.error = originalConsoleError;
   console.warn = originalConsoleWarn;
+  console.log = originalConsoleLog;
 });
 
 // Mock fetch for tests

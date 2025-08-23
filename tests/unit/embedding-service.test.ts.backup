@@ -55,18 +55,6 @@ describe('EmbeddingService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     
-    // Clear all individual mocks
-    mockEmbeddingsCreate.mockClear();
-    mockFrom.mockClear();
-    mockSelect.mockClear();
-    mockEq.mockClear();
-    mockNot.mockClear();
-    mockIs.mockClear();
-    mockUpdate.mockClear();
-    mockSingle.mockClear();
-    mockRpc.mockClear();
-    mockCount.mockClear();
-    
     // Set up environment variables
     process.env.OPENAI_API_KEY = 'test-openai-key';
     
@@ -113,12 +101,14 @@ describe('EmbeddingService', () => {
     });
 
     it('should handle OpenAI API errors', async () => {
-      mockSingle.mockResolvedValue({
+      const mockSupabase = (embeddingService as any).supabase;
+      mockSupabase.from().select().eq().single.mockResolvedValue({
         data: mockCompany,
         error: null
       });
 
-      mockEmbeddingsCreate.mockRejectedValue(new Error('OpenAI API Error'));
+      const mockOpenAI = (embeddingService as any).openai;
+      mockOpenAI.embeddings.create.mockRejectedValue(new Error('OpenAI API Error'));
 
       const result = await embeddingService.generateCompanyEmbedding(mockCompany.id);
 
@@ -128,8 +118,10 @@ describe('EmbeddingService', () => {
 
   describe('findSimilarCompanies', () => {
     it('should find similar companies using vector similarity', async () => {
+      const mockSupabase = (embeddingService as any).supabase;
+      
       // Mock company with embedding
-      mockSingle.mockResolvedValue({
+      mockSupabase.from().select().eq().single.mockResolvedValue({
         data: { ...mockCompany, embedding: mockEmbedding },
         error: null
       });
@@ -144,7 +136,7 @@ describe('EmbeddingService', () => {
         }
       ];
 
-      mockRpc.mockResolvedValue({
+      mockSupabase.rpc.mockResolvedValue({
         data: mockSimilarCompanies,
         error: null
       });
@@ -159,9 +151,11 @@ describe('EmbeddingService', () => {
     });
 
     it('should generate embedding on-demand if missing', async () => {
+      const mockSupabase = (embeddingService as any).supabase;
+      
       // First call returns company without embedding
       // Second call returns company with embedding
-      mockSingle
+      mockSupabase.from().select().eq().single
         .mockResolvedValueOnce({
           data: { ...mockCompany, embedding: null },
           error: null
@@ -172,30 +166,34 @@ describe('EmbeddingService', () => {
         });
 
       // Mock update for embedding generation
-      mockUpdate.mockResolvedValue({ error: null });
+      mockSupabase.from().update().eq.mockResolvedValue({ error: null });
 
       // Mock OpenAI response
-      mockEmbeddingsCreate.mockResolvedValue({
+      const mockOpenAI = (embeddingService as any).openai;
+      mockOpenAI.embeddings.create.mockResolvedValue({
         data: [{ embedding: mockEmbedding }]
       });
 
       // Mock similarity search
-      mockRpc.mockResolvedValue({
+      mockSupabase.rpc.mockResolvedValue({
         data: [],
         error: null
       });
 
       const result = await embeddingService.findSimilarCompanies(mockCompany.id);
 
-      expect(mockEmbeddingsCreate).toHaveBeenCalled();
+      expect(mockOpenAI.embeddings.create).toHaveBeenCalled();
       expect(result).toEqual([]);
     });
   });
 
   describe('semanticSearch', () => {
     it('should perform semantic search with natural language query', async () => {
+      const mockSupabase = (embeddingService as any).supabase;
+      const mockOpenAI = (embeddingService as any).openai;
+
       // Mock OpenAI embedding generation
-      mockEmbeddingsCreate.mockResolvedValue({
+      mockOpenAI.embeddings.create.mockResolvedValue({
         data: [{ embedding: mockEmbedding }]
       });
 
@@ -209,7 +207,7 @@ describe('EmbeddingService', () => {
         }
       ];
 
-      mockRpc.mockResolvedValue({
+      mockSupabase.rpc.mockResolvedValue({
         data: mockResults,
         error: null
       });
@@ -222,7 +220,7 @@ describe('EmbeddingService', () => {
         similarity: 0.8
       });
 
-      expect(mockEmbeddingsCreate).toHaveBeenCalledWith({
+      expect(mockOpenAI.embeddings.create).toHaveBeenCalledWith({
         model: 'text-embedding-3-small',
         input: 'beauty companies',
         dimensions: 1536
@@ -244,7 +242,7 @@ describe('EmbeddingService', () => {
 
       expect(result.success).toHaveLength(3);
       expect(result.failed).toHaveLength(0);
-    }, 10000);
+    });
 
     it('should handle partial failures in batch processing', async () => {
       const companyIds = ['id1', 'id2', 'id3'];
@@ -259,7 +257,7 @@ describe('EmbeddingService', () => {
 
       expect(result.success).toHaveLength(2);
       expect(result.failed).toHaveLength(1);
-    }, 10000);
+    });
   });
 
   describe('createEmbeddingText', () => {
@@ -295,17 +293,19 @@ describe('EmbeddingService', () => {
 
   describe('getEmbeddingStats', () => {
     it('should return embedding coverage statistics', async () => {
-      // Mock for total companies count - returns directly with count property
-      mockFrom.mockImplementationOnce(() => ({
-        select: vi.fn().mockResolvedValue({ count: 100 })
-      }));
+      const mockSupabase = (embeddingService as any).supabase;
       
-      // Mock for companies with embeddings count
-      mockFrom.mockImplementationOnce(() => ({
-        select: vi.fn().mockReturnValue({
-          not: vi.fn().mockResolvedValue({ count: 75 })
-        })
-      }));
+      // Mock total companies count
+      mockSupabase.from().select.mockReturnValueOnce({
+        count: vi.fn().mockResolvedValue({ count: 100 })
+      });
+      
+      // Mock companies with embeddings count
+      mockSupabase.from().select.mockReturnValueOnce({
+        not: vi.fn(() => ({
+          count: vi.fn().mockResolvedValue({ count: 75 })
+        }))
+      });
 
       const stats = await embeddingService.getEmbeddingStats();
 

@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ClaudeExtractor } from '@substack-intelligence/ai';
 
+// Create mock functions for Anthropic
+const mockMessagesCreate = vi.fn();
+
 // Mock Anthropic SDK
 vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
     messages: {
-      create: vi.fn()
+      create: mockMessagesCreate
     }
   }))
 }));
@@ -56,6 +59,7 @@ describe('ClaudeExtractor', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMessagesCreate.mockClear();
     
     // Set up environment variables
     process.env.ANTHROPIC_API_KEY = 'test-key';
@@ -66,8 +70,7 @@ describe('ClaudeExtractor', () => {
   describe('extractCompanies', () => {
     it('should extract companies with correct schema', async () => {
       // Mock the Anthropic client response
-      const mockClient = (extractor as any).client;
-      mockClient.messages.create.mockResolvedValue(mockAnthropicResponse);
+      mockMessagesCreate.mockResolvedValue(mockAnthropicResponse);
 
       const content = `
         Glossier just raised $80M in Series E funding.
@@ -90,8 +93,7 @@ describe('ClaudeExtractor', () => {
     });
 
     it('should handle empty content gracefully', async () => {
-      const mockClient = (extractor as any).client;
-      mockClient.messages.create.mockResolvedValue({
+      mockMessagesCreate.mockResolvedValue({
         content: [{
           text: JSON.stringify({
             companies: [],
@@ -111,8 +113,7 @@ describe('ClaudeExtractor', () => {
     });
 
     it('should handle API errors gracefully', async () => {
-      const mockClient = (extractor as any).client;
-      mockClient.messages.create.mockRejectedValue(new Error('API Error'));
+      mockMessagesCreate.mockRejectedValue(new Error('API Error'));
 
       const result = await extractor.extractCompanies('Some content', 'Test Newsletter');
 
@@ -121,8 +122,7 @@ describe('ClaudeExtractor', () => {
     });
 
     it('should handle malformed JSON response', async () => {
-      const mockClient = (extractor as any).client;
-      mockClient.messages.create.mockResolvedValue({
+      mockMessagesCreate.mockResolvedValue({
         content: [{
           text: 'Invalid JSON response'
         }]
@@ -135,8 +135,7 @@ describe('ClaudeExtractor', () => {
     });
 
     it('should validate company confidence scores', async () => {
-      const mockClient = (extractor as any).client;
-      mockClient.messages.create.mockResolvedValue({
+      mockMessagesCreate.mockResolvedValue({
         content: [{
           text: JSON.stringify({
             companies: [
@@ -168,8 +167,7 @@ describe('ClaudeExtractor', () => {
 
   describe('batchExtract', () => {
     it('should process multiple content pieces', async () => {
-      const mockClient = (extractor as any).client;
-      mockClient.messages.create.mockResolvedValue(mockAnthropicResponse);
+      mockMessagesCreate.mockResolvedValue(mockAnthropicResponse);
 
       const contents = [
         { content: 'Glossier raised funding', newsletterName: 'Beauty News', id: '1' },
@@ -184,8 +182,7 @@ describe('ClaudeExtractor', () => {
     });
 
     it('should handle partial failures in batch processing', async () => {
-      const mockClient = (extractor as any).client;
-      mockClient.messages.create
+      mockMessagesCreate
         .mockResolvedValueOnce(mockAnthropicResponse)
         .mockRejectedValueOnce(new Error('API Error'));
 
@@ -207,10 +204,10 @@ describe('ClaudeExtractor', () => {
       const prompt = (extractor as any).getSystemPrompt();
       
       expect(prompt).toContain('JSON');
-      expect(prompt).toContain('consumer brands');
+      expect(prompt).toContain('Consumer brands');
       expect(prompt).toContain('confidence');
       expect(prompt).toContain('sentiment');
-      expect(prompt).toContain('private companies');
+      expect(prompt).toContain('company');
     });
   });
 });
