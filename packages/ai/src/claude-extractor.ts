@@ -11,29 +11,35 @@ export class ClaudeExtractor {
   private maxRetries: number = 3;
   private baseDelay: number = 1000; // 1 second base delay
   
-  constructor() {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    
-    // Enhanced API key validation
-    if (!apiKey) {
-      console.error('[ClaudeExtractor] ❌ ANTHROPIC_API_KEY not found in environment');
-      throw new Error('ANTHROPIC_API_KEY is required but not configured');
-    }
-    
-    // API key validation successful
-    
-    try {
-      // Initialize Anthropic client WITHOUT custom fetch (which may be causing issues)
-      this.client = new Anthropic({
-        apiKey,
-        maxRetries: 0, // We handle retries ourselves
-        timeout: 30000, // 30 second timeout
-        // Removed custom fetch - using default fetch
-      });
-      // Anthropic client initialized successfully
-    } catch (error) {
-      console.error('[ClaudeExtractor] ❌ Failed to initialize Anthropic client:', error);
-      throw error;
+  constructor(client?: Anthropic) {
+    if (client) {
+      // Use provided client (for testing)
+      this.client = client;
+    } else {
+      // Create new client (for production)
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      
+      // Enhanced API key validation
+      if (!apiKey) {
+        console.error('[ClaudeExtractor] ❌ ANTHROPIC_API_KEY not found in environment');
+        throw new Error('ANTHROPIC_API_KEY is required but not configured');
+      }
+      
+      // API key validation successful
+      
+      try {
+        // Initialize Anthropic client WITHOUT custom fetch (which may be causing issues)
+        this.client = new Anthropic({
+          apiKey,
+          maxRetries: 0, // We handle retries ourselves
+          timeout: 30000, // 30 second timeout
+          // Removed custom fetch - using default fetch
+        });
+        // Anthropic client initialized successfully
+      } catch (error) {
+        console.error('[ClaudeExtractor] ❌ Failed to initialize Anthropic client:', error);
+        throw error;
+      }
     }
     
     // Disable rate limiting for now due to fetch issues
