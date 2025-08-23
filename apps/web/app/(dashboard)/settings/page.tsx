@@ -171,35 +171,48 @@ function SettingsPageContent() {
     }
     
     try {
-      // Generate a mock API key
-      const mockApiKey = {
-        id: Date.now().toString(),
-        name: newApiKeyName,
-        key: `sk-${Math.random().toString(36).substring(2)}${Math.random().toString(36).substring(2)}`,
-        createdAt: new Date().toISOString(),
-        lastUsed: null
-      };
-      
-      setSettings((prev: any) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          api: {
-            ...prev.api,
-            keys: [...(prev.api?.keys || []), mockApiKey]
-          }
-        };
+      const response = await fetch('/api/settings/api-keys', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name: newApiKeyName })
       });
-      setNewApiKeyName('');
       
-      alert(`API key "${newApiKeyName}" generated successfully!`);
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update local state with new API key
+        setSettings((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            api: {
+              ...prev.api,
+              keys: [...(prev.api?.keys || []), {
+                id: data.data.id,
+                name: data.data.name,
+                key: data.data.key,
+                createdAt: data.data.createdAt,
+                lastUsed: null
+              }]
+            }
+          };
+        });
+        setNewApiKeyName('');
+        
+        // Show the full API key once, then it will be masked
+        alert(`API key "${newApiKeyName}" generated successfully!\n\nFull key (copy now): ${data.data.key}\n\nThis is the only time you'll see the full key.`);
+      } else {
+        throw new Error(data.error || 'Failed to generate API key');
+      }
     } catch (error) {
       console.error('Failed to generate API key:', error);
-      alert('Failed to generate API key. Please try again.');
+      alert(error instanceof Error ? error.message : 'Failed to generate API key. Please try again.');
     }
   };
 
-  const addWebhook = () => {
+  const addWebhook = async () => {
     if (!newWebhookUrl) {
       alert('Please enter a webhook URL');
       return;
@@ -213,26 +226,160 @@ function SettingsPageContent() {
       return;
     }
     
-    const newWebhook = {
-      id: Date.now().toString(),
-      url: newWebhookUrl,
-      events: ['email.processed'],
-      enabled: true
-    };
+    try {
+      const response = await fetch('/api/settings/webhooks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          url: newWebhookUrl,
+          events: ['email.processed', 'company.extracted']
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update local state with new webhook
+        setSettings((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            api: {
+              ...prev.api,
+              webhooks: [...(prev.api?.webhooks || []), {
+                id: data.data.id,
+                url: data.data.url,
+                events: data.data.events,
+                enabled: data.data.enabled
+              }]
+            }
+          };
+        });
+        setNewWebhookUrl('');
+        
+        alert(`Webhook "${newWebhookUrl}" added successfully!`);
+      } else {
+        throw new Error(data.error || 'Failed to add webhook');
+      }
+    } catch (error) {
+      console.error('Failed to add webhook:', error);
+      alert(error instanceof Error ? error.message : 'Failed to add webhook. Please try again.');
+    }
+  };
+
+  const deleteApiKey = async (keyId: string) => {
+    if (!confirm('Are you sure you want to delete this API key? This action cannot be undone.')) {
+      return;
+    }
     
-    setSettings((prev: any) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        api: {
-          ...prev.api,
-          webhooks: [...(prev.api?.webhooks || []), newWebhook]
-        }
-      };
-    });
-    setNewWebhookUrl('');
+    try {
+      const response = await fetch('/api/settings/api-keys', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ keyId })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Remove from local state
+        setSettings((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            api: {
+              ...prev.api,
+              keys: (prev.api?.keys || []).filter((key: any) => key.id !== keyId)
+            }
+          };
+        });
+        
+        alert('API key deleted successfully!');
+      } else {
+        throw new Error(data.error || 'Failed to delete API key');
+      }
+    } catch (error) {
+      console.error('Failed to delete API key:', error);
+      alert(error instanceof Error ? error.message : 'Failed to delete API key. Please try again.');
+    }
+  };
+
+  const deleteWebhook = async (webhookId: string) => {
+    if (!confirm('Are you sure you want to delete this webhook?')) {
+      return;
+    }
     
-    alert(`Webhook "${newWebhookUrl}" added successfully!`);
+    try {
+      const response = await fetch('/api/settings/webhooks', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ webhookId })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Remove from local state
+        setSettings((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            api: {
+              ...prev.api,
+              webhooks: (prev.api?.webhooks || []).filter((webhook: any) => webhook.id !== webhookId)
+            }
+          };
+        });
+        
+        alert('Webhook deleted successfully!');
+      } else {
+        throw new Error(data.error || 'Failed to delete webhook');
+      }
+    } catch (error) {
+      console.error('Failed to delete webhook:', error);
+      alert(error instanceof Error ? error.message : 'Failed to delete webhook. Please try again.');
+    }
+  };
+
+  const toggleWebhook = async (webhookId: string, enabled: boolean) => {
+    try {
+      const response = await fetch('/api/settings/webhooks', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ webhookId, enabled })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update local state
+        setSettings((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            api: {
+              ...prev.api,
+              webhooks: (prev.api?.webhooks || []).map((webhook: any) =>
+                webhook.id === webhookId ? { ...webhook, enabled } : webhook
+              )
+            }
+          };
+        });
+      } else {
+        throw new Error(data.error || 'Failed to update webhook');
+      }
+    } catch (error) {
+      console.error('Failed to update webhook:', error);
+      alert(error instanceof Error ? error.message : 'Failed to update webhook. Please try again.');
+    }
   };
 
   // Show loading state while settings are being fetched
@@ -490,7 +637,22 @@ function SettingsPageContent() {
                                   </div>
                                 </div>
                               </div>
-                              <Button size="sm" variant="ghost">
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => {
+                                  if (confirm('Remove this company from tracking?')) {
+                                    setSettings((prev: any) => ({
+                                      ...prev,
+                                      companies: {
+                                        ...prev.companies,
+                                        tracking: (prev.companies?.tracking || []).filter((c: any) => c.id !== company.id)
+                                      }
+                                    }));
+                                  }
+                                }}
+                                title="Remove company from tracking"
+                              >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
@@ -1184,10 +1346,20 @@ function SettingsPageContent() {
                                     </p>
                                   </div>
                                   <div className="flex gap-2">
-                                    <Button size="sm" variant="ghost">
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost"
+                                      onClick={() => navigator.clipboard.writeText(key.key)}
+                                      title="Copy API key"
+                                    >
                                       <Copy className="h-4 w-4" />
                                     </Button>
-                                    <Button size="sm" variant="ghost">
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost"
+                                      onClick={() => deleteApiKey(key.id)}
+                                      title="Delete API key"
+                                    >
                                       <Trash2 className="h-4 w-4" />
                                     </Button>
                                   </div>
@@ -1238,17 +1410,7 @@ function SettingsPageContent() {
                                   <div className="flex items-center gap-3">
                                     <Switch
                                       checked={webhook.enabled}
-                                      onCheckedChange={(checked) => {
-                                        setSettings((prev: any) => ({
-                                          ...prev,
-                                          api: {
-                                            ...prev.api,
-                                            webhooks: (prev.api?.webhooks || []).map((w: any) =>
-                                              w.id === webhook.id ? { ...w, enabled: checked } : w
-                                            )
-                                          }
-                                        }));
-                                      }}
+                                      onCheckedChange={(checked) => toggleWebhook(webhook.id, checked)}
                                     />
                                     <div>
                                       <p className="font-medium text-sm">{webhook.url}</p>
@@ -1257,7 +1419,12 @@ function SettingsPageContent() {
                                       </p>
                                     </div>
                                   </div>
-                                  <Button size="sm" variant="ghost">
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost"
+                                    onClick={() => deleteWebhook(webhook.id)}
+                                    title="Delete webhook"
+                                  >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
                                 </div>
