@@ -10,6 +10,7 @@ import { anthropicMocks, openaiMocks, resendMocks, externalServicesMocks } from 
 import { googleApisMocks, gmailMocks } from './mocks/external/gmail';
 import { puppeteerModuleMocks, puppeteerMocks } from './mocks/external/puppeteer';
 import { axiomLogger, axiomMocks } from './mocks/external/axiom';
+import { burstProtection, rateLimitingMocks } from './mocks/external/rate-limiting';
 import { databaseQueryMocks } from './mocks/database/queries';
 
 // Polyfill for Node.js environment
@@ -51,6 +52,9 @@ vi.mock('@substack-intelligence/database', () => databaseMocks);
 
 // Mock Axiom logger with centralized mock
 vi.mock('../apps/web/lib/monitoring/axiom', () => ({ axiomLogger }));
+
+// Mock rate limiting with centralized mock
+vi.mock('../apps/web/lib/security/rate-limiting', () => ({ burstProtection }));
 
 // Mock Clerk authentication with centralized mocks
 vi.mock('@clerk/nextjs', () => clerkNextjsMocks);
@@ -159,6 +163,7 @@ afterEach(() => {
   // Reset all centralized mock factories
   try {
     axiomMocks.resetAllMocks();
+    rateLimitingMocks.resetAllMocks();
     clerkMocks.resetAllMocks();
     externalServicesMocks.resetAllMocks();
     gmailMocks.resetAllMocks();
@@ -237,6 +242,7 @@ globalThis.testUtils = {
   resetAllTestMocks: () => {
     try {
       axiomMocks.resetAllMocks();
+      rateLimitingMocks.resetAllMocks();
       clerkMocks.resetAllMocks();
       externalServicesMocks.resetAllMocks();
       gmailMocks.resetAllMocks();

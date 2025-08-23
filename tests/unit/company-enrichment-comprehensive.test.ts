@@ -1,39 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CompanyEnrichmentService } from '../../services/enrichment/src/company-enrichment';
-
-// Mock dependencies
-const mockSupabaseClient = {
-  from: vi.fn(() => ({
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    single: vi.fn(),
-    update: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis()
-  }))
-};
-
-vi.mock('@substack-intelligence/database', () => ({
-  createServiceRoleClient: vi.fn(() => mockSupabaseClient)
-}));
-
-// Mock axiom logger
-const mockAxiomLogger = {
-  log: vi.fn(),
-  logError: vi.fn()
-};
-
-vi.mock('../../../apps/web/lib/monitoring/axiom', () => ({
-  axiomLogger: mockAxiomLogger
-}));
-
-// Mock rate limiting
-const mockBurstProtection = {
-  checkBurstLimit: vi.fn()
-};
-
-vi.mock('../../../apps/web/lib/security/rate-limiting', () => ({
-  burstProtection: mockBurstProtection
-}));
+import { createMockSupabaseClient, MockSupabaseClient } from '../mocks/database/supabase';
+import { axiomMocks } from '../mocks/external/axiom';
+import { rateLimitingMocks } from '../mocks/external/rate-limiting';
+import { DataFixtures } from '../mocks/fixtures/data';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -62,49 +32,33 @@ const mockCompany = {
   created_at: '2024-01-01T00:00:00Z'
 };
 
-const mockEnrichedCompany = {
-  id: 'company_123',
-  name: 'Test Company',
-  website: 'https://testcompany.com',
-  description: 'Enhanced description from website',
-  industry: 'Technology',
-  location: 'United States',
-  employeeCount: 50,
-  foundedYear: 2020,
-  social: {
-    linkedin: 'https://www.linkedin.com/company/testcompany',
-    twitter: 'https://twitter.com/testcompany'
-  },
-  validation: {
-    websiteValid: true,
-    statusCode: 200,
-    responseTime: 1500,
-    sslValid: true,
-    redirects: [],
-    domainAge: 4
-  },
-  metrics: {
-    techStack: ['React', 'Next.js', 'Stripe']
-  },
-  confidence: 85,
-  lastEnriched: expect.any(Date)
-};
 
 describe('CompanyEnrichmentService', () => {
   let service: CompanyEnrichmentService;
+  let mockSupabaseClient: MockSupabaseClient;
 
   beforeEach(() => {
-    service = new CompanyEnrichmentService();
     vi.clearAllMocks();
     
-    // Default mocks
-    mockBurstProtection.checkBurstLimit.mockResolvedValue(true);
-    mockSupabaseClient.from().single.mockResolvedValue({
-      data: mockCompany,
-      error: null
+    // Setup centralized mocks
+    mockSupabaseClient = createMockSupabaseClient();
+    axiomMocks.reset();
+    rateLimitingMocks.reset();
+    
+    service = new CompanyEnrichmentService();
+    
+    // Default successful responses
+    const mockCompany = DataFixtures.createCompany({
+      id: 'company_123',
+      name: 'Test Company',
+      website: 'https://testcompany.com'
     });
-    mockSupabaseClient.from().update.mockResolvedValue({
-      data: mockEnrichedCompany,
+    
+    rateLimitingMocks.mockRateLimitPass();
+    
+    const mockQueryBuilder = mockSupabaseClient.from('companies');
+    mockQueryBuilder.mockResolvedValue({
+      data: mockCompany,
       error: null
     });
     
@@ -155,14 +109,14 @@ describe('CompanyEnrichmentService', () => {
     it('should enrich company successfully with all data sources', async () => {
       const result = await service.enrichCompany('company_123');
 
-      expect(mockBurstProtection.checkBurstLimit).toHaveBeenCalledWith(
+      expect(rateLimitingMocks.checkBurstLimit).toHaveBeenCalledWith(
         'enrichment-service',
         'company-enrichment',
         10,
         '1h'
       );
 
-      expect(mockAxiomLogger.log).toHaveBeenCalledWith(
+      expect(axiomMocks.log).toHaveBeenCalledWith(
         'company-enrichment',
         'enrichment_started',
         expect.objectContaining({
@@ -184,7 +138,7 @@ describe('CompanyEnrichmentService', () => {
         lastEnriched: expect.any(Date)
       });
 
-      expect(mockAxiomLogger.log).toHaveBeenCalledWith(
+      expect(axiomMocks.log).toHaveBeenCalledWith(
         'company-enrichment',
         'enrichment_completed',
         expect.objectContaining({
@@ -195,12 +149,12 @@ describe('CompanyEnrichmentService', () => {
     });
 
     it('should handle rate limiting gracefully', async () => {
-      mockBurstProtection.checkBurstLimit.mockResolvedValue(false);
+      rateLimitingMocks.mockRateLimitBlock();
 
       await expect(service.enrichCompany('company_123'))
         .rejects.toThrow('Company enrichment rate limit exceeded');
 
-      expect(mockAxiomLogger.logError).toHaveBeenCalledWith(
+      expect(axiomMocks.logError).toHaveBeenCalledWith(
         expect.any(Error),
         expect.objectContaining({
           operation: 'company-enrichment',
@@ -210,7 +164,8 @@ describe('CompanyEnrichmentService', () => {
     });
 
     it('should handle company not found error', async () => {
-      mockSupabaseClient.from().single.mockResolvedValue({
+      const mockQueryBuilder = mockSupabaseClient.from('companies');
+      mockQueryBuilder.mockResolvedValue({
         data: null,
         error: { message: 'Company not found' }
       });
@@ -303,7 +258,7 @@ describe('CompanyEnrichmentService', () => {
         domainAge: expect.any(Number)
       });
 
-      expect(mockAxiomLogger.log).toHaveBeenCalledWith(
+      expect(axiomMocks.log).toHaveBeenCalledWith(
         'website-validation',
         'validation_completed',
         expect.objectContaining({
@@ -394,7 +349,7 @@ describe('CompanyEnrichmentService', () => {
       const result = await service.validateWebsite('https://unreachable.com');
 
       expect(result.websiteValid).toBe(false);
-      expect(mockAxiomLogger.logError).toHaveBeenCalled();
+      expect(axiomMocks.logError).toHaveBeenCalled();
     });
   });
 
@@ -830,7 +785,7 @@ describe('CompanyEnrichmentService', () => {
       const results = await service.enrichCompanies(companyIds);
 
       expect(results).toHaveLength(5);
-      expect(mockAxiomLogger.log).toHaveBeenCalledTimes(10); // 5 start + 5 complete logs
+      expect(axiomMocks.log).toHaveBeenCalledTimes(10); // 5 start + 5 complete logs
     });
 
     it('should handle batch processing errors gracefully', async () => {
@@ -1004,7 +959,7 @@ describe('CompanyEnrichmentService', () => {
     });
 
     it('should handle rate limiting across multiple requests', async () => {
-      mockBurstProtection.checkBurstLimit
+      rateLimitingMocks.checkBurstLimit
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(false)
         .mockResolvedValueOnce(true);
