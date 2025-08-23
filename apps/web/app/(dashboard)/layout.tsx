@@ -3,6 +3,10 @@
 import { DashboardNav } from '@/components/dashboard/nav';
 // import { UserButton } from '@clerk/nextjs';
 import { Providers } from '@/components/providers';
+import { OnboardingProvider } from '@/components/onboarding/OnboardingProvider';
+import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
+import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
+import { KeyboardShortcuts } from '@/components/keyboard/KeyboardShortcuts';
 
 export default async function DashboardLayout({
   children,
@@ -18,30 +22,37 @@ export default async function DashboardLayout({
 
   return (
     <Providers>
-      <div className="min-h-screen bg-background">
-        <header className="border-b bg-card">
-          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-xl font-semibold">Substack Intelligence</h1>
-              <DashboardNav />
+      <OnboardingProvider>
+        <div className="min-h-screen bg-background">
+          <header className="border-b bg-card">
+            <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <h1 className="text-xl font-semibold">Substack Intelligence</h1>
+                <DashboardNav />
+              </div>
+              <div className="flex items-center space-x-4">
+                {/* TEMPORARILY DISABLED FOR TESTING */}
+                {/* <UserButton 
+                  appearance={{
+                    elements: {
+                      avatarBox: 'w-8 h-8'
+                    }
+                  }}
+                /> */}
+                <div className="w-8 h-8 rounded-full bg-gray-400"></div>
+              </div>
             </div>
-            <div className="flex items-center space-x-4">
-              {/* TEMPORARILY DISABLED FOR TESTING */}
-              {/* <UserButton 
-                appearance={{
-                  elements: {
-                    avatarBox: 'w-8 h-8'
-                  }
-                }}
-              /> */}
-              <div className="w-8 h-8 rounded-full bg-gray-400"></div>
-            </div>
-          </div>
-        </header>
-        <main className="container mx-auto px-4 py-8">
-          {children}
-        </main>
-      </div>
+          </header>
+          <main className="container mx-auto px-4 py-8">
+            {children}
+          </main>
+          
+          {/* Global Components */}
+          <OnboardingTour />
+          <OnboardingChecklist />
+          <KeyboardShortcuts />
+        </div>
+      </OnboardingProvider>
     </Providers>
   );
 }

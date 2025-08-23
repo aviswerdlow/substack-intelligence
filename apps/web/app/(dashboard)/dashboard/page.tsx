@@ -6,6 +6,7 @@ import { RecentCompanies } from '@/components/dashboard/recent-companies';
 import { QuickActions } from '@/components/dashboard/quick-actions';
 import { DashboardHeader } from '@/components/dashboard/header';
 import { SystemStatus, SystemStatusLoading } from '@/components/dashboard/system-status';
+import { SkeletonCard, SkeletonDashboard } from '@/components/ui/skeleton-loader';
 
 export default function DashboardPage() {
   return (
@@ -14,9 +15,11 @@ export default function DashboardPage() {
       <DashboardHeader />
 
       {/* Stats Cards */}
-      <Suspense fallback={<StatsLoading />}>
-        <DashboardStats />
-      </Suspense>
+      <div data-tour="dashboard-stats">
+        <Suspense fallback={<StatsLoading />}>
+          <DashboardStats />
+        </Suspense>
+      </div>
 
       {/* Main Content Grid */}
       <div className="grid md:grid-cols-2 gap-8">
@@ -32,7 +35,7 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Suspense fallback={<div className="animate-pulse h-64 bg-muted rounded" />}>
+            <Suspense fallback={<SkeletonCard />}>
               <RecentCompanies />
             </Suspense>
           </CardContent>
@@ -49,7 +52,7 @@ export default function DashboardPage() {
               Manage your intelligence pipeline
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent data-tour="quick-actions">
             <QuickActions />
           </CardContent>
         </Card>

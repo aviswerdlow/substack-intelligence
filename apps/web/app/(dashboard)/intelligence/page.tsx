@@ -9,6 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Building2, ExternalLink, Search, Filter, TrendingUp } from 'lucide-react';
 import { formatDateTime, getSentimentColor, getConfidenceColor } from '@/lib/utils';
 import Link from 'next/link';
+import { NoCompaniesEmptyState, NoSearchResultsEmptyState } from '@/components/ui/empty-state';
+import { SkeletonCard } from '@/components/ui/skeleton-loader';
+import { Breadcrumbs } from '@/components/navigation/Breadcrumbs';
+import { useRouter } from 'next/navigation';
 
 interface CompanyMention {
   id: string;
@@ -41,6 +45,7 @@ interface IntelligenceData {
 }
 
 export default function IntelligencePage() {
+  const router = useRouter();
   const [data, setData] = useState<IntelligenceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -83,6 +88,7 @@ export default function IntelligencePage() {
   if (loading) {
     return (
       <div className="space-y-6">
+        <Breadcrumbs />
         <div className="flex items-center justify-between">
           <div className="animate-pulse bg-muted h-8 w-48 rounded" />
           <div className="animate-pulse bg-muted h-10 w-32 rounded" />
@@ -94,7 +100,7 @@ export default function IntelligencePage() {
         </div>
         <div className="space-y-4">
           {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="animate-pulse bg-muted h-48 rounded-lg" />
+            <SkeletonCard key={i} />
           ))}
         </div>
       </div>
@@ -103,6 +109,8 @@ export default function IntelligencePage() {
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs />
+      
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -172,6 +180,7 @@ export default function IntelligencePage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
+            data-search-input
           />
         </div>
         <Select value={fundingFilter} onValueChange={setFundingFilter}>
@@ -193,18 +202,22 @@ export default function IntelligencePage() {
 
       {/* Companies List */}
       {filteredCompanies.length === 0 ? (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Companies Found</h3>
-            <p className="text-muted-foreground">
-              {data?.companies.length === 0 
-                ? 'No companies have been processed yet. The daily pipeline will run automatically.'
-                : 'Try adjusting your search or filter criteria.'
-              }
-            </p>
-          </CardContent>
-        </Card>
+        searchTerm ? (
+          <NoSearchResultsEmptyState
+            searchTerm={searchTerm}
+            onClearSearch={() => setSearchTerm('')}
+          />
+        ) : (
+          <NoCompaniesEmptyState
+            onRunPipeline={() => {
+              router.push('/dashboard');
+              setTimeout(() => {
+                document.querySelector('[data-pipeline-trigger]')?.dispatchEvent(new Event('click'));
+              }, 500);
+            }}
+            onAddCompany={() => router.push('/settings?tab=companies')}
+          />
+        )
       ) : (
         <div className="space-y-6">
           {filteredCompanies.map((company) => (
