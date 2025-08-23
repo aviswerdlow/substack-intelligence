@@ -17,31 +17,37 @@ const navigation = [
     name: 'Dashboard',
     href: '/dashboard',
     icon: Home,
+    dataTour: 'dashboard-nav'
   },
   {
     name: 'Intelligence',
     href: '/intelligence',
     icon: Building2,
+    dataTour: 'intelligence-nav'
   },
   {
     name: 'Emails',
     href: '/emails',
     icon: Mail,
+    dataTour: 'emails-nav'
   },
   {
     name: 'Reports',
     href: '/reports',
     icon: FileText,
+    dataTour: 'reports-nav'
   },
   {
     name: 'Analytics',
     href: '/analytics',
     icon: BarChart3,
+    dataTour: 'analytics-nav'
   },
   {
     name: 'Settings',
     href: '/settings',
     icon: Settings,
+    dataTour: 'settings-nav'
   },
 ];
 
@@ -58,6 +64,7 @@ export function DashboardNav() {
           <Link
             key={item.name}
             href={item.href}
+            data-tour={item.dataTour}
             className={cn(
               'flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors',
               isActive
