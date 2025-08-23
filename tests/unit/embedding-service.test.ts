@@ -1,44 +1,69 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EmbeddingService } from '@substack-intelligence/ai';
 
-// Create mock functions for OpenAI
-const mockEmbeddingsCreate = vi.fn();
-
-// Mock OpenAI SDK
-vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    embeddings: {
-      create: mockEmbeddingsCreate
-    }
-  }))
+// Mock axiom logger
+vi.mock('../../../apps/web/lib/monitoring/axiom', () => ({
+  axiomLogger: {
+    log: vi.fn().mockResolvedValue(undefined),
+    logError: vi.fn().mockResolvedValue(undefined)
+  }
 }));
 
-// Create mock functions for Supabase
+// Mock setTimeout to avoid delays in tests
+vi.stubGlobal('setTimeout', (fn: Function) => {
+  // Call the function immediately to avoid delays
+  fn();
+  return 1;
+});
+
+// Create mock OpenAI client
+const mockEmbeddingsCreate = vi.fn();
+const mockOpenAI = {
+  embeddings: {
+    create: mockEmbeddingsCreate
+  }
+};
+
+// Create mock Supabase client  
 const mockFrom = vi.fn();
-const mockSelect = vi.fn().mockReturnThis();
-const mockEq = vi.fn().mockReturnThis();
-const mockNot = vi.fn().mockReturnThis();
-const mockIs = vi.fn().mockReturnThis();
-const mockUpdate = vi.fn().mockReturnThis();
+const mockSelect = vi.fn();
+const mockEq = vi.fn();
+const mockNot = vi.fn();
+const mockIs = vi.fn();
+const mockUpdate = vi.fn();
 const mockSingle = vi.fn();
 const mockRpc = vi.fn();
 const mockCount = vi.fn();
+const mockOverlaps = vi.fn();
 
-// Mock Supabase client
-vi.mock('@substack-intelligence/database', () => ({
-  createServiceRoleClient: vi.fn(() => ({
-    from: mockFrom.mockImplementation(() => ({
-      select: mockSelect,
-      eq: mockEq,
-      not: mockNot,
-      is: mockIs,
-      update: mockUpdate,
-      single: mockSingle,
-      count: mockCount
-    })),
-    rpc: mockRpc
-  }))
-}));
+// Create a chainable query builder mock
+const createQueryBuilder = () => {
+  const queryBuilder = {
+    select: mockSelect,
+    eq: mockEq,
+    not: mockNot,
+    is: mockIs,  
+    update: mockUpdate,
+    single: mockSingle,
+    count: mockCount,
+    overlaps: mockOverlaps
+  };
+  
+  // Make all chain methods return the query builder except single and count
+  mockSelect.mockReturnValue(queryBuilder);
+  mockEq.mockReturnValue(queryBuilder);
+  mockNot.mockReturnValue(queryBuilder);
+  mockIs.mockReturnValue(queryBuilder);
+  mockUpdate.mockReturnValue(queryBuilder);
+  mockOverlaps.mockReturnValue(queryBuilder);
+  
+  return queryBuilder;
+};
+
+const mockSupabase = {
+  from: mockFrom.mockImplementation(() => createQueryBuilder()),
+  rpc: mockRpc
+};
 
 describe('EmbeddingService', () => {
   let embeddingService: EmbeddingService;
@@ -66,21 +91,26 @@ describe('EmbeddingService', () => {
     mockSingle.mockClear();
     mockRpc.mockClear();
     mockCount.mockClear();
+    mockOverlaps.mockClear();
     
-    // Set up environment variables
-    process.env.OPENAI_API_KEY = 'test-openai-key';
+    // Reset the from mock to return a fresh query builder
+    mockFrom.mockImplementation(() => createQueryBuilder());
     
-    embeddingService = new EmbeddingService();
+    // Create EmbeddingService with injected mock clients
+    embeddingService = new EmbeddingService(mockOpenAI as any, mockSupabase);
   });
 
   describe('generateCompanyEmbedding', () => {
     it('should generate and store embedding for a company', async () => {
-      // Mock Supabase client methods
+      // Mock Supabase client methods - the chain ends with single() which returns a promise
       mockSingle.mockResolvedValue({
         data: mockCompany,
         error: null
       });
+      
+      // Update also needs to return from the chain
       mockUpdate.mockResolvedValue({
+        data: null,
         error: null
       });
 
@@ -234,9 +264,9 @@ describe('EmbeddingService', () => {
     it('should process multiple companies with concurrency control', async () => {
       const companyIds = ['id1', 'id2', 'id3'];
       
-      // Mock successful embedding generation
-      vi.spyOn(embeddingService, 'generateCompanyEmbedding')
-        .mockResolvedValue(mockEmbedding);
+      // Mock the generateCompanyEmbedding method directly instead of mocking the underlying calls
+      const mockGenerateEmbedding = vi.fn().mockResolvedValue(mockEmbedding);
+      embeddingService.generateCompanyEmbedding = mockGenerateEmbedding;
 
       const result = await embeddingService.batchGenerateEmbeddings(companyIds, {
         concurrency: 2
@@ -244,22 +274,26 @@ describe('EmbeddingService', () => {
 
       expect(result.success).toHaveLength(3);
       expect(result.failed).toHaveLength(0);
-    }, 10000);
+      expect(mockGenerateEmbedding).toHaveBeenCalledTimes(3);
+    }, 5000);
 
     it('should handle partial failures in batch processing', async () => {
       const companyIds = ['id1', 'id2', 'id3'];
       
-      // Mock mixed success/failure
-      vi.spyOn(embeddingService, 'generateCompanyEmbedding')
-        .mockResolvedValueOnce(mockEmbedding)
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(mockEmbedding);
+      // Mock mixed success/failure responses
+      const mockGenerateEmbedding = vi.fn()
+        .mockResolvedValueOnce(mockEmbedding)  // id1 success
+        .mockResolvedValueOnce(null)           // id2 failure
+        .mockResolvedValueOnce(mockEmbedding); // id3 success
+        
+      embeddingService.generateCompanyEmbedding = mockGenerateEmbedding;
 
       const result = await embeddingService.batchGenerateEmbeddings(companyIds);
 
       expect(result.success).toHaveLength(2);
       expect(result.failed).toHaveLength(1);
-    }, 10000);
+      expect(mockGenerateEmbedding).toHaveBeenCalledTimes(3);
+    }, 5000);
   });
 
   describe('createEmbeddingText', () => {
@@ -295,17 +329,22 @@ describe('EmbeddingService', () => {
 
   describe('getEmbeddingStats', () => {
     it('should return embedding coverage statistics', async () => {
-      // Mock for total companies count - returns directly with count property
-      mockFrom.mockImplementationOnce(() => ({
-        select: vi.fn().mockResolvedValue({ count: 100 })
+      // Reset mockFrom implementation to handle different call patterns
+      mockFrom.mockImplementation(() => ({
+        select: mockSelect,
+        eq: mockEq,
+        not: mockNot,
+        is: mockIs,
+        update: mockUpdate,
+        single: mockSingle,
+        count: mockCount
       }));
       
-      // Mock for companies with embeddings count
-      mockFrom.mockImplementationOnce(() => ({
-        select: vi.fn().mockReturnValue({
-          not: vi.fn().mockResolvedValue({ count: 75 })
-        })
-      }));
+      // Mock first call (total companies) - select returns promise with count
+      mockSelect.mockResolvedValueOnce({ count: 100 });
+      
+      // Mock second call (companies with embeddings) - not returns promise with count
+      mockNot.mockResolvedValueOnce({ count: 75 });
 
       const stats = await embeddingService.getEmbeddingStats();
 

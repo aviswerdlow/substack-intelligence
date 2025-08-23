@@ -21,16 +21,23 @@ export class EmbeddingService {
   private openai: OpenAI;
   private supabase;
 
-  constructor() {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY environment variable is required');
+  constructor(openai?: OpenAI, supabase?: any) {
+    if (openai && supabase) {
+      // Use provided clients (for testing)
+      this.openai = openai;
+      this.supabase = supabase;
+    } else {
+      // Create new clients (for production)
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY environment variable is required');
+      }
+
+      this.openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY
+      });
+
+      this.supabase = createServiceRoleClient();
     }
-
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
-
-    this.supabase = createServiceRoleClient();
   }
 
   /**
