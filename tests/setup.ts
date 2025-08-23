@@ -5,11 +5,12 @@ import { TextEncoder, TextDecoder } from 'util';
 import { supabaseMocks } from './mocks/database/supabase';
 import { databaseMocks } from './mocks/database/queries';
 import { nextjsMocks, headersMocks } from './mocks/nextjs/server';
-import { clerkNextjsMocks } from './mocks/auth/clerk';
-import { anthropicMocks, openaiMocks, resendMocks } from './mocks/external/services';
-import { googleApisMocks } from './mocks/external/gmail';
-import { puppeteerModuleMocks } from './mocks/external/puppeteer';
-import { axiomLogger } from './mocks/external/axiom';
+import { clerkNextjsMocks, clerkMocks } from './mocks/auth/clerk';
+import { anthropicMocks, openaiMocks, resendMocks, externalServicesMocks } from './mocks/external/services';
+import { googleApisMocks, gmailMocks } from './mocks/external/gmail';
+import { puppeteerModuleMocks, puppeteerMocks } from './mocks/external/puppeteer';
+import { axiomLogger, axiomMocks } from './mocks/external/axiom';
+import { databaseQueryMocks } from './mocks/database/queries';
 
 // Polyfill for Node.js environment
 global.TextEncoder = TextEncoder;
@@ -157,14 +158,6 @@ afterEach(() => {
   
   // Reset all centralized mock factories
   try {
-    // Import and reset all mocks - done dynamically to avoid circular dependencies
-    const { axiomMocks } = require('./mocks/external/axiom');
-    const { clerkMocks } = require('./mocks/auth/clerk');
-    const { externalServicesMocks } = require('./mocks/external/services');
-    const { gmailMocks } = require('./mocks/external/gmail');
-    const { puppeteerMocks } = require('./mocks/external/puppeteer');
-    const { databaseQueryMocks } = require('./mocks/database/queries');
-    
     axiomMocks.resetAllMocks();
     clerkMocks.resetAllMocks();
     externalServicesMocks.resetAllMocks();
@@ -172,7 +165,7 @@ afterEach(() => {
     puppeteerMocks.resetAllMocks();
     databaseQueryMocks.resetAllMocks();
   } catch (error) {
-    // Silently handle any import errors during cleanup
+    // Silently handle any errors during cleanup
   }
 });
 
@@ -199,53 +192,43 @@ declare global {
 // Provide global test utilities for convenience
 globalThis.testUtils = {
   mockSuccessfulAuth: () => {
-    const { clerkMocks } = require('./mocks/auth/clerk');
     clerkMocks.mockSignedInUser();
   },
   
   mockSignedInUser: (overrides?: any) => {
-    const { clerkMocks } = require('./mocks/auth/clerk');
     return clerkMocks.mockSignedInUser(overrides);
   },
   
   mockSignedOutUser: () => {
-    const { clerkMocks } = require('./mocks/auth/clerk');
     clerkMocks.mockSignedOutUser();
   },
   
   mockAnthropicSuccess: (response?: string) => {
-    const { externalServicesMocks } = require('./mocks/external/services');
     externalServicesMocks.mockAnthropicSuccess(response);
   },
   
   mockAnthropicError: (error?: any) => {
-    const { externalServicesMocks } = require('./mocks/external/services');
     externalServicesMocks.mockAnthropicError(error);
   },
   
   mockOpenAIEmbeddingsSuccess: (embeddings?: number[][]) => {
-    const { externalServicesMocks } = require('./mocks/external/services');
     externalServicesMocks.mockOpenAIEmbeddingsSuccess(embeddings);
   },
   
   mockResendSuccess: (emailId?: string) => {
-    const { externalServicesMocks } = require('./mocks/external/services');
     externalServicesMocks.mockResendSuccess(emailId);
   },
   
   mockPuppeteerPDFSuccess: () => {
-    const { puppeteerMocks } = require('./mocks/external/puppeteer');
     puppeteerMocks.mockSuccessfulLaunch();
     puppeteerMocks.mockPDFGeneration();
   },
   
   mockAxiomLogging: () => {
-    const { axiomMocks } = require('./mocks/external/axiom');
     axiomMocks.mockSuccessfulLogging();
   },
   
   mockGmailSuccess: () => {
-    const { gmailMocks } = require('./mocks/external/gmail');
     gmailMocks.mockSuccessfulAuth();
     gmailMocks.mockMessagesListSuccess();
     gmailMocks.mockMessageGetSuccess();
@@ -253,13 +236,6 @@ globalThis.testUtils = {
   
   resetAllTestMocks: () => {
     try {
-      const { axiomMocks } = require('./mocks/external/axiom');
-      const { clerkMocks } = require('./mocks/auth/clerk');
-      const { externalServicesMocks } = require('./mocks/external/services');
-      const { gmailMocks } = require('./mocks/external/gmail');
-      const { puppeteerMocks } = require('./mocks/external/puppeteer');
-      const { databaseQueryMocks } = require('./mocks/database/queries');
-      
       axiomMocks.resetAllMocks();
       clerkMocks.resetAllMocks();
       externalServicesMocks.resetAllMocks();

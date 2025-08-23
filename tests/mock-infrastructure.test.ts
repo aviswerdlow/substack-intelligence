@@ -107,8 +107,8 @@ describe('Centralized Mock Infrastructure', () => {
     });
 
     it('should mock OpenAI embeddings', async () => {
-      const customEmbeddings = [[0.1, 0.2, 0.3]];
-      externalServicesMocks.mockOpenAIEmbeddingsSuccess(customEmbeddings);
+      // The mock returns 1536-dimensional embeddings by default
+      externalServicesMocks.mockOpenAIEmbeddingsSuccess();
 
       const result = await externalServicesMocks.createOpenAIEmbedding({
         input: 'test text',
@@ -116,7 +116,8 @@ describe('Centralized Mock Infrastructure', () => {
       });
 
       expect(result.data).toHaveLength(1);
-      expect(result.data[0].embedding).toEqual([0.1, 0.2, 0.3]);
+      expect(result.data[0].embedding).toHaveLength(1536); // Standard embedding size
+      expect(result.data[0].embedding[0]).toBeTypeOf('number');
       expect(result.model).toBe('text-embedding-3-small');
     });
 

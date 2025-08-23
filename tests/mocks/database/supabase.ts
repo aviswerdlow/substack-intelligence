@@ -158,7 +158,16 @@ class MockSupabaseQueryBuilderImpl implements MockSupabaseQueryBuilder {
     }
     
     if (this._mockConfig.shouldResolve) {
-      return this._mockConfig.resolveValue;
+      const result = this._mockConfig.resolveValue;
+      // If data is an empty array and single() is called, return null instead
+      if (Array.isArray(result.data) && result.data.length === 0) {
+        return { data: null, error: null };
+      }
+      // If data is an array with items, return just the first item
+      if (Array.isArray(result.data) && result.data.length > 0) {
+        return { data: result.data[0], error: null };
+      }
+      return result;
     } else {
       throw this._mockConfig.rejectValue;
     }

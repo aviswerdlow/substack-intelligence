@@ -632,12 +632,3 @@ export const mockUtilities = {
   mockAssertions,
   mockPerformanceUtils
 };
-
-// Re-export individual utilities for convenience
-export {
-  MockUtils,
-  SpyUtils,
-  MockStateManager,
-  AdvancedMockFactory,
-  MockScenarioManager
-};

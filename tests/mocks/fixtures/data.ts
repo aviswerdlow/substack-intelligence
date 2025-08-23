@@ -423,12 +423,3 @@ export class DataFixtures {
     return data.reverse();
   }
 }
-
-// Export all fixtures
-export {
-  SAMPLE_COMPANIES,
-  SAMPLE_EMAILS,
-  SAMPLE_INTELLIGENCE,
-  SAMPLE_USERS,
-  SAMPLE_NEWSLETTERS
-};
