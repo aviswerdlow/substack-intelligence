@@ -20,7 +20,7 @@ export class ClaudeExtractor {
       throw new Error('ANTHROPIC_API_KEY is required but not configured');
     }
     
-    console.log('[ClaudeExtractor] 🔑 API Key found:', apiKey.substring(0, 10) + '...');
+    // API key validation successful
     
     try {
       // Initialize Anthropic client WITHOUT custom fetch (which may be causing issues)
@@ -30,7 +30,7 @@ export class ClaudeExtractor {
         timeout: 30000, // 30 second timeout
         // Removed custom fetch - using default fetch
       });
-      console.log('[ClaudeExtractor] ✅ Anthropic client initialized successfully');
+      // Anthropic client initialized successfully
     } catch (error) {
       console.error('[ClaudeExtractor] ❌ Failed to initialize Anthropic client:', error);
       throw error;

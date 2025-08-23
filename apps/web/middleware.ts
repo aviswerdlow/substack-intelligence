@@ -32,6 +32,11 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   if (!isPublicRoute(req)) {
     await auth.protect();
   }
+
+  // Apply security headers to all responses
+  const response = NextResponse.next();
+  applySecurityHeaders(response, req);
+  return response;
 });
 
 /**
@@ -102,6 +107,60 @@ function checkDebugModeTimeout() {
     // Set the timestamp when debug mode is first detected
     process.env.DEBUG_ENABLED_AT = new Date().toISOString();
   }
+}
+
+/**
+ * Apply comprehensive security headers
+ */
+function applySecurityHeaders(response: NextResponse, request: NextRequest) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  
+  // Content Security Policy
+  const cspPolicy = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.clerk.dev https://*.clerk.accounts.dev",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: https: blob:",
+    "connect-src 'self' https://api.anthropic.com https://*.supabase.co https://*.clerk.accounts.dev https://*.inngest.net",
+    "frame-src 'self' https://*.clerk.accounts.dev",
+    isProduction ? "upgrade-insecure-requests" : ""
+  ].filter(Boolean).join('; ');
+  
+  // Apply security headers
+  const headers = {
+    // Content Security Policy
+    'Content-Security-Policy': cspPolicy,
+    
+    // XSS Protection
+    'X-XSS-Protection': '1; mode=block',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    
+    // HSTS (only in production)
+    ...(isProduction && {
+      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload'
+    }),
+    
+    // Referrer Policy
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    
+    // Permissions Policy
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    
+    // Cache Control for sensitive pages
+    ...(request.nextUrl.pathname.startsWith('/dashboard') && {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    })
+  };
+  
+  // Set headers
+  Object.entries(headers).forEach(([key, value]) => {
+    response.headers.set(key, value);
+  });
 }
 
 /**

@@ -52,8 +52,6 @@ function createServiceRoleClient() {
         throw new Error('Missing env.SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_ROLE_KEY');
     }
     const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-    console.log('Creating Supabase client with URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
-    console.log('Service key first 20 chars:', serviceKey?.substring(0, 20));
     return (0, supabase_js_1.createClient)(process.env.NEXT_PUBLIC_SUPABASE_URL, serviceKey, {
         auth: {
             autoRefreshToken: false,
@@ -62,12 +60,6 @@ function createServiceRoleClient() {
         },
         db: {
             schema: 'public'
-        },
-        global: {
-            fetch: (...args) => {
-                console.log('Supabase fetch called with URL:', args[0]);
-                return fetch(...args);
-            }
         }
     });
 }

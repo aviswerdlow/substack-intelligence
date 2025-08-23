@@ -73,16 +73,58 @@ function SettingsPageContent() {
         const response = await fetch('/api/auth/gmail');
         const data = await response.json();
         
+        if (!response.ok) {
+          // Handle configuration errors
+          if (data.error === 'Configuration Error') {
+            alert(
+              `Gmail Configuration Error:\n\n` +
+              `Missing environment variables:\n` +
+              data.details.map((detail: string) => `• ${detail}`).join('\n') + '\n\n' +
+              `Instructions:\n` +
+              data.instructions.map((instruction: string) => `• ${instruction}`).join('\n')
+            );
+            setConnectingEmail(false);
+            return;
+          }
+          
+          throw new Error(data.message || data.error || 'Failed to initiate Gmail authentication');
+        }
+        
         if (data.authUrl) {
           // Open OAuth flow in new window
-          const authWindow = window.open(data.authUrl, 'gmail-auth', 'width=500,height=600');
+          const authWindow = window.open(
+            data.authUrl, 
+            'gmail-auth', 
+            'width=600,height=700,scrollbars=yes,resizable=yes,left=' + 
+            ((screen.width / 2) - 300) + ',top=' + ((screen.height / 2) - 350)
+          );
           
-          // Check for window close and update status
+          if (!authWindow) {
+            alert(
+              'Popup blocked! Please allow popups for this site.\n\n' +
+              'To connect Gmail:\n' +
+              '1. Allow popups in your browser\n' +
+              '2. Click "Connect Gmail" again\n' +
+              '3. Or try disabling popup blockers'
+            );
+            setConnectingEmail(false);
+            return;
+          }
+          
+          let checkCount = 0;
+          const maxChecks = 300; // 5 minutes timeout
+          
+          // Check for window close and connection status
           const checkInterval = setInterval(() => {
-            if (authWindow?.closed) {
+            checkCount++;
+            
+            if (authWindow.closed) {
               clearInterval(checkInterval);
-              // Check if connection was successful (would be set by callback)
+              
+              // Check if connection was successful
               const connectedEmail = localStorage.getItem('gmail_connected_email');
+              const connectionError = localStorage.getItem('gmail_connection_error');
+              
               if (connectedEmail) {
                 setSettings((prev: any) => ({
                   ...prev,
@@ -97,39 +139,74 @@ function SettingsPageContent() {
                   }
                 }));
                 localStorage.removeItem('gmail_connected_email');
-                alert(`Successfully connected Gmail account: ${connectedEmail}`);
+                localStorage.removeItem('gmail_connection_time');
+                alert(`✅ Gmail connected successfully!\n\nConnected account: ${connectedEmail}`);
+              } else if (connectionError) {
+                alert(`❌ Gmail connection failed: ${connectionError}\n\nPlease try again or check the error details in the popup window.`);
+                localStorage.removeItem('gmail_connection_error');
+                localStorage.removeItem('gmail_connection_error_time');
+              } else {
+                // Window closed without clear success or error
+                alert(
+                  '⚠️ Gmail connection incomplete.\n\n' +
+                  'The authentication window was closed. Please try again and complete the full Google authorization process.'
+                );
               }
+              setConnectingEmail(false);
+            } else if (checkCount >= maxChecks) {
+              // Timeout - close window and show message
+              clearInterval(checkInterval);
+              authWindow.close();
+              alert(
+                '⏱️ Connection timeout.\n\n' +
+                'The Gmail connection process took too long. Please try again and complete the authorization quickly.'
+              );
               setConnectingEmail(false);
             }
           }, 1000);
         } else {
-          throw new Error('Failed to get authentication URL');
+          throw new Error('No authentication URL received from server');
         }
       } else {
         // Disconnect Gmail
-        await fetch('/api/auth/gmail', { method: 'DELETE' });
-        setSettings((prev: any) => ({
-          ...prev,
-          email: {
-            ...(prev.email || {}),
-            connected: false,
-            lastSync: null
-          }
-        }));
+        const response = await fetch('/api/auth/gmail', { method: 'DELETE' });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+          setSettings((prev: any) => ({
+            ...prev,
+            email: {
+              ...(prev.email || {}),
+              connected: false,
+              lastSync: null
+            },
+            account: {
+              ...(prev.account || {}),
+              email: ''
+            }
+          }));
+          alert('✅ Gmail account disconnected successfully');
+        } else {
+          throw new Error(data.message || 'Failed to disconnect Gmail account');
+        }
         setConnectingEmail(false);
-        alert('Gmail account disconnected');
       }
     } catch (error) {
-      console.error('Failed to connect email:', error);
+      console.error('Gmail connection error:', error);
       
-      // In development, offer to use mock connection
-      if (process.env.NODE_ENV === 'development') {
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      // In development, offer to use mock connection for OAuth failures
+      if (process.env.NODE_ENV === 'development' && errorMessage.includes('OAuth')) {
         const useMock = confirm(
-          'Google OAuth failed (this is common in development).\n\n' +
-          'Would you like to use a mock connection for testing?\n\n' +
-          'Note: To use real Google OAuth, you need to:\n' +
-          '1. Add http://localhost:3000/api/auth/gmail/callback to your Google OAuth redirect URIs\n' +
-          '2. Add your email as a test user in Google Cloud Console'
+          `🔧 Development Mode - OAuth Error\n\n` +
+          `Error: ${errorMessage}\n\n` +
+          `Would you like to use a mock Gmail connection for testing?\n\n` +
+          `Note: For real OAuth, you need:\n` +
+          `• Google Cloud Console setup\n` +
+          `• Proper redirect URIs configured\n` +
+          `• Environment variables set`
         );
         
         if (useMock) {
@@ -150,7 +227,9 @@ function SettingsPageContent() {
                   email: mockData.email
                 }
               }));
-              alert(`Mock Gmail connection created for: ${mockData.email}`);
+              alert(`🧪 Mock Gmail connection created for: ${mockData.email}`);
+            } else {
+              alert('Failed to create mock connection.');
             }
           } catch (mockError) {
             console.error('Mock connection failed:', mockError);
@@ -158,7 +237,14 @@ function SettingsPageContent() {
           }
         }
       } else {
-        alert('Failed to connect email. Please try again.');
+        alert(
+          `❌ Gmail Connection Failed\n\n` +
+          `Error: ${errorMessage}\n\n` +
+          `Please try again. If the problem persists, check:\n` +
+          `• Your internet connection\n` +
+          `• That popups are allowed\n` +
+          `• Gmail API is enabled in Google Cloud Console`
+        );
       }
       setConnectingEmail(false);
     }
@@ -836,28 +922,85 @@ function SettingsPageContent() {
                           <div>
                             <p className="font-medium">Gmail</p>
                             <p className="text-sm text-muted-foreground">
-                              {settings?.email?.connected ? 'Connected' : 'Not connected'}
+                              {settings?.email?.connected ? (
+                                <>
+                                  <span className="text-green-600 font-medium">Connected</span>
+                                  {settings.account?.email && (
+                                    <span className="text-xs block">{settings.account.email}</span>
+                                  )}
+                                </>
+                              ) : (
+                                'Not connected'
+                              )}
                             </p>
                           </div>
                         </div>
-                        <Button
-                          variant={settings?.email?.connected ? "outline" : "default"}
-                          onClick={handleEmailConnect}
-                          disabled={connectingEmail}
-                        >
-                          {connectingEmail ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : settings?.email?.connected ? (
-                            'Reconnect'
-                          ) : (
-                            'Connect'
+                        <div className="flex gap-2">
+                          {settings?.email?.connected && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={async () => {
+                                try {
+                                  const response = await fetch('/api/auth/gmail/status');
+                                  const data = await response.json();
+                                  if (data.connected) {
+                                    alert(`✅ Gmail connection is active\n\nAccount: ${data.email || 'Unknown'}`);
+                                  } else {
+                                    alert('⚠️ Gmail connection appears to be inactive. Try reconnecting.');
+                                  }
+                                } catch (error) {
+                                  alert('❌ Unable to check connection status');
+                                }
+                              }}
+                              title="Test Gmail connection"
+                            >
+                              Test
+                            </Button>
                           )}
-                        </Button>
+                          <Button
+                            variant={settings?.email?.connected ? "outline" : "default"}
+                            onClick={handleEmailConnect}
+                            disabled={connectingEmail}
+                          >
+                            {connectingEmail ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                {settings?.email?.connected ? 'Reconnecting...' : 'Connecting...'}
+                              </>
+                            ) : settings?.email?.connected ? (
+                              'Disconnect'
+                            ) : (
+                              'Connect Gmail'
+                            )}
+                          </Button>
+                        </div>
                       </div>
                       
                       {settings?.email?.connected && settings?.email?.lastSync && (
                         <div className="text-sm text-muted-foreground">
-                          Last synced: {new Date(settings?.email?.lastSync).toLocaleString()}
+                          <div className="flex items-center gap-2">
+                            <span>Last synced: {new Date(settings?.email?.lastSync).toLocaleString()}</span>
+                            <Badge variant="secondary" className="text-xs">
+                              {settings.email.connected ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {connectingEmail && (
+                        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                            <span className="text-sm text-blue-800">
+                              {settings?.email?.connected ? 
+                                'Reconnecting Gmail account...' : 
+                                'Opening Gmail authorization window...'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-blue-600 mt-1">
+                            Complete the authorization in the popup window
+                          </p>
                         </div>
                       )}
                     </div>
