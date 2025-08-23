@@ -280,6 +280,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Tab states
   const [tabStates, setTabStates] = useState<Record<string, TabState>>({});
   
+  // Computed properties (moved here to avoid temporal dead zone)
+  const hasUnsavedChanges = Object.values(tabStates).some(state => state.isDirty);
+  const unsavedTabs = Object.entries(tabStates)
+    .filter(([_, state]) => state.isDirty)
+    .map(([tab]) => tab);
+  
   // Auto-save draft to localStorage
   useEffect(() => {
     const interval = setInterval(() => {
@@ -335,12 +341,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       });
     }
   });
-  
-  // Computed properties
-  const hasUnsavedChanges = Object.values(tabStates).some(state => state.isDirty);
-  const unsavedTabs = Object.entries(tabStates)
-    .filter(([_, state]) => state.isDirty)
-    .map(([tab]) => tab);
   
   // Methods
   const setSettings = useCallback((newSettings: Settings | ((prev: Settings) => Settings)) => {

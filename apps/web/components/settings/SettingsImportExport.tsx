@@ -180,7 +180,9 @@ export function SettingsImportExport({ className }: SettingsImportExportProps) {
     try {
       // Filter settings based on selected sections
       const filteredSettings = Object.entries(settings).reduce((acc, [key, value]) => {
-        if (exportOptions.sections[key as keyof typeof exportOptions.sections]) {
+        // Check if the section exists in exportOptions.sections before including it
+        const sectionKey = key as keyof typeof exportOptions.sections;
+        if (exportOptions.sections[sectionKey]) {
           acc[key] = value;
         }
         return acc;

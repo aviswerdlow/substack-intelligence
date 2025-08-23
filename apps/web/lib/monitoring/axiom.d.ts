@@ -8,6 +8,7 @@ declare class AxiomLogger {
     logExtractionEvent(event: string, data?: Record<string, any>): Promise<void>;
     logApiRequest(method: string, path: string, statusCode: number, duration: number, userId?: string, error?: any): Promise<void>;
     logDatabaseEvent(event: string, data?: Record<string, any>): Promise<void>;
+    logSecurityEvent(event: string, request?: any, data?: Record<string, any>): Promise<void>;
     logReportEvent(event: string, data?: Record<string, any>): Promise<void>;
     logError(error: Error, context?: Record<string, any>): Promise<void>;
     logPerformance(operation: string, duration: number, metadata?: Record<string, any>): Promise<void>;

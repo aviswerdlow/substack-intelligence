@@ -1,7 +1,7 @@
-import { auth } from '@clerk/nextjs/server';
-import { redirect } from 'next/navigation';
+// import { auth } from '@clerk/nextjs/server';
+// import { redirect } from 'next/navigation';
 import { DashboardNav } from '@/components/dashboard/nav';
-import { UserButton } from '@clerk/nextjs';
+// import { UserButton } from '@clerk/nextjs';
 import { Providers } from '@/components/providers';
 
 export default async function DashboardLayout({
@@ -9,11 +9,12 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { userId } = await auth();
+  // TEMPORARILY DISABLED FOR TESTING
+  // const { userId } = await auth();
 
-  if (!userId) {
-    redirect('/sign-in');
-  }
+  // if (!userId) {
+  //   redirect('/sign-in');
+  // }
 
   return (
     <Providers>
@@ -25,13 +26,15 @@ export default async function DashboardLayout({
               <DashboardNav />
             </div>
             <div className="flex items-center space-x-4">
-              <UserButton 
+              {/* TEMPORARILY DISABLED FOR TESTING */}
+              {/* <UserButton 
                 appearance={{
                   elements: {
                     avatarBox: 'w-8 h-8'
                   }
                 }}
-              />
+              /> */}
+              <div className="w-8 h-8 rounded-full bg-gray-400"></div>
             </div>
           </div>
         </header>

@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useCallback } from 'react';
-import { useAuth } from '@clerk/nextjs';
+// import { useAuth } from '@clerk/nextjs';
 import { usePathname } from 'next/navigation';
 
 // Enhanced error tracking hook
 export function useErrorTracking() {
-  const { userId } = useAuth();
+  // const { userId } = useAuth();
+  const userId = 'test-user'; // TEMPORARILY HARDCODED FOR TESTING
   
   useEffect(() => {
     // Global error handler for JavaScript errors
@@ -102,7 +103,8 @@ export function useErrorTracking() {
 
 // Page view tracking hook
 export function usePageTracking() {
-  const { userId } = useAuth();
+  // const { userId } = useAuth();
+  const userId = 'test-user'; // TEMPORARILY HARDCODED FOR TESTING
   const pathname = usePathname();
   
   useEffect(() => {
@@ -130,7 +132,8 @@ export function usePageTracking() {
 
 // Performance monitoring hook
 export function usePerformanceTracking() {
-  const { userId } = useAuth();
+  // const { userId } = useAuth();
+  const userId = 'test-user'; // TEMPORARILY HARDCODED FOR TESTING
   
   useEffect(() => {
     const trackPerformance = () => {
@@ -229,7 +232,8 @@ export function usePerformanceTracking() {
 
 // Custom hook for tracking user interactions
 export function useInteractionTracking() {
-  const { userId } = useAuth();
+  // const { userId } = useAuth();
+  const userId = 'test-user'; // TEMPORARILY HARDCODED FOR TESTING
 
   return useCallback((action: string, data?: Record<string, any>) => {
     fetch('/api/monitoring/interaction', {

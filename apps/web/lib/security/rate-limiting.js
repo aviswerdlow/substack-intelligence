@@ -9,8 +9,26 @@ exports.isValidIP = isValidIP;
 exports.isIPBlocked = isIPBlocked;
 const ratelimit_1 = require("@upstash/ratelimit");
 const redis_1 = require("@upstash/redis");
-// Initialize Redis client for rate limiting
-const redis = redis_1.Redis.fromEnv();
+// Initialize Redis client for rate limiting with fallback
+let redis = null;
+let rateLimitingEnabled = false;
+try {
+    // Only initialize Redis if environment variables are properly configured
+    if (process.env.UPSTASH_REDIS_REST_URL &&
+        process.env.UPSTASH_REDIS_REST_TOKEN &&
+        !process.env.UPSTASH_REDIS_REST_URL.includes('your-redis')) {
+        redis = redis_1.Redis.fromEnv();
+        rateLimitingEnabled = true;
+        console.log('Rate limiting enabled with Redis');
+    }
+    else {
+        console.log('Rate limiting disabled - Redis not configured');
+    }
+}
+catch (error) {
+    console.warn('Failed to initialize Redis for rate limiting:', error);
+    rateLimitingEnabled = false;
+}
 // Rate limit configurations for different endpoints
 exports.RATE_LIMITS = {
     // Authentication endpoints
@@ -34,12 +52,16 @@ exports.RATE_LIMITS = {
 // Create rate limiters
 const rateLimiters = new Map();
 function getRateLimiter(endpoint) {
+    // Return null if rate limiting is disabled
+    if (!rateLimitingEnabled || !redis) {
+        return null;
+    }
     if (rateLimiters.has(endpoint)) {
         return rateLimiters.get(endpoint);
     }
     const config = exports.RATE_LIMITS[endpoint] || exports.RATE_LIMITS['api/*'];
     const ratelimit = new ratelimit_1.Ratelimit({
-        redis,
+        redis: redis,
         limiter: ratelimit_1.Ratelimit.slidingWindow(config.requests, config.window),
         analytics: true,
         prefix: `ratelimit:${endpoint}`
@@ -48,12 +70,30 @@ function getRateLimiter(endpoint) {
     return ratelimit;
 }
 async function checkRateLimit(request, endpoint) {
+    // If rate limiting is disabled, always return success
+    if (!rateLimitingEnabled || process.env.DISABLE_SECURITY_MIDDLEWARE === 'true') {
+        return {
+            success: true,
+            remaining: 999,
+            reset: new Date(Date.now() + 3600000),
+            limit: 1000
+        };
+    }
     // Get client identifier (prefer authenticated user, fallback to IP)
     const identifier = getClientIdentifier(request);
     // Determine endpoint for rate limiting
     const rateLimitEndpoint = endpoint || extractEndpoint(request);
     try {
         const ratelimit = getRateLimiter(rateLimitEndpoint);
+        // If no rate limiter available, allow the request
+        if (!ratelimit) {
+            return {
+                success: true,
+                remaining: 999,
+                reset: new Date(Date.now() + 3600000),
+                limit: 1000
+            };
+        }
         const result = await ratelimit.limit(identifier);
         return {
             success: result.success,

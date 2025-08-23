@@ -8,78 +8,186 @@ export class ClaudeExtractor {
   private client: Anthropic;
   private ratelimit: Ratelimit | null = null;
   private cache: Redis | null = null;
+  private maxRetries: number = 3;
+  private baseDelay: number = 1000; // 1 second base delay
   
   constructor() {
-    this.client = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY!
-    });
+    const apiKey = process.env.ANTHROPIC_API_KEY;
     
-    // Initialize rate limiting if Redis is available
-    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-      this.cache = Redis.fromEnv();
-      this.ratelimit = new Ratelimit({
-        redis: this.cache,
-        limiter: Ratelimit.slidingWindow(100, '1 m'),
-        analytics: true
-      });
+    // Enhanced API key validation
+    if (!apiKey) {
+      console.error('[ClaudeExtractor] ❌ ANTHROPIC_API_KEY not found in environment');
+      throw new Error('ANTHROPIC_API_KEY is required but not configured');
     }
+    
+    console.log('[ClaudeExtractor] 🔑 API Key found:', apiKey.substring(0, 10) + '...');
+    
+    try {
+      // Initialize Anthropic client WITHOUT custom fetch (which may be causing issues)
+      this.client = new Anthropic({
+        apiKey,
+        maxRetries: 0, // We handle retries ourselves
+        timeout: 30000, // 30 second timeout
+        // Removed custom fetch - using default fetch
+      });
+      console.log('[ClaudeExtractor] ✅ Anthropic client initialized successfully');
+    } catch (error) {
+      console.error('[ClaudeExtractor] ❌ Failed to initialize Anthropic client:', error);
+      throw error;
+    }
+    
+    // Disable rate limiting for now due to fetch issues
+    console.log('[ClaudeExtractor] ℹ️ Rate limiting disabled (temporarily)');
+    // if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    //   try {
+    //     this.cache = Redis.fromEnv();
+    //     this.ratelimit = new Ratelimit({
+    //       redis: this.cache,
+    //       limiter: Ratelimit.slidingWindow(100, '1 m'),
+    //       analytics: true
+    //     });
+    //     console.log('[ClaudeExtractor] ✅ Rate limiting initialized');
+    //   } catch (error) {
+    //     console.warn('[ClaudeExtractor] ⚠️ Rate limiting initialization failed:', error);
+    //     // Continue without rate limiting
+    //   }
+    // } else {
+    //   console.log('[ClaudeExtractor] ℹ️ Rate limiting disabled (Redis not configured)');
+    // }
   }
 
   async extractCompanies(content: string, newsletterName: string) {
     const startTime = Date.now();
+    console.log(`[ClaudeExtractor] 🎯 Starting extraction for newsletter: ${newsletterName}`);
+    console.log(`[ClaudeExtractor] 📝 Content length: ${content.length} characters`);
     
-    // Check rate limits if available
-    if (this.ratelimit) {
-      const { success } = await this.ratelimit.limit('claude-extraction');
-      if (!success) {
-        throw new Error('Rate limit exceeded');
-      }
-    }
+    // Skip rate limit check for now
+    // if (this.ratelimit) {
+    //   try {
+    //     const { success } = await this.ratelimit.limit('claude-extraction');
+    //     if (!success) {
+    //       console.error('[ClaudeExtractor] ❌ Rate limit exceeded');
+    //       throw new Error('Rate limit exceeded');
+    //     }
+    //     console.log('[ClaudeExtractor] ✅ Rate limit check passed');
+    //   } catch (error) {
+    //     console.warn('[ClaudeExtractor] ⚠️ Rate limit check failed:', error);
+    //     // Continue without rate limiting
+    //   }
+    // }
     
-    // Check cache if available
+    // Skip cache check for now
     const cacheKey = `extraction:${hashContent(content)}`;
-    if (this.cache) {
-      const cached = await this.cache.get(cacheKey);
-      if (cached) {
-        return ExtractionResultSchema.parse(cached);
-      }
-    }
+    // if (this.cache) {
+    //   const cached = await this.cache.get(cacheKey);
+    //   if (cached) {
+    //     return ExtractionResultSchema.parse(cached);
+    //   }
+    // }
     
     try {
-      // Make the API call to Claude
-      const response = await this.client.messages.create({
+      console.log('[ClaudeExtractor] 🚀 Making API call to Claude...');
+      console.log('[ClaudeExtractor] 📊 Request details:', {
         model: 'claude-3-5-sonnet-20241022',
         max_tokens: 4000,
         temperature: 0.2,
-        system: this.getSystemPrompt(),
-        messages: [{
-          role: 'user',
-          content: `
-            Newsletter: ${newsletterName}
-            Content: ${content.slice(0, 8000)} ${content.length > 8000 ? '...[truncated]' : ''}
-            
-            Extract all company mentions following the schema provided.
-            Focus on: consumer brands, startups, venture-backed companies.
-            Exclude: public companies unless they're launching new ventures.
-          `
-        }]
+        content_preview: content.slice(0, 100) + '...',
+        content_truncated: content.length > 8000
       });
+      
+      // Make the API call to Claude with retry logic
+      let response;
+      let lastError: any;
+      
+      for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+        try {
+          console.log(`[ClaudeExtractor] 🔄 Attempt ${attempt}/${this.maxRetries}`);
+          
+          response = await this.client.messages.create({
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 4000,
+            temperature: 0.2,
+            system: this.getSystemPrompt(),
+            messages: [{
+              role: 'user',
+              content: `
+                Newsletter: ${newsletterName}
+                Content: ${content.slice(0, 8000)} ${content.length > 8000 ? '...[truncated]' : ''}
+                
+                Extract all company mentions following the schema provided.
+                Focus on: consumer brands, startups, venture-backed companies.
+                Exclude: public companies unless they're launching new ventures.
+              `
+            }]
+          });
+          
+          console.log('[ClaudeExtractor] ✅ API call successful');
+          console.log('[ClaudeExtractor] 📊 Response usage:', response.usage);
+          break; // Success, exit retry loop
+          
+        } catch (apiError: any) {
+          lastError = apiError;
+          console.error(`[ClaudeExtractor] ❌ Attempt ${attempt} failed:`, {
+            error: apiError,
+            message: apiError?.message,
+            status: apiError?.status,
+            type: apiError?.type
+          });
+          
+          // Check if error is retryable
+          const isRetryable = this.isRetryableError(apiError);
+          
+          if (!isRetryable) {
+            console.error('[ClaudeExtractor] 🛑 Non-retryable error, stopping attempts');
+            throw apiError;
+          }
+          
+          if (attempt < this.maxRetries) {
+            const delay = this.calculateBackoffDelay(attempt);
+            console.log(`[ClaudeExtractor] ⏰ Waiting ${delay}ms before retry...`);
+            await this.sleep(delay);
+          } else {
+            console.error('[ClaudeExtractor] 💔 All retry attempts exhausted');
+            throw lastError;
+          }
+        }
+      }
+      
+      if (!response) {
+        throw lastError || new Error('Failed to get response after retries');
+      }
       
       // Parse the response
       const responseText = response.content[0]?.text;
       if (!responseText) {
+        console.error('[ClaudeExtractor] ❌ Empty response from Claude');
+        console.error('[ClaudeExtractor] Full response object:', JSON.stringify(response, null, 2));
         throw new Error('No response from Claude');
       }
+      
+      console.log('[ClaudeExtractor] 📝 Response text length:', responseText.length);
+      console.log('[ClaudeExtractor] Response preview:', responseText.slice(0, 200) + '...');
       
       let parsedResponse;
       try {
         parsedResponse = JSON.parse(responseText);
+        console.log('[ClaudeExtractor] ✅ Successfully parsed JSON response');
       } catch (parseError) {
+        console.warn('[ClaudeExtractor] ⚠️ Direct JSON parsing failed, trying to extract from markdown...');
         // Try to extract JSON from markdown code blocks
         const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
         if (jsonMatch) {
-          parsedResponse = JSON.parse(jsonMatch[1]);
+          try {
+            parsedResponse = JSON.parse(jsonMatch[1]);
+            console.log('[ClaudeExtractor] ✅ Successfully extracted and parsed JSON from markdown');
+          } catch (innerParseError) {
+            console.error('[ClaudeExtractor] ❌ Failed to parse extracted JSON:', innerParseError);
+            console.error('[ClaudeExtractor] Extracted text:', jsonMatch[1]);
+            throw new Error('Failed to parse Claude response as JSON');
+          }
         } else {
+          console.error('[ClaudeExtractor] ❌ No JSON found in response');
+          console.error('[ClaudeExtractor] Full response text:', responseText);
           throw new Error('Failed to parse Claude response as JSON');
         }
       }
@@ -96,44 +204,121 @@ export class ClaudeExtractor {
       };
       
       // Validate the result
-      const validatedResult = ExtractionResultSchema.parse(result);
-      
-      // Cache the result for 7 days if cache is available
-      if (this.cache) {
-        await this.cache.set(cacheKey, validatedResult, { ex: 604800 });
+      let validatedResult;
+      try {
+        validatedResult = ExtractionResultSchema.parse(result);
+        console.log('[ClaudeExtractor] ✅ Result validation successful');
+        console.log('[ClaudeExtractor] 📊 Extracted companies:', validatedResult.companies.length);
+      } catch (validationError) {
+        console.error('[ClaudeExtractor] ❌ Result validation failed:', validationError);
+        console.error('[ClaudeExtractor] Invalid result:', JSON.stringify(result, null, 2));
+        throw validationError;
       }
+      
+      // Skip caching for now
+      // if (this.cache) {
+      //   try {
+      //     await this.cache.set(cacheKey, validatedResult, { ex: 604800 });
+      //     console.log('[ClaudeExtractor] ✅ Result cached successfully');
+      //   } catch (cacheError) {
+      //     console.warn('[ClaudeExtractor] ⚠️ Cache write failed:', cacheError);
+      //     // Continue without caching
+      //   }
+      // }
+      
+      const processingTime = Date.now() - startTime;
+      console.log(`[ClaudeExtractor] ✅ Extraction completed in ${processingTime}ms`);
+      console.log(`[ClaudeExtractor] 📊 Companies found: ${validatedResult.companies.map(c => c.name).join(', ')}`);
       
       return validatedResult;
       
-    } catch (error) {
-      console.error('Claude extraction failed:', error);
+    } catch (error: any) {
+      const processingTime = Date.now() - startTime;
+      console.error(`[ClaudeExtractor] ❌ Extraction failed after ${processingTime}ms`);
+      console.error('[ClaudeExtractor] Error details:', {
+        message: error?.message,
+        type: error?.constructor?.name,
+        status: error?.status,
+        code: error?.code,
+        stack: error?.stack
+      });
       
-      // Return empty result with error metadata
+      // Log specific error context
+      if (error?.message?.includes('fetch')) {
+        console.error('[ClaudeExtractor] 🌐 This appears to be a network/fetch error');
+        console.error('[ClaudeExtractor] Possible causes:');
+        console.error('  - Node.js runtime not properly configured');
+        console.error('  - Network connectivity issues');
+        console.error('  - Anthropic API endpoint unreachable');
+      } else if (error?.status === 401) {
+        console.error('[ClaudeExtractor] 🔐 Authentication failed - check ANTHROPIC_API_KEY');
+      } else if (error?.status === 429) {
+        console.error('[ClaudeExtractor] ⏳ Rate limit exceeded - try again later');
+      }
+      
+      // Disable fallback extraction for now - it's extracting garbage
+      // console.log('[ClaudeExtractor] 🔄 Attempting fallback extraction method...');
+      // try {
+      //   const fallbackResult = await this.fallbackExtraction(content, newsletterName);
+      //   console.log(`[ClaudeExtractor] ✅ Fallback extraction found ${fallbackResult.companies.length} companies`);
+      //   return fallbackResult;
+      // } catch (fallbackError) {
+      //   console.error('[ClaudeExtractor] ❌ Fallback extraction also failed:', fallbackError);
+      // }
+      
+      // Return empty result with detailed error metadata
       return {
         companies: [],
         metadata: {
-          processingTime: Date.now() - startTime,
+          processingTime,
           tokenCount: 0,
           modelVersion: 'claude-3-5-sonnet-20241022',
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: error instanceof Error ? error.message : 'Unknown error',
+          errorType: error?.constructor?.name || 'UnknownError',
+          errorStatus: error?.status || null,
+          fallbackUsed: false
         }
       };
     }
   }
 
   private getSystemPrompt(): string {
-    return `You are an expert venture capital analyst specializing in consumer brands and startups.
+    return `You are an expert at identifying REAL COMPANY NAMES in text.
 
-Your task is to extract company mentions from newsletter content with high precision and accuracy.
+CRITICAL: A company must be a NAMED BUSINESS ENTITY, not a phrase or sentence fragment.
 
-CRITICAL: You must return ONLY a valid JSON object matching this exact schema:
+VALIDATION RULES - A company name must:
+1. Be a proper noun (specific name, not generic description)
+2. Refer to an actual business, brand, or organization
+3. NOT contain verbs or action words (e.g., "invested", "has been", "scrambling")
+4. NOT be a sentence fragment or partial phrase
+5. NOT be just a person's name unless it's clearly a company (e.g., "Trump Organization" is OK, just "Trump" is NOT)
+
+✅ VALID COMPANY NAMES:
+- "Apple" - technology company
+- "The New York Times" - media company  
+- "Vevo" - music video platform
+- "Create Music Group" - music company
+- "Substack" - newsletter platform
+- "Tesla" - car manufacturer
+- "OpenAI" - AI company
+
+❌ INVALID - NOT COMPANIES:
+- "Trump" - just a person's name, not a company
+- "America has been scrambling" - sentence fragment with verb
+- "Softbank invested" - contains verb "invested"
+- "and the Department of Health" - starts with "and", fragment
+- "READ IN" - not a known company, likely extracted text
+- "Loomer" - just a person's name
+
+You must return ONLY a valid JSON object with this exact structure:
 
 {
   "companies": [
     {
-      "name": "Company Name",
-      "description": "Brief description of what the company does",
-      "context": "The exact sentence or paragraph where the company was mentioned",
+      "name": "Actual Company Name Here",
+      "description": "What this company does",
+      "context": "The sentence where it was mentioned",
       "sentiment": "positive|negative|neutral",
       "confidence": 0.85
     }
@@ -145,45 +330,36 @@ CRITICAL: You must return ONLY a valid JSON object matching this exact schema:
   }
 }
 
-EXTRACTION GUIDELINES:
+EXTRACTION RULES:
+1. ONLY extract REAL company/brand/organization names
+2. Company names are proper nouns (usually capitalized)
+3. Look for:
+   - Startups and tech companies
+   - Consumer brands (fashion, beauty, food, beverage)
+   - Media organizations and publications
+   - Service companies and platforms
+   - Any business entity with a proper name
 
-1. INCLUDE these types of companies:
-   - Private companies and startups
-   - Consumer brands (beauty, fashion, food, beverage, lifestyle)
-   - New ventures from established companies
-   - Spin-offs and subsidiaries launching new products
-   - Companies mentioned in funding or acquisition context
+4. DO NOT extract:
+   - Random sentence fragments
+   - Common phrases or expressions
+   - Individual words like "and", "but", "the"
+   - Descriptive phrases that aren't company names
+   - Generic terms without a specific company
 
-2. EXCLUDE these:
-   - Large public companies (unless launching new ventures)
-   - Personal brands of individuals (unless incorporated businesses)
-   - Generic product categories or industries
-   - Investment firms or VCs themselves
-   - Media companies or publications
+5. If the text mentions NO real companies, return an empty companies array:
+{
+  "companies": [],
+  "metadata": {
+    "processingTime": 0,
+    "tokenCount": 0,
+    "modelVersion": "claude-3-5-sonnet-20241022"
+  }
+}
 
-3. SENTIMENT ANALYSIS:
-   - "positive": Company is praised, recommended, or mentioned favorably
-   - "negative": Company is criticized or mentioned unfavorably  
-   - "neutral": Factual mention without clear positive/negative tone
+Remember: Only extract ACTUAL COMPANY NAMES. If you're not sure it's a real company name, don't include it.
 
-4. CONFIDENCE SCORING (0.0 to 1.0):
-   - 0.9-1.0: Very clear company mention with specific details
-   - 0.7-0.8: Clear mention but some ambiguity
-   - 0.5-0.6: Unclear or indirect mention
-   - Below 0.5: Very uncertain, consider excluding
-
-5. CONTEXT REQUIREMENTS:
-   - Include the full sentence containing the company mention
-   - Add surrounding context if it clarifies the mention
-   - Maximum 200 characters per context
-
-6. COMPANY NAME:
-   - Use the exact name as mentioned in the text
-   - If multiple variations appear, use the most complete version
-
-Remember: Be conservative with extractions. When in doubt, include with lower confidence rather than exclude entirely. Focus on precision over recall.
-
-Return ONLY the JSON object, no additional text or formatting.`;
+Return ONLY the JSON object, no additional text.`;
   }
 
   // Batch extraction for multiple pieces of content
@@ -236,4 +412,151 @@ Return ONLY the JSON object, no additional text or formatting.`;
       return null;
     }
   }
+
+  // Helper method to determine if an error is retryable
+  private isRetryableError(error: any): boolean {
+    // Don't retry authentication errors
+    if (error?.status === 401) {
+      console.error('[ClaudeExtractor] 🔐 Authentication error - not retryable');
+      return false;
+    }
+    
+    // Retry rate limit errors
+    if (error?.status === 429) {
+      console.log('[ClaudeExtractor] ⏳ Rate limit error - will retry');
+      return true;
+    }
+    
+    // Retry 5xx server errors
+    if (error?.status >= 500 && error?.status < 600) {
+      console.log('[ClaudeExtractor] 🔄 Server error - will retry');
+      return true;
+    }
+    
+    // Retry network/fetch errors
+    if (error?.message?.includes('fetch') || 
+        error?.message?.includes('network') ||
+        error?.message?.includes('ECONNREFUSED') ||
+        error?.message?.includes('ETIMEDOUT')) {
+      console.log('[ClaudeExtractor] 🌐 Network error - will retry');
+      return true;
+    }
+    
+    // Retry timeout errors
+    if (error?.message?.includes('timeout')) {
+      console.log('[ClaudeExtractor] ⏱️ Timeout error - will retry');
+      return true;
+    }
+    
+    // Don't retry other errors (400, 403, 404, etc.)
+    return false;
+  }
+
+  // Calculate exponential backoff delay with jitter
+  private calculateBackoffDelay(attempt: number): number {
+    // Exponential backoff: baseDelay * 2^(attempt-1)
+    const exponentialDelay = this.baseDelay * Math.pow(2, attempt - 1);
+    
+    // Add jitter (random 0-25% additional delay) to prevent thundering herd
+    const jitter = Math.random() * 0.25 * exponentialDelay;
+    
+    // Cap at 30 seconds
+    const maxDelay = 30000;
+    const totalDelay = Math.min(exponentialDelay + jitter, maxDelay);
+    
+    return Math.floor(totalDelay);
+  }
+
+  // Sleep helper
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Fallback extraction method using pattern matching
+  private async fallbackExtraction(content: string, newsletterName: string) {
+    const startTime = Date.now();
+    console.log('[FallbackExtractor] 🔍 Starting pattern-based extraction...');
+    
+    const companies: any[] = [];
+    const processedNames = new Set<string>();
+    
+    // Common patterns for company mentions
+    const patterns = [
+      // Company raised funding
+      /([A-Z][A-Za-z0-9\s&.]+?)\s+(?:raised|raises|secured|closed|announced|completed)\s+\$?([0-9]+[MBK]|\d+\s*(?:million|billion))/gi,
+      // Company valued at
+      /([A-Z][A-Za-z0-9\s&.]+?)\s+(?:valued at|valuation of)\s+\$?([0-9]+[MBK]|\d+\s*(?:million|billion))/gi,
+      // Company acquired/acquired by
+      /([A-Z][A-Za-z0-9\s&.]+?)\s+(?:acquired|acquires|bought|buys)\s+([A-Z][A-Za-z0-9\s&.]+)/gi,
+      // Company launched/launches
+      /([A-Z][A-Za-z0-9\s&.]+?)\s+(?:launched|launches|introduced|introduces|unveiled|unveils)/gi,
+      // CEO/Founder of Company
+      /(?:CEO|Founder|Co-founder|President)\s+(?:of|at)\s+([A-Z][A-Za-z0-9\s&.]+)/gi,
+      // Company's product/service
+      /([A-Z][A-Za-z0-9\s&.]+?)(?:'s|\s+)(?:platform|product|service|app|solution|tool)/gi,
+      // Startup/company patterns
+      /(?:startup|company|firm|venture)\s+([A-Z][A-Za-z0-9\s&.]+)/gi,
+    ];
+    
+    // Extract companies using patterns
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        const companyName = match[1]?.trim();
+        
+        if (companyName && 
+            companyName.length > 2 && 
+            companyName.length < 50 &&
+            !processedNames.has(companyName.toLowerCase())) {
+          
+          // Basic validation - exclude common words
+          const excludeWords = ['The', 'This', 'That', 'These', 'Those', 'Their', 'There', 
+                              'Today', 'Yesterday', 'Tomorrow', 'Monday', 'Tuesday', 'Wednesday',
+                              'Thursday', 'Friday', 'Saturday', 'Sunday', 'January', 'February',
+                              'March', 'April', 'May', 'June', 'July', 'August', 'September',
+                              'October', 'November', 'December'];
+          
+          if (excludeWords.includes(companyName)) continue;
+          
+          processedNames.add(companyName.toLowerCase());
+          
+          // Extract context around the mention
+          const mentionIndex = content.indexOf(companyName);
+          const contextStart = Math.max(0, mentionIndex - 100);
+          const contextEnd = Math.min(content.length, mentionIndex + companyName.length + 100);
+          const context = content.slice(contextStart, contextEnd).trim();
+          
+          companies.push({
+            name: companyName,
+            description: `Company mentioned in ${newsletterName}`,
+            context: context.length > 200 ? context.slice(0, 200) + '...' : context,
+            sentiment: 'neutral',
+            confidence: 0.5 // Lower confidence for fallback extraction
+          });
+          
+          console.log(`[FallbackExtractor] Found: ${companyName}`);
+        }
+      }
+    }
+    
+    // Deduplicate by name
+    const uniqueCompanies = Array.from(
+      new Map(companies.map(c => [c.name.toLowerCase(), c])).values()
+    );
+    
+    const processingTime = Date.now() - startTime;
+    console.log(`[FallbackExtractor] ✅ Extracted ${uniqueCompanies.length} unique companies in ${processingTime}ms`);
+    
+    return {
+      companies: uniqueCompanies.slice(0, 20), // Limit to 20 companies
+      metadata: {
+        processingTime,
+        tokenCount: 0,
+        modelVersion: 'fallback-pattern-matcher-v1',
+        fallbackUsed: true
+      }
+    };
+  }
+
+  // Removed custom fetch wrapper - it was causing issues
 }

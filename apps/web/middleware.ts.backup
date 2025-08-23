@@ -1,0 +1,235 @@
+import { clerkMiddleware, createRouteMatcher as createClerkRouteMatcher } from '@clerk/nextjs/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { withSecurity } from './lib/security/middleware';
+import { getSecurityHeaders } from './lib/security/auth';
+
+// Helper function to create route matchers
+const createRouteMatcher = (patterns: string[]) => {
+  return (req: NextRequest) => {
+    const pathname = req.nextUrl.pathname;
+    return patterns.some(pattern => {
+      const regex = new RegExp(`^${pattern.replace('(.*)', '.*')}$`);
+      return regex.test(pathname);
+    });
+  };
+};
+
+// Define route matchers
+const isProtectedRoute = createRouteMatcher([
+  '/dashboard(.*)',
+  '/analytics(.*)',
+  '/reports(.*)',
+  '/settings(.*)',
+  '/api/companies(.*)',
+  '/api/emails(.*)',
+  '/api/reports(.*)',
+  '/api/ai(.*)'
+]);
+
+const isPublicAPIRoute = createRouteMatcher([
+  '/api/monitoring/health',
+  '/api/auth/webhook',
+  '/api/inngest',
+  '/api/webhooks(.*)'
+]);
+
+const isMonitoringRoute = createRouteMatcher([
+  '/api/monitoring(.*)'
+]);
+
+const isSensitiveRoute = createRouteMatcher([
+  '/api/companies/create',
+  '/api/companies/update',
+  '/api/companies/delete',
+  '/api/reports/generate',
+  '/api/ai/extract',
+  '/api/settings(.*)',
+  '/dashboard/admin(.*)'
+]);
+
+// Generate a nonce for CSP
+const generateNonce = () => {
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return Buffer.from(array).toString('base64');
+};
+
+const publicRoutes = createClerkRouteMatcher([
+  '/',
+  '/dashboard(.*)',
+  '/emails(.*)',
+  '/reports(.*)',
+  '/analytics(.*)',
+  '/settings(.*)',
+  '/intelligence(.*)',
+  '/api/monitoring/health',
+  '/api/health',
+  '/api/test/(.*)',
+  '/api/auth/webhook',
+  '/api/inngest',
+  '/api/webhooks/(.*)',
+  '/sign-in(.*)',
+  '/sign-up(.*)'
+]);
+
+export default clerkMiddleware(async (authData, request: NextRequest) => {
+    const { pathname } = new URL(request.url);
+    
+    // Skip middleware for static files
+    if (
+      pathname.startsWith('/_next/') ||
+      pathname.startsWith('/favicon.') ||
+      pathname.startsWith('/static/') ||
+      pathname.includes('.')
+    ) {
+      return NextResponse.next();
+    }
+
+    // Check if route is public
+    if (!publicRoutes(request)) {
+      await authData.protect();
+    }
+    
+    // Skip security middleware entirely in development if disabled
+    if (process.env.DISABLE_SECURITY_MIDDLEWARE === 'true' && process.env.NODE_ENV === 'development') {
+      const response = NextResponse.next();
+      response.headers.set('X-Security-Disabled', 'true');
+      return response;
+    }
+    
+    try {
+      // Generate nonce for CSP
+      const nonce = generateNonce();
+      
+      // Get auth data
+      const { userId } = await authData();
+      
+      // Check if user is authenticated for protected routes
+      if (isProtectedRoute(request) && !userId) {
+        // Redirect to sign-in
+        const signInUrl = new URL('/sign-in', request.url);
+        signInUrl.searchParams.set('redirect_url', request.url);
+        return NextResponse.redirect(signInUrl);
+      }
+
+    // Apply security middleware
+    const securityOptions = {
+      requireAuth: isProtectedRoute(request) && !isPublicAPIRoute(request),
+      sensitiveEndpoint: isSensitiveRoute(request),
+      rateLimitEndpoint: determineRateLimitEndpoint(pathname),
+      allowedMethods: determineAllowedMethods(pathname),
+      skipCSRFCheck: request.method === 'GET' || isMonitoringRoute(request)
+    };
+
+    const securityResult = await withSecurity(request, securityOptions);
+    
+    if (securityResult.response) {
+      return securityResult.response;
+    }
+
+    // Create response with security headers
+    const response = NextResponse.next();
+    
+    // Apply security headers
+    Object.entries(getSecurityHeaders()).forEach(([key, value]) => {
+      response.headers.set(key, value);
+    });
+
+    // Enhanced CSP with nonce
+    const cspDirectives = [
+      "default-src 'self'",
+      `script-src 'self' 'unsafe-inline' 'nonce-${nonce}' https://cdn.clerk.com https://js.clerk.com https://js.stripe.com`,
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "img-src 'self' data: https: blob:",
+      "connect-src 'self' https://api.clerk.com https://clerk.substack-intelligence.com https://api.anthropic.com https://*.supabase.co wss://*.supabase.co https://api.axiom.co",
+      "frame-src 'none'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "upgrade-insecure-requests"
+    ];
+    
+    response.headers.set('Content-Security-Policy', cspDirectives.join('; '));
+    response.headers.set('X-Nonce', nonce);
+
+    // Additional security headers for sensitive routes
+    if (isSensitiveRoute(request)) {
+      response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      response.headers.set('Pragma', 'no-cache');
+    }
+
+    // Smart caching for different types of content
+    if (pathname.startsWith('/_next/static') || pathname.startsWith('/static')) {
+      response.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (pathname.startsWith('/api/companies') || pathname.startsWith('/api/reports')) {
+      response.headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
+    } else if (pathname.startsWith('/api/')) {
+      response.headers.set('Cache-Control', 'no-cache, must-revalidate');
+    }
+
+    // HSTS for HTTPS
+    if (request.headers.get('x-forwarded-proto') === 'https') {
+      response.headers.set(
+        'Strict-Transport-Security', 
+        'max-age=31536000; includeSubDomains; preload'
+      );
+    }
+
+    return response;
+    
+  } catch (error) {
+    console.error('Middleware error:', error);
+    
+    // Return error response with security headers
+    return new NextResponse(
+      JSON.stringify({ error: 'Request processing failed' }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getSecurityHeaders()
+        }
+      }
+    );
+  }
+});
+
+function determineRateLimitEndpoint(pathname: string): string | undefined {
+  if (pathname.startsWith('/api/auth/')) return 'auth/signin';
+  if (pathname.startsWith('/api/companies/search')) return 'api/companies/search';
+  if (pathname.startsWith('/api/emails/process')) return 'api/emails/process';
+  if (pathname.startsWith('/api/reports/generate')) return 'api/reports/generate';
+  if (pathname.startsWith('/api/ai/')) return 'api/ai/extract';
+  if (pathname.startsWith('/api/monitoring/')) return 'api/monitoring/error';
+  if (pathname.startsWith('/api/')) return 'api/*';
+  return 'global';
+}
+
+function determineAllowedMethods(pathname: string): string[] {
+  // Read-only endpoints
+  if (pathname.includes('/search') || pathname.includes('/get') || pathname === '/api/monitoring/health') {
+    return ['GET', 'HEAD', 'OPTIONS'];
+  }
+  
+  // Monitoring endpoints
+  if (pathname.startsWith('/api/monitoring/')) {
+    return ['GET', 'POST', 'OPTIONS'];
+  }
+  
+  // Full CRUD endpoints
+  if (pathname.startsWith('/api/')) {
+    return ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'];
+  }
+  
+  // Default for pages
+  return ['GET', 'HEAD'];
+}
+
+export const config = {
+  matcher: [
+    '/((?!.*\\..*|_next).*)',
+    '/',
+    '/(api|trpc)(.*)'
+  ]
+};

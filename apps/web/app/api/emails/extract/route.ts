@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import { ClaudeExtractor } from '@substack-intelligence/ai';
 
+// Force Node.js runtime for full compatibility with Anthropic SDK
+export const runtime = 'nodejs';
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -139,12 +141,20 @@ export async function POST() {
           companiesFound: extractionResult.companies.length
         });
         
-      } catch (emailError) {
+      } catch (emailError: any) {
         console.error(`Failed to process email ${email.id}:`, emailError);
+        console.error('Full error details:', {
+          message: emailError?.message,
+          type: emailError?.constructor?.name,
+          status: emailError?.status,
+          code: emailError?.code,
+          stack: emailError?.stack
+        });
         extractionResults.push({
           emailId: email.id,
           subject: email.subject,
-          error: emailError instanceof Error ? emailError.message : 'Unknown error'
+          error: emailError instanceof Error ? emailError.message : 'Unknown error',
+          companiesFound: 0
         });
       }
     }

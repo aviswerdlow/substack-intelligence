@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "type-check": "tsc --noEmit",
-    "dev": "react-email dev",
+    "dev": "echo 'Email app dev mode - react-email not installed'",
     "export": "react-email export"
   },
   "dependencies": {
