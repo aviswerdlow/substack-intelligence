@@ -282,7 +282,7 @@ export class ClaudeExtractor {
     }
   }
 
-  private getSystemPrompt(): string {
+  public getSystemPrompt(): string {
     return `You are an expert at identifying REAL COMPANY NAMES in text.
 
 CRITICAL: A company must be a NAMED BUSINESS ENTITY, not a phrase or sentence fragment.

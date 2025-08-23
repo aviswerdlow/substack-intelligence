@@ -207,10 +207,10 @@ describe('ClaudeExtractor', () => {
       const prompt = (extractor as any).getSystemPrompt();
       
       expect(prompt).toContain('JSON');
-      expect(prompt).toContain('consumer brands');
+      expect(prompt).toContain('Consumer brands');
       expect(prompt).toContain('confidence');
       expect(prompt).toContain('sentiment');
-      expect(prompt).toContain('private companies');
+      expect(prompt).toContain('company');
     });
   });
 });

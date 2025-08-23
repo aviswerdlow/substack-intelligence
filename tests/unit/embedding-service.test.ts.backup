@@ -55,18 +55,6 @@ describe('EmbeddingService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     
-    // Clear all individual mocks
-    mockEmbeddingsCreate.mockClear();
-    mockFrom.mockClear();
-    mockSelect.mockClear();
-    mockEq.mockClear();
-    mockNot.mockClear();
-    mockIs.mockClear();
-    mockUpdate.mockClear();
-    mockSingle.mockClear();
-    mockRpc.mockClear();
-    mockCount.mockClear();
-    
     // Set up environment variables
     process.env.OPENAI_API_KEY = 'test-openai-key';
     
@@ -113,12 +101,14 @@ describe('EmbeddingService', () => {
     });
 
     it('should handle OpenAI API errors', async () => {
-      mockSingle.mockResolvedValue({
+      const mockSupabase = (embeddingService as any).supabase;
+      mockSupabase.from().select().eq().single.mockResolvedValue({
         data: mockCompany,
         error: null
       });
 
-      mockEmbeddingsCreate.mockRejectedValue(new Error('OpenAI API Error'));
+      const mockOpenAI = (embeddingService as any).openai;
+      mockOpenAI.embeddings.create.mockRejectedValue(new Error('OpenAI API Error'));
 
       const result = await embeddingService.generateCompanyEmbedding(mockCompany.id);
 
@@ -128,8 +118,10 @@ describe('EmbeddingService', () => {
 
   describe('findSimilarCompanies', () => {
     it('should find similar companies using vector similarity', async () => {
+      const mockSupabase = (embeddingService as any).supabase;
+      
       // Mock company with embedding
-      mockSingle.mockResolvedValue({
+      mockSupabase.from().select().eq().single.mockResolvedValue({
         data: { ...mockCompany, embedding: mockEmbedding },
         error: null
       });
@@ -144,7 +136,7 @@ describe('EmbeddingService', () => {
         }
       ];
 
-      mockRpc.mockResolvedValue({
+      mockSupabase.rpc.mockResolvedValue({
         data: mockSimilarCompanies,
         error: null
       });

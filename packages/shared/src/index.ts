@@ -4,6 +4,14 @@ export * from './schemas';
 export function normalizeCompanyName(name: string): string {
   return name
     .toLowerCase()
+    // Replace common separators/connectors with 'and'
+    .replace(/\s*&\s*/g, 'and')
+    .replace(/\s+and\s+/g, 'and')
+    // Remove common company suffixes
+    .replace(/\s*(inc\.?|llc\.?|corp\.?|ltd\.?|co\.?|company|corporation|limited|pbc)\s*$/i, '')
+    // Remove parenthetical information
+    .replace(/\s*\([^)]*\)\s*/g, '')
+    // Remove all non-alphanumeric characters
     .replace(/[^a-z0-9]/g, '')
     .trim();
 }

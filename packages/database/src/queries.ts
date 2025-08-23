@@ -1,4 +1,18 @@
-import { cache } from 'react';
+// Conditional cache import - use identity function in test/non-React environments
+let cache: <T extends (...args: any[]) => any>(fn: T) => T;
+try {
+  // Try to import React cache
+  const react = require('react');
+  cache = react.cache;
+  // Fallback if cache doesn't exist (older React versions or test environment)
+  if (!cache || typeof cache !== 'function') {
+    cache = <T extends (...args: any[]) => any>(fn: T): T => fn;
+  }
+} catch {
+  // Fallback for non-React environments or tests
+  cache = <T extends (...args: any[]) => any>(fn: T): T => fn;
+}
+
 import type { Database } from './types/supabase';
 import type { SupabaseClient } from './client';
 

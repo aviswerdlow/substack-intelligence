@@ -4,17 +4,17 @@ import { normalizeCompanyName, deduplicateCompanies } from '@substack-intelligen
 describe('Company Deduplication Utils', () => {
   describe('normalizeCompanyName', () => {
     it('should normalize company names consistently', () => {
-      expect(normalizeCompanyName('Glossier Inc.')).toBe('glossierinc');
+      expect(normalizeCompanyName('Glossier Inc.')).toBe('glossier');
       expect(normalizeCompanyName('Warby Parker')).toBe('warbyparker');
-      expect(normalizeCompanyName('Away Travel, LLC')).toBe('awaytravelllc');
-      expect(normalizeCompanyName('Allbirds (PBC)')).toBe('allbirdspbc');
+      expect(normalizeCompanyName('Away Travel, LLC')).toBe('awaytravel');
+      expect(normalizeCompanyName('Allbirds (PBC)')).toBe('allbirds');
     });
 
     it('should handle special characters and spaces', () => {
       expect(normalizeCompanyName('Re/code Media')).toBe('recodemedia');
       expect(normalizeCompanyName('Dollar Shave Club')).toBe('dollarshaveclub');
-      expect(normalizeCompanyName('23&Me')).toBe('23me');
-      expect(normalizeCompanyName('Uber Technologies, Inc.')).toBe('ubertechnologiesinc');
+      expect(normalizeCompanyName('23&Me')).toBe('23andme');
+      expect(normalizeCompanyName('Uber Technologies, Inc.')).toBe('ubertechnologies');
     });
 
     it('should handle empty and whitespace-only strings', () => {
