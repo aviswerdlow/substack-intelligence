@@ -10,36 +10,7 @@ vi.mock('@substack-intelligence/reports/email-service');
 vi.mock('@substack-intelligence/reports/report-scheduler');
 vi.mock('@substack-intelligence/database');
 
-// Mock dependencies
-const mockPage = {
-  setContent: vi.fn(),
-  pdf: vi.fn(() => Promise.resolve(Buffer.from('mock-pdf-content'))),
-  close: vi.fn()
-};
-
-const mockBrowser = {
-  newPage: vi.fn(() => Promise.resolve(mockPage)),
-  close: vi.fn()
-};
-
-vi.mock('puppeteer', () => ({
-  default: {
-    launch: vi.fn(() => Promise.resolve(mockBrowser))
-  }
-}));
-
-const mockSend = vi.fn(() => Promise.resolve({
-  data: { id: 'mock-email-id' },
-  error: null
-}));
-
-vi.mock('resend', () => ({
-  Resend: vi.fn().mockImplementation(() => ({
-    emails: {
-      send: mockSend
-    }
-  }))
-}));
+// These services are mocked globally in setup.ts
 
 vi.mock('@react-email/render', () => ({
   render: vi.fn((component) => '<html>Mock rendered email</html>')
@@ -51,39 +22,7 @@ vi.mock('@substack-intelligence/email', () => ({
   CompanyAlert: vi.fn(() => 'Company Alert Component')
 }));
 
-vi.mock('@substack-intelligence/database', () => ({
-  createServiceRoleClient: vi.fn(() => ({
-    from: vi.fn(() => ({
-      insert: vi.fn(() => ({ error: null }))
-    }))
-  })),
-  getDailyIntelligence: vi.fn(() => Promise.resolve([
-    {
-      company_id: 'company-1',
-      name: 'Test Company',
-      description: 'A tech startup',
-      website: 'https://example.com',
-      context: 'Test company raised $10M in funding',
-      sentiment: 'positive',
-      confidence: 0.9,
-      newsletter_name: 'TechCrunch',
-      received_at: '2024-01-01',
-      funding_status: 'Series A'
-    },
-    {
-      company_id: 'company-2',
-      name: 'Beauty Brand',
-      description: 'Beauty and cosmetics company',
-      website: 'https://beauty.com',
-      context: 'Beauty Brand launched new skincare line',
-      sentiment: 'positive',
-      confidence: 0.85,
-      newsletter_name: 'Beauty Newsletter',
-      received_at: '2024-01-01',
-      funding_status: null
-    }
-  ]))
-}));
+// Database is mocked globally in setup.ts
 
 // Mock environment variables
 const originalEnv = process.env;

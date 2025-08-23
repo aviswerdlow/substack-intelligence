@@ -171,9 +171,12 @@ describe('Critical Business Workflows', () => {
         .rejects.toThrow('Claude API Error');
 
       // Database insert fails
-      mockDatabase.from().insert.mockResolvedValue({ 
+      const mockInsert = vi.fn().mockResolvedValue({ 
         data: null, 
         error: { message: 'Database error' } 
+      });
+      mockDatabase.from.mockReturnValue({
+        insert: mockInsert
       });
       
       const dbResult = await mockDatabase.from('companies').insert({});
@@ -506,7 +509,7 @@ describe('Critical Business Workflows', () => {
       expect(mockAuth.userId).toBeTruthy();
 
       // Step 2: Check user permissions
-      mockDatabase.from().single.mockResolvedValue({
+      const mockSingle = vi.fn().mockResolvedValue({
         data: {
           id: mockAuth.userId,
           organization_id: mockAuth.orgId,
@@ -514,6 +517,12 @@ describe('Critical Business Workflows', () => {
           permissions: ['read', 'write', 'delete']
         },
         error: null
+      });
+
+      mockDatabase.from.mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: mockSingle
       });
 
       const userPermissions = await mockDatabase.from('users')

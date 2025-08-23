@@ -8,6 +8,9 @@ export default defineConfig({
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.ts'],
     exclude: ['node_modules', 'dist', '.next'],
+    clearMocks: true,
+    restoreMocks: true,
+    testTimeout: 30000,
     coverage: {
       reporter: ['text', 'json', 'html'],
       include: [

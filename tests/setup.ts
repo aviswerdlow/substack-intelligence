@@ -73,14 +73,27 @@ vi.mock('@substack-intelligence/database', () => ({
       select: vi.fn(() => ({ data: [], error: null }))
     }))
   })),
-  getCompanyById: vi.fn(),
-  getCompanies: vi.fn(),
-  getDailyIntelligence: vi.fn(),
-  getEmailById: vi.fn(),
-  getRecentEmails: vi.fn(),
-  getTopNewsletters: vi.fn(),
-  searchCompanies: vi.fn(),
-  getAnalytics: vi.fn()
+  getCompanyById: vi.fn().mockResolvedValue(null),
+  getCompanies: vi.fn().mockResolvedValue([]),
+  getDailyIntelligence: vi.fn().mockResolvedValue([
+    {
+      company_id: 'test-company-id',
+      name: 'Test Company',
+      description: 'A test company',
+      website: 'https://test.com',
+      context: 'Test company news',
+      sentiment: 'positive',
+      confidence: 0.9,
+      newsletter_name: 'Test Newsletter',
+      received_at: '2024-01-15',
+      funding_status: 'Series A'
+    }
+  ]),
+  getEmailById: vi.fn().mockResolvedValue(null),
+  getRecentEmails: vi.fn().mockResolvedValue([]),
+  getTopNewsletters: vi.fn().mockResolvedValue([]),
+  searchCompanies: vi.fn().mockResolvedValue([]),
+  getAnalytics: vi.fn().mockResolvedValue({})
 }));
 
 // Mock axiomLogger module
@@ -122,26 +135,83 @@ vi.mock('next/headers', () => ({
   headers: vi.fn(() => new Map())
 }));
 
-// Mock Supabase packages
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn(() => ({
+// Mock Supabase packages (v2.38.4 compatible)
+const createMockSupabaseQueryBuilder = () => {
+  const queryBuilder = {
+    select: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    update: vi.fn().mockReturnThis(),
+    upsert: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
+    gt: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
+    lt: vi.fn().mockReturnThis(),
+    lte: vi.fn().mockReturnThis(),
+    like: vi.fn().mockReturnThis(),
+    ilike: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    contains: vi.fn().mockReturnThis(),
+    containedBy: vi.fn().mockReturnThis(),
+    rangeGt: vi.fn().mockReturnThis(),
+    rangeGte: vi.fn().mockReturnThis(),
+    rangeLt: vi.fn().mockReturnThis(),
+    rangeLte: vi.fn().mockReturnThis(),
+    rangeAdjacent: vi.fn().mockReturnThis(),
+    overlaps: vi.fn().mockReturnThis(),
+    textSearch: vi.fn().mockReturnThis(),
+    match: vi.fn().mockReturnThis(),
+    not: vi.fn().mockReturnThis(),
+    or: vi.fn().mockReturnThis(),
+    filter: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    range: vi.fn().mockReturnThis(),
+    single: vi.fn().mockResolvedValue({ data: null, error: null }),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    // Promise-like behavior for direct await
+    then: vi.fn((resolve) => resolve({ data: [], error: null })),
+    catch: vi.fn(),
+    finally: vi.fn()
+  };
+  
+  // Add data and error properties
+  Object.defineProperty(queryBuilder, 'data', { value: [], writable: true });
+  Object.defineProperty(queryBuilder, 'error', { value: null, writable: true });
+  
+  return queryBuilder;
+};
+
+const createMockSupabaseClient = () => ({
+  from: vi.fn(() => createMockSupabaseQueryBuilder()),
+  rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+  auth: {
+    getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
+    signInWithOAuth: vi.fn().mockResolvedValue({ data: null, error: null }),
+    signOut: vi.fn().mockResolvedValue({ error: null })
+  },
+  storage: {
     from: vi.fn(() => ({
-      select: vi.fn(() => ({ data: [], error: null }))
+      upload: vi.fn().mockResolvedValue({ data: null, error: null }),
+      download: vi.fn().mockResolvedValue({ data: null, error: null }),
+      remove: vi.fn().mockResolvedValue({ data: null, error: null })
     }))
+  },
+  channel: vi.fn(() => ({
+    on: vi.fn().mockReturnThis(),
+    subscribe: vi.fn().mockReturnThis()
   }))
+});
+
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: vi.fn(createMockSupabaseClient)
 }));
 
 vi.mock('@supabase/ssr', () => ({
-  createBrowserClient: vi.fn(() => ({
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({ data: [], error: null }))
-    }))
-  })),
-  createServerClient: vi.fn(() => ({
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({ data: [], error: null }))
-    }))
-  }))
+  createBrowserClient: vi.fn(createMockSupabaseClient),
+  createServerClient: vi.fn(createMockSupabaseClient)
 }));
 
 // Restore console methods after tests
@@ -171,25 +241,203 @@ Object.defineProperty(global, 'crypto', {
 vi.mock('setTimeout');
 vi.useFakeTimers();
 
-// Mock puppeteer
-vi.mock('puppeteer', () => ({
-  default: {
-    launch: vi.fn(() => Promise.resolve({
-      newPage: vi.fn(() => Promise.resolve({
-        setContent: vi.fn(),
-        pdf: vi.fn(() => Promise.resolve(Buffer.from('mock-pdf'))),
-        close: vi.fn()
-      })),
-      close: vi.fn()
-    }))
-  }
+// Mock puppeteer (v21.5.2 compatible)
+vi.mock('puppeteer', () => {
+  const mockPage = {
+    setContent: vi.fn().mockResolvedValue(undefined),
+    pdf: vi.fn().mockResolvedValue(Buffer.from('mock-pdf-content')),
+    close: vi.fn().mockResolvedValue(undefined),
+    goto: vi.fn().mockResolvedValue(undefined),
+    setViewport: vi.fn().mockResolvedValue(undefined),
+    waitForSelector: vi.fn().mockResolvedValue(undefined)
+  };
+  
+  const mockBrowser = {
+    newPage: vi.fn().mockResolvedValue(mockPage),
+    close: vi.fn().mockResolvedValue(undefined),
+    pages: vi.fn().mockResolvedValue([mockPage])
+  };
+  
+  return {
+    default: {
+      launch: vi.fn().mockResolvedValue(mockBrowser),
+      executablePath: vi.fn().mockReturnValue('/usr/bin/chromium'),
+      connect: vi.fn().mockResolvedValue(mockBrowser)
+    },
+    launch: vi.fn().mockResolvedValue(mockBrowser),
+    executablePath: vi.fn().mockReturnValue('/usr/bin/chromium'),
+    connect: vi.fn().mockResolvedValue(mockBrowser)
+  };
+});
+
+// Mock Resend email service with comprehensive mock
+vi.mock('resend', () => {
+  const mockResendInstance = {
+    emails: {
+      send: vi.fn().mockResolvedValue({ 
+        data: { 
+          id: 'email-123',
+          from: 'test@example.com',
+          to: ['recipient@example.com'],
+          created_at: new Date().toISOString()
+        },
+        error: null
+      }),
+      get: vi.fn().mockResolvedValue({
+        data: {
+          id: 'email-123',
+          status: 'delivered'
+        }
+      })
+    },
+    domains: {
+      list: vi.fn().mockResolvedValue({ data: [] })
+    },
+    apiKeys: {
+      list: vi.fn().mockResolvedValue({ data: [] })
+    }
+  };
+  
+  return {
+    Resend: vi.fn(() => mockResendInstance),
+    default: vi.fn(() => mockResendInstance)
+  };
+});
+
+// Mock Anthropic SDK (v0.60.0 compatible)
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: vi.fn(() => ({
+    messages: {
+      create: vi.fn(() => Promise.resolve({
+        id: 'msg_test_id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-3-5-sonnet-20241022',
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            companies: [],
+            metadata: {
+              processingTime: 1000,
+              tokenCount: 100,
+              modelVersion: 'claude-3-5-sonnet-20241022'
+            }
+          })
+        }],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50
+        }
+      }))
+    }
+  })),
+  Anthropic: vi.fn(() => ({
+    messages: {
+      create: vi.fn(() => Promise.resolve({
+        id: 'msg_test_id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-3-5-sonnet-20241022',
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            companies: [],
+            metadata: {
+              processingTime: 1000,
+              tokenCount: 100,
+              modelVersion: 'claude-3-5-sonnet-20241022'
+            }
+          })
+        }],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50
+        }
+      }))
+    }
+  }))
 }));
 
-// Mock Resend email service
-vi.mock('resend', () => ({
-  Resend: vi.fn(() => ({
-    emails: {
-      send: vi.fn(() => Promise.resolve({ data: { id: 'email-123' } }))
+// Mock OpenAI SDK (v4.20.1 compatible)
+vi.mock('openai', () => ({
+  default: vi.fn(() => ({
+    embeddings: {
+      create: vi.fn(() => Promise.resolve({
+        object: 'list',
+        data: [{
+          object: 'embedding',
+          embedding: new Array(1536).fill(0).map(() => Math.random() - 0.5),
+          index: 0
+        }],
+        model: 'text-embedding-3-small',
+        usage: {
+          prompt_tokens: 10,
+          total_tokens: 10
+        }
+      }))
+    },
+    chat: {
+      completions: {
+        create: vi.fn(() => Promise.resolve({
+          id: 'chatcmpl-test',
+          object: 'chat.completion',
+          created: Date.now(),
+          model: 'gpt-4-turbo-preview',
+          choices: [{
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Test response'
+            },
+            finish_reason: 'stop'
+          }],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15
+          }
+        }))
+      }
+    }
+  })),
+  OpenAI: vi.fn(() => ({
+    embeddings: {
+      create: vi.fn(() => Promise.resolve({
+        object: 'list',
+        data: [{
+          object: 'embedding',
+          embedding: new Array(1536).fill(0).map(() => Math.random() - 0.5),
+          index: 0
+        }],
+        model: 'text-embedding-3-small',
+        usage: {
+          prompt_tokens: 10,
+          total_tokens: 10
+        }
+      }))
+    },
+    chat: {
+      completions: {
+        create: vi.fn(() => Promise.resolve({
+          id: 'chatcmpl-test',
+          object: 'chat.completion',
+          created: Date.now(),
+          model: 'gpt-4-turbo-preview',
+          choices: [{
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Test response'
+            },
+            finish_reason: 'stop'
+          }],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15
+          }
+        }))
+      }
     }
   }))
 }));
