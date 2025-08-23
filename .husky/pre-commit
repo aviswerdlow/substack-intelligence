@@ -1,0 +1,37 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔄 Running pre-commit checks..."
+
+# Run linting first (quick check)
+echo "📝 Running linter..."
+pnpm lint
+if [ $? -ne 0 ]; then
+  echo "❌ Linting failed. Please fix linting errors before committing."
+  exit 1
+fi
+
+# Run critical user journey tests
+echo "🧪 Running critical user journey tests..."
+cd apps/web && pnpm run test:e2e:critical --reporter=dot --workers=1
+
+if [ $? -ne 0 ]; then
+  echo "❌ Critical user journey tests failed!"
+  echo "🔍 The following user journeys are broken:"
+  echo "   - User authentication and sign-up"
+  echo "   - Gmail connection and email fetching"
+  echo "   - Data pipeline processing"
+  echo "   - Onboarding flow"
+  echo "   - No dummy data validation"
+  echo ""
+  echo "💡 To debug:"
+  echo "   pnpm run test:e2e:critical --headed    # Run with browser visible"
+  echo "   pnpm run test:e2e:ui                   # Run with Playwright UI"
+  echo "   pnpm run test:e2e:report               # View last test report"
+  echo ""
+  echo "🚫 Commit blocked. Please fix failing tests before committing."
+  exit 1
+fi
+
+echo "✅ All pre-commit checks passed!"
+echo "🚀 Ready to commit - user journeys are protected!"
