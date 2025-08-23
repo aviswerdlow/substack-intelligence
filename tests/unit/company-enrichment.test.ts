@@ -1,43 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { CompanyEnrichmentService, CompanyEnrichmentData } from '@substack-intelligence/enrichment';
-
-// Mock dependencies
-vi.mock('@substack-intelligence/database', () => ({
-  createServiceRoleClient: vi.fn(() => ({
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => ({
-            data: {
-              id: 'company-1',
-              name: 'Test Company',
-              website: 'https://example.com'
-            },
-            error: null
-          }))
-        }))
-      })),
-      update: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          error: null
-        }))
-      }))
-    }))
-  }))
-}));
-
-vi.mock('../../../apps/web/lib/monitoring/axiom', () => ({
-  axiomLogger: {
-    log: vi.fn(),
-    logError: vi.fn()
-  }
-}));
-
-vi.mock('../../../apps/web/lib/security/rate-limiting', () => ({
-  burstProtection: {
-    checkBurstLimit: vi.fn(() => Promise.resolve(true))
-  }
-}));
+import { CompanyEnrichmentService, CompanyEnrichmentData } from '../../services/enrichment/src/company-enrichment';
+import { createMockSupabaseClient, MockSupabaseClient } from '../mocks/database/supabase';
+import { axiomMocks } from '../mocks/external/axiom';
+import { rateLimitingMocks } from '../mocks/external/rate-limiting';
+import { DataFixtures } from '../mocks/fixtures/data';
 
 // Mock global fetch
 const mockFetch = vi.fn();
@@ -45,13 +11,33 @@ global.fetch = mockFetch;
 
 describe('CompanyEnrichmentService', () => {
   let service: CompanyEnrichmentService;
-  let mockSupabaseClient: any;
+  let mockSupabaseClient: MockSupabaseClient;
 
   beforeEach(() => {
     vi.clearAllMocks();
     
-    const { createServiceRoleClient } = require('@substack-intelligence/database');
-    mockSupabaseClient = createServiceRoleClient();
+    // Setup centralized mocks
+    mockSupabaseClient = createMockSupabaseClient();
+    axiomMocks.reset();
+    rateLimitingMocks.reset();
+    
+    // Configure default successful responses
+    const mockCompany = DataFixtures.createCompany({
+      id: 'company-1',
+      name: 'Test Company',
+      website: 'https://example.com'
+    });
+    
+    mockSupabaseClient.from('companies').select().eq('id', 'company-1').single = vi.fn().mockResolvedValue({
+      data: mockCompany,
+      error: null
+    });
+    
+    mockSupabaseClient.from('companies').update = vi.fn().mockReturnValue({
+      eq: vi.fn().mockResolvedValue({ error: null })
+    });
+    
+    rateLimitingMocks.mockRateLimitPass();
     
     service = new CompanyEnrichmentService();
     
@@ -86,8 +72,7 @@ describe('CompanyEnrichmentService', () => {
 
   describe('enrichCompany', () => {
     it('should successfully enrich a company with all data', async () => {
-      const { burstProtection } = require('../../../apps/web/lib/security/rate-limiting');
-      burstProtection.checkBurstLimit.mockResolvedValue(true);
+      rateLimitingMocks.mockRateLimitPass();
 
       const result = await service.enrichCompany('company-1');
 
@@ -114,8 +99,7 @@ describe('CompanyEnrichmentService', () => {
     });
 
     it('should handle rate limiting', async () => {
-      const { burstProtection } = require('../../../apps/web/lib/security/rate-limiting');
-      burstProtection.checkBurstLimit.mockResolvedValue(false);
+      rateLimitingMocks.mockRateLimitBlock();
 
       await expect(service.enrichCompany('company-1'))
         .rejects
@@ -123,15 +107,10 @@ describe('CompanyEnrichmentService', () => {
     });
 
     it('should handle company not found', async () => {
-      mockSupabaseClient.from.mockReturnValue({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            single: vi.fn(() => ({
-              data: null,
-              error: { message: 'Not found' }
-            }))
-          }))
-        }))
+      const mockQueryBuilder = mockSupabaseClient.from('companies');
+      mockQueryBuilder.mockResolvedValue({
+        data: null,
+        error: { message: 'Not found' }
       });
 
       await expect(service.enrichCompany('nonexistent'))
@@ -140,22 +119,16 @@ describe('CompanyEnrichmentService', () => {
     });
 
     it('should handle companies without websites', async () => {
-      mockSupabaseClient.from.mockReturnValue({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            single: vi.fn(() => ({
-              data: {
-                id: 'company-no-website',
-                name: 'Company Without Website',
-                website: null
-              },
-              error: null
-            }))
-          }))
-        })),
-        update: vi.fn(() => ({
-          eq: vi.fn(() => ({ error: null }))
-        }))
+      const companyWithoutWebsite = DataFixtures.createCompany({
+        id: 'company-no-website',
+        name: 'Company Without Website',
+        website: null
+      });
+      
+      const mockQueryBuilder = mockSupabaseClient.from('companies');
+      mockQueryBuilder.mockResolvedValue({
+        data: companyWithoutWebsite,
+        error: null
       });
 
       const result = await service.enrichCompany('company-no-website');
@@ -165,12 +138,10 @@ describe('CompanyEnrichmentService', () => {
     });
 
     it('should handle enrichment errors gracefully', async () => {
-      const { axiomLogger } = require('../../../apps/web/lib/monitoring/axiom');
-      
       mockFetch.mockRejectedValue(new Error('Network error'));
 
       await expect(service.enrichCompany('company-1')).rejects.toThrow();
-      expect(axiomLogger.logError).toHaveBeenCalled();
+      expect(axiomMocks.logError).toHaveBeenCalled();
     });
   });
 
