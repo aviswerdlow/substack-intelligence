@@ -18,14 +18,16 @@ const TEMPLATES = {
     description: 'Staging/preview environment',
     variables: {
       'NODE_ENV': 'production',
-      'VERCEL_ENV': 'preview'
+      'VERCEL_ENV': 'preview',
+      'DEBUG': 'false'  // Can be overridden but will auto-disable after timeout
     }
   },
   production: {
     description: 'Production environment',
     variables: {
       'NODE_ENV': 'production',
-      'VERCEL_ENV': 'production'
+      'VERCEL_ENV': 'production',
+      'DEBUG': 'false'  // SECURITY: Always force DEBUG=false in production
     }
   }
 };
@@ -288,6 +290,12 @@ function validateEnvironmentFile(filePath) {
     if (variables.ENCRYPTION_KEY.length !== 32) {
       warnings.push('ENCRYPTION_KEY should be exactly 32 characters');
     }
+  }
+
+  // CRITICAL: Check debug mode in production
+  if (nodeEnv === 'production' && variables.DEBUG === 'true') {
+    console.log('  ❌ CRITICAL: DEBUG mode is enabled in production!');
+    hasErrors = true;
   }
 
   // Check for test keys in production-like environment
