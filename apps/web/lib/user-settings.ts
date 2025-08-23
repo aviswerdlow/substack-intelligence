@@ -405,7 +405,7 @@ export class UserSettingsService {
     try {
       // First check if settings exist
       const { data: existing } = await this.supabase
-        .from('user_preferences')
+        .from('user_settings')
         .select('id')
         .eq('user_id', userId)
         .single();
@@ -413,7 +413,7 @@ export class UserSettingsService {
       if (existing) {
         // Update existing settings
         const { data, error } = await this.supabase
-          .from('user_preferences')
+          .from('user_settings')
           .update({
             ...settings,
             updated_at: new Date().toISOString()
@@ -431,7 +431,7 @@ export class UserSettingsService {
       } else {
         // Create new settings
         const { data, error } = await this.supabase
-          .from('user_preferences')
+          .from('user_settings')
           .insert({
             user_id: userId,
             ...settings
