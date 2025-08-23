@@ -6,6 +6,12 @@ import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import axios from 'axios';
 import Cookies from 'js-cookie';
+import { 
+  validateSettingsTab, 
+  validateAllSettings, 
+  settingsTabSchemas,
+  type ValidationError 
+} from '@/lib/validation/settings-schemas';
 
 // Settings type definition
 export interface Settings {
@@ -119,12 +125,6 @@ export interface TabState {
   originalValues: Record<string, any>;
   lastSaved: Date | null;
   validationErrors: ValidationError[];
-}
-
-export interface ValidationError {
-  field: string;
-  message: string;
-  severity: 'error' | 'warning' | 'info';
 }
 
 // Context type
@@ -377,13 +377,40 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, []);
   
   const saveSettings = useCallback(async (tab?: string) => {
+    // Validate before saving
+    if (tab) {
+      const errors = validateTab(tab);
+      if (errors.length > 0) {
+        toast({
+          title: 'Validation Error',
+          description: `Please fix the following errors: ${errors.map(e => e.message).join(', ')}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    } else {
+      const errors = validateAll();
+      const errorCount = Object.values(errors).flat().length;
+      if (errorCount > 0) {
+        toast({
+          title: 'Validation Error',
+          description: `Please fix ${errorCount} validation error${errorCount > 1 ? 's' : ''} before saving`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+    
     setIsSaving(true);
     try {
       await saveMutation.mutateAsync({ tab, settings });
+      if (tab) {
+        markTabClean(tab);
+      }
     } finally {
       setIsSaving(false);
     }
-  }, [settings, saveMutation]);
+  }, [settings, saveMutation, validateTab, validateAll, toast, markTabClean]);
   
   const loadSettings = useCallback(async () => {
     setIsLoading(true);
@@ -463,13 +490,28 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const imported = JSON.parse(text);
       
       // Validate imported settings
-      // TODO: Add validation with Zod schema
+      const validationResult = validateAllSettings(imported);
       
-      setSettings(imported);
+      if (!validationResult.success) {
+        const errorCount = Object.values(validationResult.errors || {}).flat().length;
+        const firstErrors = Object.values(validationResult.errors || {})
+          .flat()
+          .slice(0, 3)
+          .map(e => e.message);
+        
+        toast({
+          title: 'Invalid Settings File',
+          description: `Found ${errorCount} validation error${errorCount > 1 ? 's' : ''}. ${firstErrors.join('. ')}${errorCount > 3 ? '...' : ''}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      setSettings(validationResult.data!);
       
       toast({
         title: 'Settings imported',
-        description: 'Settings imported successfully',
+        description: 'Settings imported and validated successfully',
       });
     } catch (error) {
       toast({
@@ -481,13 +523,36 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [setSettings]);
   
   const validateTab = useCallback((tab: string): ValidationError[] => {
-    // TODO: Implement validation logic using Zod schemas
-    return [];
+    // Get the data for the specific tab
+    const tabData = settings[tab as keyof Settings];
+    
+    if (!tabData) {
+      return [];
+    }
+    
+    // Check if we have a schema for this tab
+    if (!(tab in settingsTabSchemas)) {
+      return [];
+    }
+    
+    // Validate the tab data
+    const result = validateSettingsTab(tab as keyof typeof settingsTabSchemas, tabData);
+    
+    if (result.success) {
+      return [];
+    } else {
+      return result.errors || [];
+    }
   }, [settings]);
   
   const validateAll = useCallback((): Record<string, ValidationError[]> => {
-    // TODO: Implement validation logic using Zod schemas
-    return {};
+    const result = validateAllSettings(settings);
+    
+    if (result.success) {
+      return {};
+    } else {
+      return result.errors || {};
+    }
   }, [settings]);
   
   const value: SettingsContextType = {
