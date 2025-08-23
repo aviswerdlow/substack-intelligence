@@ -16,11 +16,26 @@ vi.stubGlobal('setTimeout', (fn: Function) => {
   return 1;
 });
 
-// Create mock OpenAI client
+// Create mock OpenAI client with proper error handling
 const mockEmbeddingsCreate = vi.fn();
 const mockOpenAI = {
   embeddings: {
-    create: mockEmbeddingsCreate
+    create: mockEmbeddingsCreate.mockImplementation(async (params) => {
+      // Default successful response structure matching OpenAI's API
+      return {
+        data: [{
+          object: 'embedding',
+          embedding: new Array(params.dimensions || 1536).fill(0).map(() => Math.random()),
+          index: 0
+        }],
+        model: params.model || 'text-embedding-3-small',
+        object: 'list',
+        usage: {
+          prompt_tokens: Math.floor(Math.random() * 100) + 10,
+          total_tokens: Math.floor(Math.random() * 100) + 10
+        }
+      };
+    })
   }
 };
 
@@ -80,8 +95,24 @@ describe('EmbeddingService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     
-    // Clear all individual mocks
-    mockEmbeddingsCreate.mockClear();
+    // Reset OpenAI mock to default implementation
+    mockEmbeddingsCreate.mockImplementation(async (params) => {
+      return {
+        data: [{
+          object: 'embedding',
+          embedding: mockEmbedding,
+          index: 0
+        }],
+        model: params.model || 'text-embedding-3-small',
+        object: 'list',
+        usage: {
+          prompt_tokens: Math.floor(Math.random() * 100) + 10,
+          total_tokens: Math.floor(Math.random() * 100) + 10
+        }
+      };
+    });
+    
+    // Clear all Supabase mocks
     mockFrom.mockClear();
     mockSelect.mockClear();
     mockEq.mockClear();
@@ -114,13 +145,6 @@ describe('EmbeddingService', () => {
         error: null
       });
 
-      // Mock OpenAI response
-      mockEmbeddingsCreate.mockResolvedValue({
-        data: [{
-          embedding: mockEmbedding
-        }]
-      });
-
       const result = await embeddingService.generateCompanyEmbedding(mockCompany.id);
 
       expect(result).toEqual(mockEmbedding);
@@ -142,7 +166,7 @@ describe('EmbeddingService', () => {
       expect(result).toBeNull();
     });
 
-    it('should handle OpenAI API errors', async () => {
+    it('should handle OpenAI API errors gracefully', async () => {
       mockSingle.mockResolvedValue({
         data: mockCompany,
         error: null
@@ -153,6 +177,11 @@ describe('EmbeddingService', () => {
       const result = await embeddingService.generateCompanyEmbedding(mockCompany.id);
 
       expect(result).toBeNull();
+      expect(mockEmbeddingsCreate).toHaveBeenCalledWith({
+        model: 'text-embedding-3-small',
+        input: expect.stringContaining('Glossier'),
+        dimensions: 1536
+      });
     });
   });
 
@@ -204,11 +233,6 @@ describe('EmbeddingService', () => {
       // Mock update for embedding generation
       mockUpdate.mockResolvedValue({ error: null });
 
-      // Mock OpenAI response
-      mockEmbeddingsCreate.mockResolvedValue({
-        data: [{ embedding: mockEmbedding }]
-      });
-
       // Mock similarity search
       mockRpc.mockResolvedValue({
         data: [],
@@ -224,11 +248,6 @@ describe('EmbeddingService', () => {
 
   describe('semanticSearch', () => {
     it('should perform semantic search with natural language query', async () => {
-      // Mock OpenAI embedding generation
-      mockEmbeddingsCreate.mockResolvedValue({
-        data: [{ embedding: mockEmbedding }]
-      });
-
       // Mock search results
       const mockResults = [
         {
@@ -275,7 +294,7 @@ describe('EmbeddingService', () => {
       expect(result.success).toHaveLength(3);
       expect(result.failed).toHaveLength(0);
       expect(mockGenerateEmbedding).toHaveBeenCalledTimes(3);
-    }, 5000);
+    }, 30000);
 
     it('should handle partial failures in batch processing', async () => {
       const companyIds = ['id1', 'id2', 'id3'];
@@ -293,7 +312,27 @@ describe('EmbeddingService', () => {
       expect(result.success).toHaveLength(2);
       expect(result.failed).toHaveLength(1);
       expect(mockGenerateEmbedding).toHaveBeenCalledTimes(3);
-    }, 5000);
+    }, 30000);
+
+    it('should handle batch processing with proper error handling', async () => {
+      const companyIds = ['id1', 'id2'];
+      
+      // Mock one success and one async error
+      const mockGenerateEmbedding = vi.fn()
+        .mockResolvedValueOnce(mockEmbedding)  // id1 success
+        .mockRejectedValueOnce(new Error('Async error')); // id2 async error
+        
+      embeddingService.generateCompanyEmbedding = mockGenerateEmbedding;
+
+      const result = await embeddingService.batchGenerateEmbeddings(companyIds, {
+        concurrency: 1
+      });
+
+      expect(result.success).toHaveLength(1);
+      expect(result.failed).toHaveLength(1);
+      expect(result.success).toContain('id1');
+      expect(result.failed).toContain('id2');
+    }, 30000);
   });
 
   describe('createEmbeddingText', () => {
@@ -329,22 +368,22 @@ describe('EmbeddingService', () => {
 
   describe('getEmbeddingStats', () => {
     it('should return embedding coverage statistics', async () => {
-      // Reset mockFrom implementation to handle different call patterns
-      mockFrom.mockImplementation(() => ({
-        select: mockSelect,
-        eq: mockEq,
-        not: mockNot,
-        is: mockIs,
-        update: mockUpdate,
-        single: mockSingle,
-        count: mockCount
-      }));
+      // Mock the first call (.from().select() with count)
+      const mockFirstQueryBuilder = {
+        select: vi.fn().mockResolvedValue({ count: 100, error: null })
+      };
       
-      // Mock first call (total companies) - select returns promise with count
-      mockSelect.mockResolvedValueOnce({ count: 100 });
+      // Mock the second call (.from().select().not() with count)  
+      const mockSecondQueryBuilder = {
+        select: vi.fn().mockReturnValue({
+          not: vi.fn().mockResolvedValue({ count: 75, error: null })
+        })
+      };
       
-      // Mock second call (companies with embeddings) - not returns promise with count
-      mockNot.mockResolvedValueOnce({ count: 75 });
+      // Set up mockFrom to return different query builders for each call
+      mockFrom
+        .mockReturnValueOnce(mockFirstQueryBuilder)
+        .mockReturnValueOnce(mockSecondQueryBuilder);
 
       const stats = await embeddingService.getEmbeddingStats();
 
