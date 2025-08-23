@@ -9,6 +9,7 @@
     "services/*"
   ],
   "scripts": {
+    "prebuild": "node scripts/validate-build.js",
     "build": "turbo build",
     "dev": "turbo dev",
     "start": "turbo start",
@@ -36,6 +37,7 @@
     "db:seed": "supabase db seed",
     "security:audit": "npm audit --audit-level moderate && pnpm audit --audit-level moderate",
     "security:check": "node scripts/security-check.js",
+    "security:validate-build": "node scripts/validate-build.js",
     "deploy": "vercel",
     "deploy:prod": "vercel --prod",
     "postinstall": "turbo build --filter=@substack-intelligence/database",
