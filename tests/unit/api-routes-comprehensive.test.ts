@@ -1,72 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+
+// Import route handlers to test
 import { GET as getGmailAuth, DELETE as deleteGmailAuth } from '../../apps/web/app/api/auth/gmail/route';
 import { GET as getSettings, PUT as updateSettings } from '../../apps/web/app/api/settings/route';
 import { GET as getIntelligence } from '../../apps/web/app/api/intelligence/route';
 
-// Mock Next.js
-vi.mock('next/server', () => ({
-  NextRequest: vi.fn(),
-  NextResponse: {
-    json: vi.fn((data, options) => ({
-      json: () => Promise.resolve(data),
-      status: options?.status || 200,
-      ok: (options?.status || 200) >= 200 && (options?.status || 200) < 300
-    }))
-  }
-}));
-
-// Mock Google APIs
-const mockOAuth2Client = {
-  generateAuthUrl: vi.fn(),
-  setCredentials: vi.fn(),
-  getAccessToken: vi.fn()
-};
-
-vi.mock('googleapis', () => ({
-  google: {
-    auth: {
-      OAuth2: vi.fn(() => mockOAuth2Client)
-    }
-  }
-}));
-
-// Mock Clerk authentication
-const mockCurrentUser = vi.fn();
-vi.mock('@clerk/nextjs/server', () => ({
-  currentUser: mockCurrentUser
-}));
-
-// Mock database
-const mockSupabaseClient = {
-  from: vi.fn(() => ({
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    order: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    update: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    single: vi.fn(),
-    data: null,
-    error: null
-  }))
-};
-
-vi.mock('@substack-intelligence/database', () => ({
-  createServiceRoleClient: vi.fn(() => mockSupabaseClient),
-  createServerComponentClient: vi.fn(() => mockSupabaseClient)
-}));
-
-// Mock user settings service
-const mockUserSettingsService = {
-  getComprehensiveSettings: vi.fn(),
-  updateComprehensiveSettings: vi.fn(),
-  disconnectGmail: vi.fn()
-};
-
-vi.mock('../../apps/web/lib/user-settings', () => ({
-  UserSettingsService: vi.fn(() => mockUserSettingsService)
-}));
+// Import centralized mock utilities
+import { createMockNextRequest } from '../mocks/nextjs/server';
 
 // Test data
 const mockUser = {
@@ -121,7 +62,13 @@ describe('API Routes Comprehensive Testing', () => {
       NEXT_PUBLIC_APP_URL: 'https://test.example.com'
     };
     vi.clearAllMocks();
-    mockCurrentUser.mockResolvedValue(mockUser);
+    globalThis.testUtils.resetAllTestMocks();
+    
+    // Setup authenticated user by default
+    globalThis.testUtils.mockSuccessfulAuth();
+    
+    // Setup Gmail mocks
+    globalThis.testUtils.mockGmailSuccess();
   });
 
   afterEach(() => {

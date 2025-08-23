@@ -1,71 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
-// Mock the route handlers instead of importing them
-const getCompanies = vi.fn();
-const getIntelligence = vi.fn();
+// Import route handlers to test
+import { GET as getCompanies } from '../../apps/web/app/api/companies/route';
+import { GET as getIntelligence } from '../../apps/web/app/api/intelligence/route';
 
-// Mock Next.js
-vi.mock('next/server', () => ({
-  NextRequest: vi.fn().mockImplementation((url) => ({
-    url: new URL(url),
-    nextUrl: new URL(url)
-  })),
-  NextResponse: {
-    json: vi.fn((data, options) => ({
-      json: () => Promise.resolve(data),
-      status: options?.status || 200,
-      ok: true
-    }))
-  }
-}));
+// Import centralized mock utilities
+import { createMockNextRequest } from '../mocks/nextjs/server';
 
-// Mock Clerk authentication
-const mockAuth = vi.fn(() => ({ userId: 'test-user-id' }));
-const mockCurrentUser = vi.fn(() => Promise.resolve({ id: 'test-user-id', emailAddress: 'test@example.com' }));
-
-vi.mock('@clerk/nextjs', () => ({
-  auth: mockAuth
-}));
-
-vi.mock('@clerk/nextjs/server', () => ({
-  currentUser: mockCurrentUser
-}));
-
-// Mock database functions
-const mockGetCompanies = vi.fn();
-const mockGetDailyIntelligence = vi.fn();
-
-vi.mock('@substack-intelligence/database', () => ({
-  createServerComponentClient: vi.fn(() => mockSupabaseClient),
-  createServiceRoleClient: vi.fn(() => mockServiceRoleClient),
-  getCompanies: mockGetCompanies,
-  getDailyIntelligence: mockGetDailyIntelligence
-}));
-
-// Create mock Supabase clients
-const mockSupabaseClient = {
-  from: vi.fn(() => ({
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    order: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    range: vi.fn().mockReturnThis(),
-    ilike: vi.fn().mockReturnThis(),
-    single: vi.fn(),
-    data: [],
-    error: null
-  }))
-};
-
-const mockServiceRoleClient = {
-  from: vi.fn(() => ({
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    order: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis()
-  }))
-};
+// Import database functions for mocking (these will be mocked by setup)
+import * as databaseFunctions from '@substack-intelligence/database';
 
 // Test data
 const mockCompanies = [
@@ -123,6 +67,10 @@ describe('API Routes', () => {
       NODE_ENV: 'test'
     };
     vi.clearAllMocks();
+    globalThis.testUtils.resetAllTestMocks();
+    
+    // Setup authenticated user by default
+    globalThis.testUtils.mockSuccessfulAuth();
   });
 
   afterEach(() => {
@@ -130,18 +78,13 @@ describe('API Routes', () => {
   });
 
   describe('GET /api/companies', () => {
-    let mockRequest: any;
+    let mockRequest: NextRequest;
 
     beforeEach(() => {
-      mockRequest = {
-        url: 'https://example.com/api/companies',
-        nextUrl: {
-          searchParams: new URLSearchParams()
-        }
-      } as any;
-
-      const { getCompanies: getCompaniesQuery } = require('@substack-intelligence/database');
-      getCompaniesQuery.mockResolvedValue({
+      mockRequest = createMockNextRequest('https://example.com/api/companies');
+      
+      // Configure the getCompanies mock to return expected data structure
+      vi.mocked(databaseFunctions.getCompanies).mockResolvedValue({
         companies: mockCompanies,
         total: mockCompanies.length,
         hasMore: false
@@ -152,35 +95,24 @@ describe('API Routes', () => {
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
 
-      expect(responseData).toMatchObject({
-        success: true,
-        data: {
-          companies: expect.arrayContaining([
-            expect.objectContaining({
-              name: 'Test Company A'
-            })
-          ]),
-          pagination: {
-            total: 2,
-            limit: 20,
-            offset: 0,
-            hasMore: false
-          }
-        },
-        meta: {
-          timestamp: expect.any(String),
-          version: '1.0.0'
-        }
+      if (!responseData.success) {
+        console.log('Error response:', responseData);
+        console.log('Response status:', response.status);
+      }
+
+      // Temporarily fail with the actual response to debug
+      expect(responseData).toEqual({ 
+        ACTUAL_RESPONSE_FOR_DEBUG: responseData,
+        RESPONSE_STATUS_FOR_DEBUG: response.status 
       });
     });
 
     it('should handle search parameter', async () => {
-      mockRequest.url = 'https://example.com/api/companies?search=test&limit=5&offset=10';
-      const { getCompanies: getCompaniesQuery } = require('@substack-intelligence/database');
+      mockRequest = createMockNextRequest('https://example.com/api/companies?search=test&limit=5&offset=10');
       
       await getCompanies(mockRequest);
 
-      expect(getCompaniesQuery).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         mockSupabaseClient,
         expect.objectContaining({
           search: 'test',
@@ -193,12 +125,11 @@ describe('API Routes', () => {
     });
 
     it('should handle funding status filter', async () => {
-      mockRequest.url = 'https://example.com/api/companies?fundingStatus=Series+A';
-      const { getCompanies: getCompaniesQuery } = require('@substack-intelligence/database');
+      mockRequest = createMockNextRequest('https://example.com/api/companies?fundingStatus=Series+A');
       
       await getCompanies(mockRequest);
 
-      expect(getCompaniesQuery).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         mockSupabaseClient,
         expect.objectContaining({
           fundingStatus: 'Series A'
@@ -207,12 +138,12 @@ describe('API Routes', () => {
     });
 
     it('should handle ordering parameters', async () => {
-      mockRequest.url = 'https://example.com/api/companies?orderBy=name&orderDirection=asc';
-      const { getCompanies: getCompaniesQuery } = require('@substack-intelligence/database');
+      mockRequest = createMockNextRequest('https://example.com/api/companies?orderBy=name&orderDirection=asc');
+      // Using centralized database mocks
       
       await getCompanies(mockRequest);
 
-      expect(getCompaniesQuery).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         mockSupabaseClient,
         expect.objectContaining({
           orderBy: 'name',
@@ -222,8 +153,8 @@ describe('API Routes', () => {
     });
 
     it('should return 401 when not authenticated', async () => {
-      const { auth } = require('@clerk/nextjs');
-      auth.mockReturnValue({ userId: null });
+      // Mock signed out user
+      globalThis.testUtils.mockSignedOutUser();
 
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
@@ -236,7 +167,7 @@ describe('API Routes', () => {
     });
 
     it('should return 400 for invalid query parameters', async () => {
-      mockRequest.url = 'https://example.com/api/companies?orderBy=invalid&limit=notanumber';
+      mockRequest = createMockNextRequest('https://example.com/api/companies?orderBy=invalid&limit=notanumber');
       
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
@@ -250,8 +181,8 @@ describe('API Routes', () => {
     });
 
     it('should handle database errors', async () => {
-      const { getCompanies: getCompaniesQuery } = require('@substack-intelligence/database');
-      getCompaniesQuery.mockRejectedValue(new Error('Database connection failed'));
+      // Using centralized database mocks
+      databaseQueryMocks.getCompanies.mockRejectedValue(new Error('Database connection failed'));
 
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
@@ -264,12 +195,12 @@ describe('API Routes', () => {
     });
 
     it('should validate numeric parameters', async () => {
-      mockRequest.url = 'https://example.com/api/companies?limit=50&offset=100';
-      const { getCompanies: getCompaniesQuery } = require('@substack-intelligence/database');
+      mockRequest = createMockNextRequest('https://example.com/api/companies?limit=50&offset=100');
+      // Using centralized database mocks
       
       await getCompanies(mockRequest);
 
-      expect(getCompaniesQuery).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         mockSupabaseClient,
         expect.objectContaining({
           limit: 50,
@@ -279,11 +210,11 @@ describe('API Routes', () => {
     });
 
     it('should use default values for missing parameters', async () => {
-      const { getCompanies: getCompaniesQuery } = require('@substack-intelligence/database');
+      // Using centralized database mocks
       
       await getCompanies(mockRequest);
 
-      expect(getCompaniesQuery).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         mockSupabaseClient,
         expect.objectContaining({
           limit: 20,
@@ -296,25 +227,20 @@ describe('API Routes', () => {
   });
 
   describe('GET /api/intelligence', () => {
-    let mockRequest: any;
+    let mockRequest: NextRequest;
 
     beforeEach(() => {
-      mockRequest = {
-        url: 'https://example.com/api/intelligence',
-        nextUrl: {
-          searchParams: new URLSearchParams()
-        }
-      } as any;
+      mockRequest = createMockNextRequest('https://example.com/api/intelligence');
 
-      // Mock the database query response
-      mockServiceRoleClient.from.mockReturnValue({
+      // Setup mock Supabase client to return intelligence data
+      mockSupabaseClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
         limit: vi.fn(() => Promise.resolve({
           data: mockIntelligenceData,
           error: null
         }))
-      });
+      }));
     });
 
     it('should return intelligence data with default parameters', async () => {
@@ -351,7 +277,7 @@ describe('API Routes', () => {
     });
 
     it('should handle custom limit and days parameters', async () => {
-      mockRequest.url = 'https://example.com/api/intelligence?limit=25&days=7';
+      mockRequest = createMockNextRequest('https://example.com/api/intelligence?limit=25&days=7');
       
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -361,7 +287,7 @@ describe('API Routes', () => {
     });
 
     it('should handle single day timeRange', async () => {
-      mockRequest.url = 'https://example.com/api/intelligence?days=1';
+      mockRequest = createMockNextRequest('https://example.com/api/intelligence?days=1');
       
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -371,8 +297,8 @@ describe('API Routes', () => {
 
     it('should return 401 when not authenticated in production', async () => {
       process.env.NODE_ENV = 'production';
-      const { currentUser } = require('@clerk/nextjs/server');
-      currentUser.mockResolvedValue(null);
+      // Mock signed out user
+      globalThis.testUtils.mockSignedOutUser();
 
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -386,8 +312,8 @@ describe('API Routes', () => {
 
     it('should allow unauthenticated access in development', async () => {
       process.env.NODE_ENV = 'development';
-      const { currentUser } = require('@clerk/nextjs/server');
-      currentUser.mockResolvedValue(null);
+      // Mock signed out user  
+      globalThis.testUtils.mockSignedOutUser();
 
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -507,7 +433,7 @@ describe('API Routes', () => {
     });
 
     it('should return 400 for invalid query parameters', async () => {
-      mockRequest.url = 'https://example.com/api/intelligence?limit=notanumber&days=invalid';
+      mockRequest = createMockNextRequest('https://example.com/api/intelligence?limit=notanumber&days=invalid');
       
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -580,7 +506,7 @@ describe('API Routes', () => {
     });
 
     it('should use default values for null parameters', async () => {
-      mockRequest.url = 'https://example.com/api/intelligence?limit=null&days=null';
+      mockRequest = createMockNextRequest('https://example.com/api/intelligence?limit=null&days=null');
       
       const response = await getIntelligence(mockRequest);
       
@@ -595,8 +521,8 @@ describe('API Routes', () => {
         url: 'https://example.com/api/companies'
       } as any;
 
-      const { getCompanies: getCompaniesQuery } = require('@substack-intelligence/database');
-      getCompaniesQuery.mockRejectedValue('Unknown error type');
+      // Using centralized database mocks
+      databaseQueryMocks.getCompanies.mockRejectedValue('Unknown error type');
 
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
@@ -614,8 +540,8 @@ describe('API Routes', () => {
         url: 'https://example.com/api/companies'
       } as any;
 
-      const { getCompanies: getCompaniesQuery } = require('@substack-intelligence/database');
-      getCompaniesQuery.mockRejectedValue(new Error('Test error'));
+      // Using centralized database mocks
+      databaseQueryMocks.getCompanies.mockRejectedValue(new Error('Test error'));
 
       await getCompanies(mockRequest);
 
@@ -631,8 +557,8 @@ describe('API Routes', () => {
         url: 'https://example.com/api/companies'
       } as any;
 
-      const { getCompanies: getCompaniesQuery } = require('@substack-intelligence/database');
-      getCompaniesQuery.mockResolvedValue({
+      // Using centralized database mocks
+      databaseQueryMocks.getCompanies.mockResolvedValue({
         companies: [],
         total: 0,
         hasMore: false
@@ -656,8 +582,8 @@ describe('API Routes', () => {
         url: 'https://example.com/api/companies'
       } as any;
 
-      const { auth } = require('@clerk/nextjs');
-      auth.mockReturnValue({ userId: null });
+      // Mock signed out user
+      globalThis.testUtils.mockSignedOutUser();
 
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
@@ -670,9 +596,10 @@ describe('API Routes', () => {
   });
 
   describe('Caching Headers', () => {
-    it('should disable caching with dynamic exports', () => {
-      const companiesRoute = require('@/app/api/companies/route');
-      const intelligenceRoute = require('@/app/api/intelligence/route');
+    it('should disable caching with dynamic exports', async () => {
+      // Import the route modules to check their export configuration
+      const companiesRoute = await import('../../apps/web/app/api/companies/route');
+      const intelligenceRoute = await import('../../apps/web/app/api/intelligence/route');
 
       expect(companiesRoute.dynamic).toBe('force-dynamic');
       expect(companiesRoute.revalidate).toBe(0);
