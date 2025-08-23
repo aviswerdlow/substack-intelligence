@@ -4,6 +4,10 @@ import { Permission } from '@/lib/security/auth';
 import { validateEnvironmentSecurity, performRuntimeSecurityChecks } from '@/lib/security/environment';
 import { apiKeys } from '@/lib/config/secrets';
 import { axiomLogger } from '@/lib/monitoring/axiom';
+import validationCache from '@/lib/validation/cache';
+import debouncer from '@/lib/validation/debounce';
+import memoryMonitor from '@/lib/validation/memory-monitor';
+import performanceTracker from '@/lib/validation/performance-metrics';
 
 // Configuration validation endpoint for admins
 export const GET = withSecureRoute(
@@ -16,37 +20,70 @@ export const GET = withSecureRoute(
       );
     }
 
+    // Check debouncing
+    const debounceCheck = debouncer.shouldAllowRequest(context.userId);
+    if (!debounceCheck.allowed) {
+      return new NextResponse(
+        JSON.stringify({
+          error: 'Too many requests',
+          message: debounceCheck.reason,
+          retryAfterMs: debounceCheck.waitMs
+        }),
+        { 
+          status: 429, 
+          headers: { 
+            'Content-Type': 'application/json',
+            'Retry-After': String(Math.ceil((debounceCheck.waitMs || 1000) / 1000))
+          } 
+        }
+      );
+    }
+
     try {
       const { searchParams } = new URL(request.url);
       const checkType = searchParams.get('type') || 'full';
+      const bypassCache = searchParams.get('force') === 'true';
+
+      // Start performance tracking
+      const endTracking = performanceTracker.startOperation(`validation_${checkType}`);
 
       let validationResult;
 
-      switch (checkType) {
-        case 'environment':
-          validationResult = await validateEnvironmentConfiguration();
-          break;
-          
-        case 'secrets':
-          validationResult = await validateSecretsConfiguration();
-          break;
-          
-        case 'runtime':
-          validationResult = await validateRuntimeConfiguration();
-          break;
-          
-        case 'full':
-        default:
-          validationResult = await validateFullConfiguration();
-          break;
-      }
+      // Try to get cached result first
+      const cacheKey = `validation_${checkType}_${context.userId}`;
+      
+      validationResult = await validationCache.getOrFetch(
+        cacheKey,
+        async () => {
+          switch (checkType) {
+            case 'environment':
+              return await validateEnvironmentConfiguration();
+              
+            case 'secrets':
+              return await validateSecretsConfiguration();
+              
+            case 'runtime':
+              return await validateRuntimeConfiguration();
+              
+            case 'full':
+            default:
+              return await validateFullConfiguration();
+          }
+        },
+        { bypassCache }
+      );
 
-      // Log validation request
+      const cached = !bypassCache && validationCache.has(cacheKey);
+      endTracking(true, { cached });
+
+      // Log validation request with performance metrics
       await axiomLogger.logSecurityEvent('configuration_validation', {
         checkType,
         userId: context.userId,
         result: validationResult.overall,
-        issues: validationResult.issues?.length || 0
+        issues: validationResult.issues?.length || 0,
+        cached,
+        performanceStats: performanceTracker.getStats(`validation_${checkType}`)
       });
 
       const statusCode = validationResult.overall === 'valid' ? 200 : 
@@ -55,7 +92,12 @@ export const GET = withSecureRoute(
       return NextResponse.json({
         success: true,
         validation: validationResult,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        cached,
+        performance: {
+          stats: performanceTracker.getStats(`validation_${checkType}`),
+          cacheStats: validationCache.getStats()
+        }
       }, { status: statusCode });
 
     } catch (error) {
@@ -163,12 +205,28 @@ async function validateRuntimeConfiguration() {
     {
       name: 'Memory Usage',
       check: () => {
-        const memInfo = process.memoryUsage();
-        const heapUsageMB = memInfo.heapUsed / 1024 / 1024;
+        // Get memory status from background monitor instead of checking inline
+        const memStatus = memoryMonitor.getStatus();
+        const trend = memStatus.trend;
+        
+        let message = `Heap usage: ${memStatus.heapUsedMB}MB (${memStatus.heapPercentage}% of total)`;
+        if (trend) {
+          message += `, trend: ${trend.increasing ? '↑' : '↓'} ${Math.abs(trend.changeRate)}MB/interval`;
+        }
+        
         return {
-          passed: heapUsageMB < 500, // 500MB threshold
-          message: `Heap usage: ${Math.round(heapUsageMB)}MB`,
-          value: heapUsageMB
+          passed: memStatus.status !== 'critical',
+          message,
+          value: {
+            heapUsedMB: memStatus.heapUsedMB,
+            heapPercentage: memStatus.heapPercentage,
+            status: memStatus.status,
+            trend,
+            history: memoryMonitor.getReadings().slice(-5).map(r => ({
+              timestamp: r.timestamp,
+              heapUsedMB: Math.round(r.heapUsedMB * 100) / 100
+            }))
+          }
         };
       }
     },
