@@ -1,47 +1,63 @@
 import { NextRequest } from 'next/server';
 export declare const RATE_LIMITS: {
     readonly 'auth/signin': {
-        readonly requests: 5;
+        readonly requests: number;
         readonly window: "1m";
     };
     readonly 'auth/signup': {
-        readonly requests: 3;
+        readonly requests: number;
         readonly window: "5m";
     };
-    readonly 'api/companies/search': {
-        readonly requests: 100;
+    readonly 'api/companies': {
+        readonly requests: number;
         readonly window: "1h";
     };
-    readonly 'api/emails/process': {
-        readonly requests: 10;
+    readonly 'api/emails/extract': {
+        readonly requests: number;
         readonly window: "1m";
     };
     readonly 'api/reports/generate': {
-        readonly requests: 5;
+        readonly requests: number;
         readonly window: "1h";
     };
-    readonly 'api/ai/extract': {
-        readonly requests: 20;
+    readonly 'api/test/anthropic': {
+        readonly requests: number;
         readonly window: "1h";
     };
-    readonly 'api/ai/analyze': {
-        readonly requests: 10;
+    readonly 'api/test/extract': {
+        readonly requests: number;
+        readonly window: "1h";
+    };
+    readonly 'api/test/extract-all': {
+        readonly requests: number;
+        readonly window: "1h";
+    };
+    readonly 'api/test/extract-batch': {
+        readonly requests: number;
         readonly window: "1h";
     };
     readonly 'api/monitoring/error': {
-        readonly requests: 50;
+        readonly requests: number;
         readonly window: "1m";
     };
     readonly 'api/monitoring/performance': {
-        readonly requests: 100;
+        readonly requests: number;
         readonly window: "1m";
     };
+    readonly 'api/health': {
+        readonly requests: 500;
+        readonly window: "1m";
+    };
+    readonly 'api/config/validate': {
+        readonly requests: number;
+        readonly window: "1h";
+    };
     readonly 'api/*': {
-        readonly requests: 200;
+        readonly requests: number;
         readonly window: "1h";
     };
     readonly global: {
-        readonly requests: 1000;
+        readonly requests: number;
         readonly window: "1h";
     };
 };
