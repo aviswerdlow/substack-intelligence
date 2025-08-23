@@ -5,6 +5,7 @@ import { DashboardStats } from '@/components/dashboard/stats';
 import { RecentCompanies } from '@/components/dashboard/recent-companies';
 import { QuickActions } from '@/components/dashboard/quick-actions';
 import { DashboardHeader } from '@/components/dashboard/header';
+import { SystemStatus, SystemStatusLoading } from '@/components/dashboard/system-status';
 
 export default function DashboardPage() {
   return (
@@ -66,40 +67,9 @@ export default function DashboardPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <Mail className="h-5 w-5 text-green-600" />
-                <div>
-                  <p className="font-medium">Gmail Connector</p>
-                  <p className="text-sm text-muted-foreground">Connected</p>
-                </div>
-              </div>
-              <div className="h-2 w-2 bg-green-600 rounded-full" />
-            </div>
-            
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <Zap className="h-5 w-5 text-green-600" />
-                <div>
-                  <p className="font-medium">Claude AI</p>
-                  <p className="text-sm text-muted-foreground">Operational</p>
-                </div>
-              </div>
-              <div className="h-2 w-2 bg-green-600 rounded-full" />
-            </div>
-            
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <Building2 className="h-5 w-5 text-green-600" />
-                <div>
-                  <p className="font-medium">Database</p>
-                  <p className="text-sm text-muted-foreground">Healthy</p>
-                </div>
-              </div>
-              <div className="h-2 w-2 bg-green-600 rounded-full" />
-            </div>
-          </div>
+          <Suspense fallback={<SystemStatusLoading />}>
+            <SystemStatus />
+          </Suspense>
         </CardContent>
       </Card>
     </div>

@@ -1,127 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// MOCK API ROUTE FOR TESTING SETTINGS UI
-
-// Mock default settings data matching the Settings interface
-const mockSettings = {
-  account: {
-    name: 'John Doe',
-    email: 'john@example.com',
-    role: 'Admin',
-    timezone: 'America/New_York'
-  },
-  newsletters: {
-    sources: [
-      {
-        id: '1',
-        name: 'TechCrunch',
-        email: 'newsletter@techcrunch.com',
-        enabled: true,
-        frequency: 'daily'
-      },
-      {
-        id: '2',
-        name: 'The Verge',
-        email: 'newsletter@theverge.com',
-        enabled: true,
-        frequency: 'weekly'
-      }
-    ],
-    autoSubscribe: true,
-    digestFrequency: 'weekly'
-  },
-  companies: {
-    tracking: [
-      {
-        id: '1',
-        name: 'OpenAI',
-        domain: 'openai.com',
-        keywords: ['ChatGPT', 'GPT-4', 'AI'],
-        enabled: true
-      },
-      {
-        id: '2',
-        name: 'Anthropic',
-        domain: 'anthropic.com',
-        keywords: ['Claude', 'Constitutional AI'],
-        enabled: true
-      }
-    ],
-    autoDetect: true,
-    minimumMentions: 3
-  },
-  ai: {
-    provider: 'anthropic',
-    model: 'claude-3-5-sonnet-20241022',
-    apiKey: '',
-    anthropicApiKey: '',
-    openaiApiKey: '',
-    temperature: 0.7,
-    maxTokens: 4096,
-    enableEnrichment: true
-  },
-  email: {
-    provider: 'gmail',
-    connected: false,
-    syncFrequency: '15min',
-    lastSync: new Date().toISOString(),
-    autoProcess: true,
-    retentionDays: 90
-  },
-  reports: {
-    defaultFormat: 'pdf',
-    includeCharts: true,
-    includeSentiment: true,
-    autoGenerate: {
-      daily: false,
-      weekly: true,
-      monthly: false
-    },
-    deliveryTime: '09:00',
-    recipients: ['john@example.com']
-  },
-  notifications: {
-    email: {
-      enabled: true,
-      criticalOnly: false,
-      dailyDigest: true
-    },
-    inApp: {
-      enabled: true,
-      soundEnabled: false
-    },
-    thresholds: {
-      negativeSentiment: -0.5,
-      mentionVolume: 10,
-      competitorMentions: true
-    }
-  },
-  api: {
-    keys: [],
-    webhooks: []
-  },
-  privacy: {
-    dataRetention: 365,
-    shareAnalytics: true,
-    allowExport: true
-  },
-  appearance: {
-    theme: 'system' as const,
-    accentColor: 'blue',
-    fontSize: 'medium' as const,
-    compactMode: false,
-    showTips: true
-  }
-};
+import { auth } from '@clerk/nextjs';
+import { UserSettingsService } from '@/lib/user-settings';
 
 export async function GET() {
   try {
-    // Return mock settings
+    const { userId } = auth();
+    if (!userId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized'
+      }, { status: 401 });
+    }
+
+    const settingsService = new UserSettingsService();
+    const settings = await settingsService.getComprehensiveSettings(userId);
+    
+    if (!settings) {
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to fetch settings'
+      }, { status: 500 });
+    }
+
     return NextResponse.json({
       success: true,
-      settings: mockSettings
+      settings
     });
   } catch (error) {
+    console.error('Settings GET error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to fetch settings' },
       { status: 500 }
@@ -131,18 +37,36 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
+    const { userId } = auth();
+    if (!userId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized'
+      }, { status: 401 });
+    }
+
     const body = await request.json();
+    const settingsService = new UserSettingsService();
     
-    // In a real app, this would save to database
-    // For testing, just return success
-    console.log('Settings update received:', body);
+    const success = await settingsService.updateComprehensiveSettings(userId, body);
+    
+    if (!success) {
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to save settings'
+      }, { status: 500 });
+    }
+
+    // Return updated settings
+    const updatedSettings = await settingsService.getComprehensiveSettings(userId);
     
     return NextResponse.json({
       success: true,
-      settings: body,
+      settings: updatedSettings,
       message: 'Settings saved successfully'
     });
   } catch (error) {
+    console.error('Settings PUT error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to save settings' },
       { status: 500 }
