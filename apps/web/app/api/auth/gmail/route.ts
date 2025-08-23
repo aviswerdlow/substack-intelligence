@@ -3,25 +3,63 @@ import { google } from 'googleapis';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import { currentUser } from '@clerk/nextjs/server';
 
-const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`;
-console.log('OAuth Redirect URI:', redirectUri);
-console.log('Client ID:', process.env.GOOGLE_CLIENT_ID);
+// Environment variable validation
+function validateEnvironment() {
+  const errors = [];
+  
+  if (!process.env.GOOGLE_CLIENT_ID) {
+    errors.push('GOOGLE_CLIENT_ID environment variable is not set');
+  }
+  
+  if (!process.env.GOOGLE_CLIENT_SECRET) {
+    errors.push('GOOGLE_CLIENT_SECRET environment variable is not set');
+  }
+  
+  if (!process.env.NEXT_PUBLIC_APP_URL) {
+    errors.push('NEXT_PUBLIC_APP_URL environment variable is not set');
+  }
+  
+  return errors;
+}
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  redirectUri
-);
+function createOAuth2Client() {
+  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`;
+  
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri
+  );
+}
 
 // GET - Initiate OAuth flow
 export async function GET(request: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Validate environment variables first
+    const envErrors = validateEnvironment();
+    if (envErrors.length > 0) {
+      return NextResponse.json({
+        error: 'Configuration Error',
+        details: envErrors,
+        instructions: [
+          'Set up OAuth 2.0 credentials in Google Cloud Console',
+          'Add the required environment variables to your .env.local file',
+          'Ensure NEXT_PUBLIC_APP_URL matches your current domain'
+        ]
+      }, { status: 500 });
     }
 
-    // Generate OAuth URL
+    const user = await currentUser();
+    if (!user) {
+      return NextResponse.json({ 
+        error: 'Authentication required',
+        message: 'Please sign in to connect your Gmail account'
+      }, { status: 401 });
+    }
+
+    const oauth2Client = createOAuth2Client();
+    
+    // Generate OAuth URL with proper scopes
     const scopes = [
       'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/gmail.modify'
@@ -30,23 +68,39 @@ export async function GET(request: NextRequest) {
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: scopes,
-      state: user.id, // Pass user ID in state for callback
-      prompt: 'consent' // Force consent to get refresh token
+      state: user.id, // Pass user ID in state for callback security
+      prompt: 'consent', // Force consent to get refresh token
+      include_granted_scopes: true
     });
 
-    console.log('Generated Auth URL:', authUrl);
-    
-    // Extract and log the redirect_uri parameter from the URL
-    const urlParams = new URL(authUrl);
-    console.log('Redirect URI in auth URL:', urlParams.searchParams.get('redirect_uri'));
-
-    return NextResponse.json({ authUrl });
+    return NextResponse.json({ 
+      authUrl,
+      redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`
+    });
   } catch (error) {
     console.error('Gmail OAuth initiation failed:', error);
-    return NextResponse.json(
-      { error: 'Failed to initiate Gmail authentication' },
-      { status: 500 }
-    );
+    
+    // Check for specific error types
+    if (error instanceof Error) {
+      if (error.message.includes('Gmail API')) {
+        return NextResponse.json({
+          error: 'Gmail API Not Enabled',
+          message: 'The Gmail API is not enabled in your Google Cloud project',
+          instructions: [
+            'Go to Google Cloud Console',
+            'Enable the Gmail API for your project',
+            'Wait 2-3 minutes for the API to activate',
+            'Try connecting again'
+          ]
+        }, { status: 500 });
+      }
+    }
+
+    return NextResponse.json({
+      error: 'OAuth Setup Failed',
+      message: 'Unable to initiate Gmail authentication. Please check your OAuth configuration.',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
 
@@ -55,7 +109,10 @@ export async function DELETE() {
   try {
     const user = await currentUser();
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ 
+        error: 'Authentication required',
+        message: 'Please sign in to disconnect your Gmail account'
+      }, { status: 401 });
     }
 
     // Disconnect Gmail in database
@@ -64,20 +121,24 @@ export async function DELETE() {
     const success = await userSettingsService.disconnectGmail(user.id);
     
     if (success) {
-      console.log('Gmail disconnected for user:', user.id);
-      return NextResponse.json({ success: true, message: 'Gmail disconnected successfully' });
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Gmail account disconnected successfully',
+        userId: user.id
+      });
     } else {
-      console.error('Failed to disconnect Gmail for user:', user.id);
-      return NextResponse.json(
-        { error: 'Failed to disconnect Gmail' },
-        { status: 500 }
-      );
+      return NextResponse.json({
+        error: 'Disconnection Failed',
+        message: 'Unable to disconnect Gmail account. Please try again.',
+        userId: user.id
+      }, { status: 500 });
     }
   } catch (error) {
     console.error('Gmail disconnection failed:', error);
-    return NextResponse.json(
-      { error: 'Failed to disconnect Gmail' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      error: 'Disconnection Error',
+      message: 'An unexpected error occurred while disconnecting Gmail',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
