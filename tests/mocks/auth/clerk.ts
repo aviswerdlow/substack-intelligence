@@ -294,26 +294,24 @@ class ClerkMocks {
 // Export singleton instance
 export const clerkMocks = new ClerkMocks();
 
-// Export individual mocks for direct use
-export const {
-  currentUser,
-  auth,
-  useUser,
-  useAuth,
-  useSession,
-  useOrganization,
-  useOrganizationList,
-  SignedIn,
-  SignedOut,
-  ClerkProvider,
-  SignInButton,
-  SignOutButton,
-  SignUpButton,
-  UserButton,
-  OrganizationSwitcher,
-  verifyToken,
-  createOrganization
-} = clerkMocks;
+// Export individual mocks for direct use - bind methods to preserve context
+export const currentUser = clerkMocks.currentUser.bind(clerkMocks);
+export const auth = clerkMocks.auth.bind(clerkMocks);
+export const useUser = clerkMocks.useUser.bind(clerkMocks);
+export const useAuth = clerkMocks.useAuth.bind(clerkMocks);
+export const useSession = clerkMocks.useSession.bind(clerkMocks);
+export const useOrganization = clerkMocks.useOrganization.bind(clerkMocks);
+export const useOrganizationList = clerkMocks.useOrganizationList.bind(clerkMocks);
+export const SignedIn = clerkMocks.SignedIn.bind(clerkMocks);
+export const SignedOut = clerkMocks.SignedOut.bind(clerkMocks);
+export const ClerkProvider = clerkMocks.ClerkProvider.bind(clerkMocks);
+export const SignInButton = clerkMocks.SignInButton.bind(clerkMocks);
+export const SignOutButton = clerkMocks.SignOutButton.bind(clerkMocks);
+export const SignUpButton = clerkMocks.SignUpButton.bind(clerkMocks);
+export const UserButton = clerkMocks.UserButton.bind(clerkMocks);
+export const OrganizationSwitcher = clerkMocks.OrganizationSwitcher.bind(clerkMocks);
+export const verifyToken = clerkMocks.verifyToken.bind(clerkMocks);
+export const createOrganization = clerkMocks.createOrganization.bind(clerkMocks);
 
 // Mock implementations for vi.mock()
 export const clerkNextjsMocks = {
