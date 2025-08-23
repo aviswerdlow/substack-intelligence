@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs';
+import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import { z } from 'zod';
 
@@ -15,10 +15,10 @@ const GetIntelligenceSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     // Check authentication (skip in development for testing)
-    const { userId } = auth();
+    const user = await currentUser();
     const isDevelopment = process.env.NODE_ENV === 'development';
     
-    if (!userId && !isDevelopment) {
+    if (!user && !isDevelopment) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'

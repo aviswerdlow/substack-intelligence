@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { useIntelligence } from '@/contexts/IntelligenceContext';
 import { 
   Play, 
   RefreshCw, 
@@ -11,62 +12,19 @@ import {
   Settings, 
   Database,
   Mail,
-  Brain
+  Brain,
+  Sparkles
 } from 'lucide-react';
 
 export function QuickActions() {
-  const [isTriggering, setIsTriggering] = useState(false);
-  const [isExtracting, setIsExtracting] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const { syncPipeline, isSyncing, pipelineStatus } = useIntelligence();
 
-  const triggerPipeline = async () => {
-    setIsTriggering(true);
-    try {
-      // First try the test Gmail endpoint for development
-      // Add timestamp to bypass cache
-      const response = await fetch(`/api/test/gmail?_t=${Date.now()}`, {
-        method: 'POST',
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        toast({
-          title: 'Pipeline Triggered',
-          description: `Successfully fetched ${data.data.emailsProcessed} emails from Gmail.`,
-        });
-        // Refresh the router to show new data
-        router.refresh();
-        setTimeout(() => router.refresh(), 1500);
-      } else {
-        // Fallback to original trigger endpoint
-        const fallbackResponse = await fetch('/api/trigger/intelligence', {
-          method: 'POST'
-        });
-        const fallbackData = await fallbackResponse.json();
-        
-        if (fallbackData.success) {
-          toast({
-            title: 'Pipeline Triggered',
-            description: 'Intelligence processing has been started manually.',
-          });
-        } else {
-          throw new Error(fallbackData.error || 'Failed to trigger pipeline');
-        }
-      }
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to trigger pipeline',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsTriggering(false);
-    }
+  const refreshIntelligence = async () => {
+    await syncPipeline(true); // Force refresh
+    router.refresh();
+    setTimeout(() => router.refresh(), 1500);
   };
 
   const testExtraction = async () => {
@@ -117,62 +75,25 @@ export function QuickActions() {
     }
   };
 
-  const extractCompanies = async () => {
-    setIsExtracting(true);
-    try {
-      const response = await fetch(`/api/emails/extract?_t=${Date.now()}`, {
-        method: 'POST',
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        toast({
-          title: 'Extraction Complete',
-          description: `Extracted ${data.data.companiesExtracted} companies from ${data.data.emailsProcessed} emails.`,
-        });
-        // Refresh the router to show new companies
-        router.refresh();
-        setTimeout(() => router.refresh(), 1500);
-      } else {
-        throw new Error(data.error || 'Extraction failed');
-      }
-    } catch (error) {
-      toast({
-        title: 'Extraction Failed',
-        description: error instanceof Error ? error.message : 'Failed to extract companies',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsExtracting(false);
-    }
+  const viewIntelligence = () => {
+    router.push('/intelligence');
   };
 
   const actions = [
     {
-      title: 'Trigger Pipeline',
-      description: 'Fetch emails from Gmail',
-      icon: Mail,
-      action: triggerPipeline,
-      loading: isTriggering,
+      title: 'Refresh Intelligence',
+      description: 'Sync emails and extract companies',
+      icon: Sparkles,
+      action: refreshIntelligence,
+      loading: isSyncing,
       variant: 'default' as const
     },
     {
-      title: 'Extract Companies',
-      description: 'Run AI extraction on emails',
+      title: 'View Intelligence',
+      description: 'See latest company mentions',
       icon: Brain,
-      action: extractCompanies,
-      loading: isExtracting,
+      action: viewIntelligence,
       variant: 'default' as const
-    },
-    {
-      title: 'Test Extraction',
-      description: 'Test Claude AI with sample content',
-      icon: RefreshCw,
-      action: testExtraction,
-      variant: 'outline' as const
     },
     {
       title: 'System Health',
@@ -182,24 +103,24 @@ export function QuickActions() {
       variant: 'outline' as const
     },
     {
-      title: 'View Reports',
-      description: 'Generate intelligence reports',
-      icon: FileText,
-      action: () => window.open('/reports', '_self'),
+      title: 'Test Extraction',
+      description: 'Test AI with sample content',
+      icon: RefreshCw,
+      action: testExtraction,
       variant: 'outline' as const
     },
     {
-      title: 'Email Settings',
-      description: 'Configure Gmail integration',
-      icon: Mail,
-      action: () => window.open('/settings', '_self'),
+      title: 'View Reports',
+      description: 'Generate intelligence reports',
+      icon: FileText,
+      action: () => router.push('/reports'),
       variant: 'outline' as const
     },
     {
       title: 'System Settings',
-      description: 'Manage platform configuration',
+      description: 'Manage configuration',
       icon: Settings,
-      action: () => window.open('/settings', '_self'),
+      action: () => router.push('/settings'),
       variant: 'outline' as const
     }
   ];

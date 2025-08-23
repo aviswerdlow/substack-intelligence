@@ -376,40 +376,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
   
-  // Validation functions (moved before saveSettings to avoid temporal dead zone)
-  const validateTab = useCallback((tab: string): ValidationError[] => {
-    // Get the data for the specific tab
-    const tabData = settings[tab as keyof Settings];
-    
-    if (!tabData) {
-      return [];
-    }
-    
-    // Check if we have a schema for this tab
-    if (!(tab in settingsTabSchemas)) {
-      return [];
-    }
-    
-    // Validate the tab data
-    const result = validateSettingsTab(tab as keyof typeof settingsTabSchemas, tabData);
-    
-    if (result.success) {
-      return [];
-    } else {
-      return result.errors || [];
-    }
-  }, [settings]);
-  
-  const validateAll = useCallback((): Record<string, ValidationError[]> => {
-    const result = validateAllSettings(settings);
-    
-    if (result.success) {
-      return {};
-    } else {
-      return result.errors || {};
-    }
-  }, [settings]);
-  
   const saveSettings = useCallback(async (tab?: string) => {
     // Validate before saving
     if (tab) {
@@ -555,6 +521,39 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       });
     }
   }, [setSettings]);
+  
+  const validateTab = useCallback((tab: string): ValidationError[] => {
+    // Get the data for the specific tab
+    const tabData = settings[tab as keyof Settings];
+    
+    if (!tabData) {
+      return [];
+    }
+    
+    // Check if we have a schema for this tab
+    if (!(tab in settingsTabSchemas)) {
+      return [];
+    }
+    
+    // Validate the tab data
+    const result = validateSettingsTab(tab as keyof typeof settingsTabSchemas, tabData);
+    
+    if (result.success) {
+      return [];
+    } else {
+      return result.errors || [];
+    }
+  }, [settings]);
+  
+  const validateAll = useCallback((): Record<string, ValidationError[]> => {
+    const result = validateAllSettings(settings);
+    
+    if (result.success) {
+      return {};
+    } else {
+      return result.errors || {};
+    }
+  }, [settings]);
   
   const value: SettingsContextType = {
     settings,

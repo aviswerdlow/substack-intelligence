@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useIntelligence } from '@/contexts/IntelligenceContext';
 import {
   Dialog,
   DialogContent,
@@ -14,7 +15,7 @@ import {
 import { 
   Settings, 
   Plus, 
-  Grid3X3, 
+  LayoutGrid, 
   Save,
   RotateCcw,
   Eye,
@@ -31,12 +32,31 @@ import { ActivityFeedWidget } from '@/components/dashboard/widgets/ActivityFeedW
 import { EmailStatsWidget } from '@/components/dashboard/widgets/EmailStatsWidget';
 import { PipelineStatusWidget } from '@/components/dashboard/widgets/PipelineStatusWidget';
 import { Breadcrumbs } from '@/components/navigation/Breadcrumbs';
+import { DataFreshness } from '@/components/dashboard/DataFreshness';
 import { cn } from '@/lib/utils';
 
 function DashboardContent() {
   const { widgets, isEditing, toggleEditMode, resetLayout, saveLayout, addWidget } = useDashboard();
+  const { syncPipeline, pipelineStatus, isSyncing } = useIntelligence();
   const [showAddWidget, setShowAddWidget] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
+  
+  // Auto-refresh on dashboard load
+  useEffect(() => {
+    const checkAndSync = async () => {
+      // Only sync if data is stale (not fresh)
+      if (!pipelineStatus || !pipelineStatus.dataIsFresh) {
+        console.log('Dashboard loaded - syncing intelligence data...');
+        await syncPipeline();
+      } else {
+        console.log('Dashboard loaded - data is fresh, skipping sync');
+      }
+    };
+    
+    // Small delay to let the page render first
+    const timer = setTimeout(checkAndSync, 500);
+    return () => clearTimeout(timer);
+  }, []); // Only run once on mount
 
   const renderWidgetContent = (widget: WidgetConfig) => {
     switch (widget.type) {
@@ -91,7 +111,11 @@ function DashboardContent() {
         </div>
         
         {/* Dashboard Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
+          {/* Data Freshness Indicator */}
+          <DataFreshness />
+          
+          <div className="flex items-center gap-2">
           {/* Add Widget Dialog */}
           <Dialog open={showAddWidget} onOpenChange={setShowAddWidget}>
             <DialogTrigger asChild>
@@ -133,7 +157,7 @@ function DashboardContent() {
             onClick={() => setShowGrid(!showGrid)}
             className="gap-2"
           >
-            <Grid3X3 className="h-4 w-4" />
+            <LayoutGrid className="h-4 w-4" />
             {showGrid ? 'Hide' : 'Show'} Grid
           </Button>
 
@@ -173,6 +197,7 @@ function DashboardContent() {
               Reset
             </Button>
           )}
+          </div>
         </div>
       </div>
 

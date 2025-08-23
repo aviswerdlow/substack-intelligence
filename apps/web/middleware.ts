@@ -91,8 +91,8 @@ function checkDebugModeTimeout() {
     
     if (currentTime - enabledTime > hourInMs) {
       console.log('[SECURITY] Auto-disabling debug mode in staging (1-hour timeout)');
-      process.env.DEBUG = 'false';
-      delete process.env.DEBUG_ENABLED_AT;
+      // Note: Cannot modify process.env in Edge Runtime
+      // This would need to be handled server-side
       
       logSecurityIncident({
         type: 'DEBUG_MODE_AUTO_DISABLED',
@@ -104,8 +104,8 @@ function checkDebugModeTimeout() {
       });
     }
   } else {
-    // Set the timestamp when debug mode is first detected
-    process.env.DEBUG_ENABLED_AT = new Date().toISOString();
+    // Note: Cannot set process.env in Edge Runtime
+    console.log('[SECURITY] Debug mode detected in staging environment');
   }
 }
 
@@ -189,5 +189,9 @@ async function logSecurityIncident(incident: {
 }
 
 export const config = {
-  matcher: ['/((?!.+\\.[\\w]+$|_next).*)', '/', '/(api|trpc)(.*)']
+  matcher: [
+    '/((?!.*\\..*|_next).*)',
+    '/',
+    '/(api|trpc)(.*)'
+  ]
 };

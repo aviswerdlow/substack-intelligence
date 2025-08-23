@@ -7,6 +7,7 @@ import { OnboardingProvider } from '@/components/onboarding/OnboardingProvider';
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
 import { KeyboardShortcuts } from '@/components/keyboard/KeyboardShortcuts';
+import { IntelligenceProvider } from '@/contexts/IntelligenceContext';
 
 export default async function DashboardLayout({
   children,
@@ -21,35 +22,37 @@ export default async function DashboardLayout({
 
   return (
     <Providers>
-      <OnboardingProvider>
-        <div className="min-h-screen bg-background">
-          <header className="border-b bg-card">
-            <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <h1 className="text-xl font-semibold">Substack Intelligence</h1>
-                <DashboardNav />
+      <IntelligenceProvider>
+        <OnboardingProvider>
+          <div className="min-h-screen bg-background">
+            <header className="border-b bg-card">
+              <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <h1 className="text-xl font-semibold">Substack Intelligence</h1>
+                  <DashboardNav />
+                </div>
+                <div className="flex items-center space-x-4">
+                  <UserButton 
+                    appearance={{
+                      elements: {
+                        avatarBox: 'w-8 h-8'
+                      }
+                    }}
+                  />
+                </div>
               </div>
-              <div className="flex items-center space-x-4">
-                <UserButton 
-                  appearance={{
-                    elements: {
-                      avatarBox: 'w-8 h-8'
-                    }
-                  }}
-                />
-              </div>
-            </div>
-          </header>
-          <main className="container mx-auto px-4 py-8">
-            {children}
-          </main>
-          
-          {/* Global Components */}
-          <OnboardingTour />
-          <OnboardingChecklist />
-          <KeyboardShortcuts />
-        </div>
-      </OnboardingProvider>
+            </header>
+            <main className="container mx-auto px-4 py-8">
+              {children}
+            </main>
+            
+            {/* Global Components */}
+            <OnboardingTour />
+            <OnboardingChecklist />
+            <KeyboardShortcuts />
+          </div>
+        </OnboardingProvider>
+      </IntelligenceProvider>
     </Providers>
   );
 }

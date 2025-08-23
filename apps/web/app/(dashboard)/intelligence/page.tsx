@@ -6,13 +6,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Building2, ExternalLink, Search, Filter, TrendingUp } from 'lucide-react';
+import { Building2, ExternalLink, Search, Filter, TrendingUp, RefreshCw } from 'lucide-react';
 import { formatDateTime, getSentimentColor, getConfidenceColor } from '@/lib/utils';
 import Link from 'next/link';
 import { NoCompaniesEmptyState, NoSearchResultsEmptyState } from '@/components/ui/empty-state';
 import { SkeletonCard } from '@/components/ui/skeleton-loader';
 import { Breadcrumbs } from '@/components/navigation/Breadcrumbs';
 import { useRouter } from 'next/navigation';
+import { useIntelligence } from '@/contexts/IntelligenceContext';
+import { DataFreshness } from '@/components/dashboard/DataFreshness';
 
 interface CompanyMention {
   id: string;
@@ -46,6 +48,7 @@ interface IntelligenceData {
 
 export default function IntelligencePage() {
   const router = useRouter();
+  const { syncPipeline, isSyncing, pipelineStatus } = useIntelligence();
   const [data, setData] = useState<IntelligenceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,6 +58,14 @@ export default function IntelligencePage() {
   useEffect(() => {
     fetchIntelligence();
   }, [days]);
+  
+  // Auto-refresh when pipeline completes
+  useEffect(() => {
+    if (pipelineStatus?.status === 'complete') {
+      console.log('Pipeline completed, refreshing intelligence data...');
+      fetchIntelligence();
+    }
+  }, [pipelineStatus?.status]);
 
   const fetchIntelligence = async () => {
     setLoading(true);
@@ -122,7 +133,8 @@ export default function IntelligencePage() {
             Latest company mentions from your curated newsletters
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <DataFreshness />
           <Select value={days} onValueChange={setDays}>
             <SelectTrigger className="w-32">
               <SelectValue />
@@ -134,9 +146,13 @@ export default function IntelligencePage() {
               <SelectItem value="30">30 Days</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={fetchIntelligence} variant="outline">
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Refresh
+          <Button 
+            onClick={() => syncPipeline(true)} 
+            variant="outline"
+            disabled={isSyncing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Syncing...' : 'Sync Data'}
           </Button>
         </div>
       </div>

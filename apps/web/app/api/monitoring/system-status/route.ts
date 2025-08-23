@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs';
+import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient, getAnalytics } from '@substack-intelligence/database';
 
 export async function GET() {
   try {
-    const { userId } = auth();
-    if (!userId) {
+    const user = await currentUser();
+    if (!user) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
       }, { status: 401 });
     }
+    const userId = user.id;
 
     const supabase = createServiceRoleClient();
     
