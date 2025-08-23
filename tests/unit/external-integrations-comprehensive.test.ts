@@ -1,4 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { 
+  externalServicesMocks,
+  anthropicMocks,
+  createAnthropicMessage
+} from '../mocks/external/services';
+import {
+  gmailMocks,
+  googleApisMocks,
+  listMessages,
+  getMessage,
+  setCredentials,
+  getProfile
+} from '../mocks/external/gmail';
+import {
+  rateLimitingMocks,
+  burstProtection
+} from '../mocks/external/rate-limiting';
 
 // Mock external services
 global.fetch = vi.fn();
@@ -15,47 +32,54 @@ const mockRedis = {
   ttl: vi.fn()
 };
 
-// Mock Google APIs
+// Use mock factories
 const mockGoogleAuth = {
-  setCredentials: vi.fn(),
-  getAccessToken: vi.fn()
+  setCredentials: setCredentials,
+  getAccessToken: vi.fn().mockResolvedValue({ token: 'test-token' })
 };
 
 const mockGmail = {
   users: {
     messages: {
-      list: vi.fn(),
-      get: vi.fn()
+      list: listMessages,
+      get: getMessage
     },
     history: {
       list: vi.fn()
-    }
+    },
+    getProfile: getProfile
   }
 };
 
-vi.mock('googleapis', () => ({
-  google: {
-    auth: {
-      OAuth2: vi.fn(() => mockGoogleAuth)
-    },
-    gmail: vi.fn(() => mockGmail)
-  }
-}));
+vi.mock('googleapis', () => googleApisMocks);
 
 // Mock Anthropic AI
 const mockAnthropic = {
   messages: {
-    create: vi.fn()
+    create: createAnthropicMessage
   }
 };
 
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn(() => mockAnthropic)
-}));
+vi.mock('@anthropic-ai/sdk', () => anthropicMocks);
+
+// Mock crypto for webhook signature validation
+const mockCrypto = {
+  createHmac: vi.fn(() => ({
+    update: vi.fn().mockReturnThis(),
+    digest: vi.fn(() => 'valid-webhook-signature')
+  }))
+};
+
+vi.mock('crypto', () => mockCrypto);
 
 describe('External API Integrations Comprehensive Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    
+    // Reset all mock factories
+    externalServicesMocks.reset();
+    gmailMocks.reset();
+    rateLimitingMocks.reset();
     
     // Default successful responses
     mockFetch.mockResolvedValue({
@@ -65,10 +89,18 @@ describe('External API Integrations Comprehensive Tests', () => {
       text: () => Promise.resolve('Success'),
       headers: new Map()
     });
+    
+    // Setup default mock behaviors
+    gmailMocks.mockSuccessfulAuth();
+    externalServicesMocks.mockAnthropicSuccess();
+    rateLimitingMocks.mockRateLimitPass();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    externalServicesMocks.resetAllMocks();
+    gmailMocks.resetAllMocks();
+    rateLimitingMocks.resetAllMocks();
   });
 
   describe('Rate Limiting Implementation', () => {
@@ -339,10 +371,11 @@ describe('External API Integrations Comprehensive Tests', () => {
     });
 
     it('should handle concurrent rate limit checks correctly', async () => {
+      let currentCount = 50;
       mockRedis.get.mockResolvedValue('50');
       mockRedis.incr.mockImplementation(() => {
-        const current = parseInt(mockRedis.get.mockResolvedValue || '50');
-        return Promise.resolve(current + 1);
+        currentCount++;
+        return Promise.resolve(currentCount);
       });
       
       const concurrentChecks = Array.from({ length: 10 }, () => 
@@ -367,14 +400,14 @@ describe('External API Integrations Comprehensive Tests', () => {
       },
 
       async getMessages(auth: any, query: string = '', maxResults: number = 10) {
-        mockGmail.users.messages.list.mockResolvedValue({
-          data: {
-            messages: Array.from({ length: maxResults }, (_, i) => ({
-              id: `message_${i}`,
-              threadId: `thread_${i}`
-            })),
-            nextPageToken: maxResults >= 10 ? 'next_page_token' : undefined
-          }
+        // Configure mock response
+        gmailMocks.mockMessagesListSuccess({
+          messages: Array.from({ length: maxResults }, (_, i) => ({
+            id: `message_${i}`,
+            threadId: `thread_${i}`
+          })),
+          nextPageToken: maxResults >= 10 ? 'next_page_token' : undefined,
+          resultSizeEstimate: maxResults
         });
         
         const response = await mockGmail.users.messages.list({
@@ -387,18 +420,17 @@ describe('External API Integrations Comprehensive Tests', () => {
       },
 
       async getMessageContent(auth: any, messageId: string) {
-        mockGmail.users.messages.get.mockResolvedValue({
-          data: {
-            id: messageId,
-            payload: {
-              headers: [
-                { name: 'From', value: 'sender@newsletter.com' },
-                { name: 'Subject', value: 'Tech News Update' },
-                { name: 'Date', value: 'Wed, 01 Jan 2024 10:00:00 +0000' }
-              ],
-              body: {
-                data: Buffer.from('Email content here').toString('base64')
-              }
+        // Configure mock response
+        gmailMocks.mockMessageGetSuccess({
+          id: messageId,
+          payload: {
+            headers: [
+              { name: 'From', value: 'sender@newsletter.com' },
+              { name: 'Subject', value: 'Tech News Update' },
+              { name: 'Date', value: 'Wed, 01 Jan 2024 10:00:00 +0000' }
+            ],
+            body: {
+              data: Buffer.from('Email content here').toString('base64')
             }
           }
         });
@@ -663,27 +695,42 @@ describe('External API Integrations Comprehensive Tests', () => {
     it('should handle pagination for large mailboxes', async () => {
       let pageToken: string | undefined;
       const allMessages: any[] = [];
+      let callCount = 0;
       
       // Mock paginated responses
       mockGmail.users.messages.list
-        .mockResolvedValueOnce({
-          data: {
-            messages: Array.from({ length: 10 }, (_, i) => ({ id: `page1_message_${i}` })),
-            nextPageToken: 'page2_token'
-          }
-        })
-        .mockResolvedValueOnce({
-          data: {
-            messages: Array.from({ length: 5 }, (_, i) => ({ id: `page2_message_${i}` })),
-            nextPageToken: undefined
+        .mockImplementation(async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              data: {
+                messages: Array.from({ length: 10 }, (_, i) => ({ id: `page1_message_${i}` })),
+                nextPageToken: 'page2_token',
+                resultSizeEstimate: 10
+              }
+            };
+          } else {
+            return {
+              data: {
+                messages: Array.from({ length: 5 }, (_, i) => ({ id: `page2_message_${i}` })),
+                nextPageToken: undefined,
+                resultSizeEstimate: 5
+              }
+            };
           }
         });
       
-      do {
-        const response = await gmailService.getMessages(mockGoogleAuth, '', 10);
+      // First call
+      let response = await gmailService.getMessages(mockGoogleAuth, '', 10);
+      allMessages.push(...(response.messages || []));
+      pageToken = response.nextPageToken;
+      
+      // Second call if there's a next page
+      if (pageToken) {
+        response = await gmailService.getMessages(mockGoogleAuth, '', 10);
         allMessages.push(...(response.messages || []));
         pageToken = response.nextPageToken;
-      } while (pageToken);
+      }
       
       expect(allMessages).toHaveLength(15); // 10 + 5
       expect(mockGmail.users.messages.list).toHaveBeenCalledTimes(2);
@@ -693,17 +740,30 @@ describe('External API Integrations Comprehensive Tests', () => {
   describe('AI Service Integration (Anthropic Claude)', () => {
     const aiService = {
       async extractCompanyMentions(text: string) {
-        mockAnthropic.messages.create.mockResolvedValue({
-          content: [{
-            text: JSON.stringify([
-              {
-                company: 'Test Company',
-                context: 'Test Company raised $50M in Series B funding',
-                sentiment: 'positive',
-                confidence: 0.92
-              }
-            ])
-          }]
+        // Configure mock response
+        externalServicesMocks.configureAnthropic({
+          shouldResolve: true,
+          resolveValue: {
+            id: 'msg_test',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-3-sonnet-20240229',
+            content: [{
+              type: 'text',
+              text: JSON.stringify([
+                {
+                  company: 'Test Company',
+                  context: 'Test Company raised $50M in Series B funding',
+                  sentiment: 'positive',
+                  confidence: 0.92
+                }
+              ])
+            }],
+            usage: {
+              input_tokens: 100,
+              output_tokens: 50
+            }
+          }
         });
         
         const response = await mockAnthropic.messages.create({
@@ -719,14 +779,27 @@ describe('External API Integrations Comprehensive Tests', () => {
       },
 
       async analyzeSentiment(text: string) {
-        mockAnthropic.messages.create.mockResolvedValue({
-          content: [{
-            text: JSON.stringify({
-              sentiment: 'positive',
-              confidence: 0.85,
-              reasoning: 'The text contains positive language about funding and growth'
-            })
-          }]
+        // Configure mock response
+        externalServicesMocks.configureAnthropic({
+          shouldResolve: true,
+          resolveValue: {
+            id: 'msg_sentiment',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-3-sonnet-20240229',
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                sentiment: 'positive',
+                confidence: 0.85,
+                reasoning: 'The text contains positive language about funding and growth'
+              })
+            }],
+            usage: {
+              input_tokens: 80,
+              output_tokens: 40
+            }
+          }
         });
         
         const response = await mockAnthropic.messages.create({
@@ -742,10 +815,23 @@ describe('External API Integrations Comprehensive Tests', () => {
       },
 
       async generateSummary(texts: string[]) {
-        mockAnthropic.messages.create.mockResolvedValue({
-          content: [{
-            text: 'This week saw significant activity in the tech sector with multiple funding rounds and product launches.'
-          }]
+        // Configure mock response
+        externalServicesMocks.configureAnthropic({
+          shouldResolve: true,
+          resolveValue: {
+            id: 'msg_summary',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-3-sonnet-20240229',
+            content: [{
+              type: 'text',
+              text: 'This week saw significant activity in the tech sector with multiple funding rounds and product launches.'
+            }],
+            usage: {
+              input_tokens: 150,
+              output_tokens: 75
+            }
+          }
         });
         
         const combinedText = texts.join('\n\n---\n\n');
@@ -876,7 +962,8 @@ describe('External API Integrations Comprehensive Tests', () => {
     });
 
     it('should handle AI service errors gracefully', async () => {
-      mockAnthropic.messages.create.mockRejectedValue(new Error('Service unavailable'));
+      // Configure to fail
+      externalServicesMocks.mockAnthropicError(new Error('Service unavailable'));
       
       const texts = ['Test text 1', 'Test text 2'];
       const results = await aiService.batchProcess(texts, 2);
@@ -944,11 +1031,10 @@ describe('External API Integrations Comprehensive Tests', () => {
   describe('External Webhook Integration', () => {
     const webhookService = {
       async validateWebhook(signature: string, payload: string, secret: string) {
-        const crypto = require('crypto');
-        const expectedSignature = crypto
-          .createHmac('sha256', secret)
-          .update(payload)
-          .digest('hex');
+        // Use the mocked crypto
+        const hmac = mockCrypto.createHmac('sha256', secret);
+        hmac.update(payload);
+        const expectedSignature = hmac.digest('hex');
         
         return signature === `sha256=${expectedSignature}`;
       },
@@ -1019,11 +1105,10 @@ describe('External API Integrations Comprehensive Tests', () => {
         };
         
         if (secret) {
-          const crypto = require('crypto');
-          const signature = crypto
-            .createHmac('sha256', secret)
-            .update(JSON.stringify(payload))
-            .digest('hex');
+          // Use the mocked crypto
+          const hmac = mockCrypto.createHmac('sha256', secret);
+          hmac.update(JSON.stringify(payload));
+          const signature = hmac.digest('hex');
           headers['X-Signature'] = `sha256=${signature}`;
         }
         
@@ -1065,13 +1150,6 @@ describe('External API Integrations Comprehensive Tests', () => {
       }
     };
 
-    // Mock crypto
-    vi.mock('crypto', () => ({
-      createHmac: vi.fn(() => ({
-        update: vi.fn().mockReturnThis(),
-        digest: vi.fn(() => 'mock_signature')
-      }))
-    }));
 
     it('should validate webhook signatures correctly', async () => {
       const isValid = await webhookService.validateWebhook(
