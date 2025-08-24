@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import { UserSettingsService } from '@/lib/user-settings';
+import { logOAuthSuccess, logOAuthFailure } from '@/lib/oauth-monitoring';
 
 function createOAuth2Client() {
   return new google.auth.OAuth2(
@@ -117,14 +118,24 @@ function generateErrorPage(errorType: string, errorMessage: string, instructions
 }
 
 export async function GET(request: NextRequest) {
+  const startTime = Date.now();
+  let userId: string | undefined;
+  
   try {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
     const state = searchParams.get('state'); // User ID from state
     const error = searchParams.get('error');
+    
+    userId = state || undefined;
 
     // Handle OAuth errors
     if (error) {
+      await logOAuthFailure(error, `OAuth error: ${error}`, userId, undefined, {
+        userAgent: request.headers.get('user-agent') || 'unknown',
+        referer: request.headers.get('referer') || 'unknown'
+      });
+      
       const errorDescriptions: { [key: string]: { message: string; instructions: string[] } } = {
         'access_denied': {
           message: 'You denied access to your Gmail account. To connect Gmail, you need to grant the requested permissions.',
@@ -181,23 +192,77 @@ export async function GET(request: NextRequest) {
 
     const oauth2Client = createOAuth2Client();
 
-    // Exchange code for tokens
+    // Exchange code for tokens with retry logic
     let tokens;
-    try {
-      const tokenResponse = await oauth2Client.getToken(code);
-      tokens = tokenResponse.tokens;
-    } catch (tokenError) {
-      console.error('Token exchange failed:', tokenError);
+    const maxRetries = 3;
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Token exchange attempt ${attempt}/${maxRetries}`);
+        const tokenResponse = await oauth2Client.getToken(code);
+        tokens = tokenResponse.tokens;
+        console.log('Token exchange successful on attempt', attempt);
+        break;
+      } catch (tokenError) {
+        lastError = tokenError as Error;
+        console.error(`Token exchange failed on attempt ${attempt}:`, tokenError);
+        
+        // Don't retry for certain errors that won't be resolved by retrying
+        const errorMessage = lastError.message.toLowerCase();
+        if (errorMessage.includes('invalid_grant') || 
+            errorMessage.includes('invalid_request') ||
+            errorMessage.includes('unauthorized_client')) {
+          console.log('Non-retryable error detected, stopping retries');
+          break;
+        }
+        
+        // Wait before retrying (exponential backoff)
+        if (attempt < maxRetries) {
+          const delayMs = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+          console.log(`Waiting ${delayMs}ms before retry`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+    
+    if (!tokens && lastError) {
+      console.error('Token exchange failed after all retries:', lastError);
       
-      return new NextResponse(generateErrorPage(
-        'token_exchange_failed',
-        'Failed to exchange authorization code for access tokens. This could be a timing issue or invalid code.',
-        [
-          'Try connecting your Gmail account again',
-          'Make sure you complete the authorization quickly (codes expire in 10 minutes)',
-          'Check that your system clock is accurate'
-        ]
-      ), { headers: { 'Content-Type': 'text/html' } });
+      // Provide specific error messages based on the error type
+      const errorMessage = lastError.message;
+      if (errorMessage.includes('invalid_grant')) {
+        return new NextResponse(generateErrorPage(
+          'invalid_grant',
+          'The authorization grant is invalid, expired, or revoked.',
+          [
+            'Try connecting your Gmail account again',
+            'Make sure your system clock is accurate',
+            'If using a saved bookmark, get a fresh authorization link'
+          ]
+        ), { headers: { 'Content-Type': 'text/html' } });
+      } else if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
+        return new NextResponse(generateErrorPage(
+          'network_error',
+          'Network error during token exchange. This is usually a temporary issue.',
+          [
+            'Check your internet connection',
+            'Try connecting your Gmail account again',
+            'If the problem persists, try again in a few minutes'
+          ]
+        ), { headers: { 'Content-Type': 'text/html' } });
+      } else {
+        return new NextResponse(generateErrorPage(
+          'token_exchange_failed',
+          `Failed to exchange authorization code for access tokens after ${maxRetries} attempts.`,
+          [
+            'Try connecting your Gmail account again',
+            'Make sure you complete the authorization quickly (codes expire in 10 minutes)',
+            'Check that your system clock is accurate',
+            `Last error: ${errorMessage}`
+          ]
+        ), { headers: { 'Content-Type': 'text/html' } });
+      }
     }
 
     oauth2Client.setCredentials(tokens);
@@ -227,28 +292,70 @@ export async function GET(request: NextRequest) {
     }
 
     // Store tokens in database
-    if (!tokens.refresh_token || !tokens.access_token) {
+    if (!tokens.access_token) {
       return new NextResponse(generateErrorPage(
-        'missing_tokens',
-        'Did not receive the required tokens from Google. This usually happens if you\'ve already connected this account before.',
+        'missing_access_token',
+        'Did not receive an access token from Google. This indicates a problem with the OAuth flow.',
         [
-          'Try revoking app access in Google Account settings first',
-          'Go to https://myaccount.google.com/permissions',
-          'Remove this app and try connecting again'
+          'Try connecting your Gmail account again',
+          'Make sure you complete the entire Google authorization process',
+          'Check that your internet connection is stable'
         ]
       ), { headers: { 'Content-Type': 'text/html' } });
+    }
+
+    // Check if we have a refresh token (required for first-time connections)
+    // Note: Google may not provide a refresh token if the user has already authorized this app
+    if (!tokens.refresh_token) {
+      console.log('No refresh token received - checking if user already has a stored refresh token');
+      
+      // Try to get existing refresh token from database
+      const userSettingsService = new UserSettingsService();
+      const existingTokens = await userSettingsService.getGmailTokens(state);
+      
+      if (!existingTokens?.refreshToken) {
+        return new NextResponse(generateErrorPage(
+          'missing_refresh_token',
+          'Google did not provide a refresh token. This usually happens when you\'ve already connected this account before.',
+          [
+            'First, revoke app access in Google Account settings:',
+            '1. Go to https://myaccount.google.com/permissions',
+            '2. Find this app and click "Remove access"',
+            '3. Wait 30 seconds, then try connecting again',
+            '4. Make sure to click "Allow" on all permission requests'
+          ]
+        ), { headers: { 'Content-Type': 'text/html' } });
+      }
+      
+      // Use existing refresh token
+      tokens.refresh_token = existingTokens.refreshToken;
+      console.log('Using existing refresh token for token update');
     }
 
     const userSettingsService = new UserSettingsService();
     const expiryDate = tokens.expiry_date ? new Date(tokens.expiry_date) : undefined;
     
-    const success = await userSettingsService.connectGmail(
-      state, // userId from state
-      tokens.refresh_token,
-      tokens.access_token,
-      emailAddress,
-      expiryDate
-    );
+    let success;
+    try {
+      success = await userSettingsService.connectGmail(
+        state, // userId from state
+        tokens.refresh_token,
+        tokens.access_token,
+        emailAddress,
+        expiryDate
+      );
+    } catch (dbError) {
+      console.error('Database error during Gmail connection:', dbError);
+      return new NextResponse(generateErrorPage(
+        'database_error',
+        'Database error occurred while saving your Gmail connection.',
+        [
+          'This is a temporary issue on our end',
+          'Please try connecting your Gmail account again',
+          'If the problem persists, contact support with error code: DB_CONN_ERROR'
+        ]
+      ), { headers: { 'Content-Type': 'text/html' } });
+    }
     
     if (!success) {
       return new NextResponse(generateErrorPage(
@@ -261,6 +368,10 @@ export async function GET(request: NextRequest) {
         ]
       ), { headers: { 'Content-Type': 'text/html' } });
     }
+
+    // Log successful OAuth connection
+    const duration = Date.now() - startTime;
+    await logOAuthSuccess(state, emailAddress, duration);
 
     // Return success page
     return new NextResponse(generateSuccessPage(emailAddress), {

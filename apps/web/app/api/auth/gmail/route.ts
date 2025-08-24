@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import { currentUser } from '@clerk/nextjs/server';
+import { validateOAuthConfig } from '@/lib/oauth-health-check';
+import { logOAuthInitiated, logOAuthFailure } from '@/lib/oauth-monitoring';
 
 // Environment variable validation
 function validateEnvironment() {
@@ -35,27 +37,38 @@ function createOAuth2Client() {
 // GET - Initiate OAuth flow
 export async function GET(request: NextRequest) {
   try {
-    // Validate environment variables first
-    const envErrors = validateEnvironment();
-    if (envErrors.length > 0) {
+    // Enhanced OAuth configuration validation
+    const configValidation = await validateOAuthConfig();
+    if (!configValidation.isValid) {
       return NextResponse.json({
-        error: 'Configuration Error',
-        details: envErrors,
+        error: 'OAuth Configuration Error',
+        details: configValidation.errors,
+        warnings: configValidation.warnings,
         instructions: [
           'Set up OAuth 2.0 credentials in Google Cloud Console',
           'Add the required environment variables to your .env.local file',
-          'Ensure NEXT_PUBLIC_APP_URL matches your current domain'
+          'Ensure NEXT_PUBLIC_APP_URL matches your current domain',
+          'Check the OAuth health endpoint at /api/health/oauth for detailed diagnostics'
         ]
       }, { status: 500 });
     }
 
     const user = await currentUser();
     if (!user) {
+      await logOAuthFailure('authentication_required', 'User not authenticated', undefined, undefined, {
+        userAgent: request.headers.get('user-agent') || 'unknown'
+      });
       return NextResponse.json({ 
         error: 'Authentication required',
         message: 'Please sign in to connect your Gmail account'
       }, { status: 401 });
     }
+
+    // Log OAuth initiation
+    await logOAuthInitiated(user.id, {
+      userAgent: request.headers.get('user-agent') || 'unknown',
+      referer: request.headers.get('referer') || 'unknown'
+    });
 
     const oauth2Client = createOAuth2Client();
     
