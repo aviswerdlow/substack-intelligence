@@ -31,7 +31,7 @@
     "env:dev": "node scripts/setup-environment.js generate development .env.local",
     "env:staging": "node scripts/setup-environment.js generate staging .env.staging",
     "env:prod": "node scripts/setup-environment.js generate production .env.production",
-    "db:generate": "supabase gen types typescript --project-id $NEXT_PUBLIC_SUPABASE_PROJECT_ID --schema public > packages/database/types/supabase.ts",
+    "db:generate": "supabase gen types typescript --project-id $NEXT_PUBLIC_SUPABASE_PROJECT_ID --schema public > packages/database/src/types/supabase.ts",
     "db:reset": "supabase db reset",
     "db:migrate": "supabase db push",
     "db:seed": "supabase db seed",

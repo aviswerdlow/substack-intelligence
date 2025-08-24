@@ -20,6 +20,7 @@ type Tables = Database['public']['Tables'];
 type Email = Tables['emails']['Row'];
 type Company = Tables['companies']['Row'];
 type CompanyMention = Tables['company_mentions']['Row'];
+type UserTodo = Tables['user_todos']['Row'];
 type DailyIntelligence = Database['public']['Views']['daily_intelligence']['Row'];
 
 // Cached queries for React Server Components
@@ -476,22 +477,8 @@ export type AnalyticsData = Awaited<ReturnType<typeof getAnalytics>>;
 export type TodosResponse = Awaited<ReturnType<typeof getTodos>>;
 export type TodoStats = Awaited<ReturnType<typeof getTodoStats>>;
 
-// Define Todo type based on our schema
-export type Todo = {
-  id: string;
-  user_id: string;
-  title: string;
-  description?: string;
-  completed: boolean;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  due_date?: string;
-  category?: string;
-  tags: string[];
-  position: number;
-  completed_at?: string;
-  created_at: string;
-  updated_at: string;
-};
+// Export Todo type from generated types
+export type Todo = UserTodo;
 
 // Export row types
-export type { Email, Company, CompanyMention, DailyIntelligence };
+export type { Email, Company, CompanyMention, UserTodo, DailyIntelligence };
