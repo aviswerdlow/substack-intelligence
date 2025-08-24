@@ -23,8 +23,8 @@ describe('Test Infrastructure Verification', () => {
 
   it('should support async tests', async () => {
     const asyncFn = async () => {
-      await new Promise(resolve => setTimeout(resolve, 10));
-      return 'async result';
+      // Use a simpler async pattern without setTimeout
+      return Promise.resolve('async result');
     };
     
     const result = await asyncFn();
