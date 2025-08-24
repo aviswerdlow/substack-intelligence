@@ -167,7 +167,7 @@ function loadEnvironment() {
   return env;
 }
 
-function validateBuild() {
+async function validateBuild() {
   console.log('🔍 Validating build configuration...\n');
   
   const env = loadEnvironment();
@@ -192,6 +192,43 @@ function validateBuild() {
     } else {
       console.log(`  ✅ ${result.message}`);
     }
+  }
+
+  // API Route validation - critical for catching import-time errors
+  console.log('\n🛣️  API Route Import Validation:');
+  try {
+    const { ApiRouteValidator } = require('./validate-api-routes.js');
+    const validator = new ApiRouteValidator();
+    
+    // Run a quick validation (without full output)
+    const originalLog = console.log;
+    const logs = [];
+    console.log = (msg) => logs.push(msg);
+    
+    const routeValidationResult = await validator.run();
+    console.log = originalLog;
+    
+    if (routeValidationResult) {
+      console.log(`  ✅ All API routes can be imported successfully`);
+    } else {
+      console.log(`  ❌ Some API routes have import errors`);
+      console.log(`  Run 'npm run validate:api-routes' for detailed output`);
+      
+      // Look for jsdom errors specifically
+      const jsdomErrors = validator.results.errors.filter(error => 
+        error.error.includes('jsdom') || error.error.includes('Canvas')
+      );
+      
+      if (jsdomErrors.length > 0) {
+        console.log(`  🚨 jsdom compatibility issues detected in ${jsdomErrors.length} routes`);
+        hasCriticalErrors = true;
+      } else {
+        hasWarnings = true;
+      }
+    }
+  } catch (error) {
+    console.log(`  ⚠️  Could not run API route validation: ${error.message}`);
+    hasWarnings = true;
   }
 
   // Additional production-specific checks
@@ -241,5 +278,8 @@ module.exports = {
 
 // Run if called directly
 if (require.main === module) {
-  validateBuild();
+  validateBuild().catch(error => {
+    console.error('Validation failed with error:', error);
+    process.exit(1);
+  });
 }
