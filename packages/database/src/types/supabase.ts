@@ -158,6 +158,54 @@ export interface Database {
           }
         ]
       }
+      user_todos: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          description: string | null
+          completed: boolean
+          priority: "low" | "medium" | "high" | "urgent"
+          due_date: string | null
+          category: string | null
+          tags: string[]
+          position: number
+          completed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          description?: string | null
+          completed?: boolean
+          priority?: "low" | "medium" | "high" | "urgent"
+          due_date?: string | null
+          category?: string | null
+          tags?: string[]
+          position?: number
+          completed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          description?: string | null
+          completed?: boolean
+          priority?: "low" | "medium" | "high" | "urgent"
+          due_date?: string | null
+          category?: string | null
+          tags?: string[]
+          position?: number
+          completed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       daily_intelligence: {
@@ -192,6 +240,20 @@ export interface Database {
           description: string | null
           similarity: number
         }[]
+      }
+      get_user_todo_stats: {
+        Args: {
+          p_user_id: string
+        }
+        Returns: {
+          total_todos: number
+          completed_todos: number
+          active_todos: number
+          overdue_todos: number
+          due_today: number
+          due_this_week: number
+          completion_rate: number
+        }
       }
     }
     Enums: {
