@@ -454,5 +454,126 @@ export const gmailTestScenarios = {
         }
       }
     });
+  },
+  
+  // Pipeline-specific test scenarios
+  freshPipelineData: () => {
+    gmailMocks.mockSuccessfulAuth();
+    gmailMocks.mockProfileSuccess({
+      emailAddress: 'test@gmail.com',
+      messagesTotal: 150,
+      messagesUnread: 5
+    });
+    gmailMocks.mockMessagesListSuccess({
+      messages: [
+        { id: 'recent-1', threadId: 'thread-1' },
+        { id: 'recent-2', threadId: 'thread-2' },
+        { id: 'recent-3', threadId: 'thread-3' }
+      ],
+      resultSizeEstimate: 3
+    });
+  },
+  
+  stalePipelineData: () => {
+    gmailMocks.mockSuccessfulAuth();
+    gmailMocks.mockProfileSuccess({
+      emailAddress: 'test@gmail.com',
+      messagesTotal: 50,
+      messagesUnread: 1
+    });
+    gmailMocks.mockMessagesListSuccess({
+      messages: [{ id: 'old-1', threadId: 'thread-1' }],
+      resultSizeEstimate: 1
+    });
+  },
+  
+  gmailApiQuotaExceeded: () => {
+    gmailMocks.mockAuthError(new Error('Quota exceeded. Please try again later.'));
+    gmailMocks.mockMessagesListError(new Error('Quota exceeded. Please try again later.'));
+  },
+  
+  invalidRefreshToken: () => {
+    gmailMocks.mockAuthError(new Error('Invalid refresh token. Please re-authenticate.'));
+  },
+  
+  networkError: () => {
+    gmailMocks.mockMessagesListError(new Error('Network timeout'));
+    gmailMocks.mockProfileError(new Error('Network timeout'));
+  },
+  
+  largeBatch: (messageCount: number = 100) => {
+    gmailMocks.mockSuccessfulAuth();
+    gmailMocks.mockMessagesListSuccess({
+      messages: Array.from({ length: messageCount }, (_, i) => ({
+        id: `bulk-msg-${i + 1}`,
+        threadId: `bulk-thread-${i + 1}`
+      })),
+      resultSizeEstimate: messageCount
+    });
+    
+    // Mock successful message get for bulk processing
+    gmailMocks.mockMessageGetSuccess({
+      payload: {
+        headers: [
+          { name: 'From', value: 'bulk@substack.com' },
+          { name: 'Subject', value: 'Bulk Newsletter Content' }
+        ],
+        body: {
+          data: Buffer.from(`
+            <html>
+              <body>
+                <h1>Tech Newsletter</h1>
+                <p>Featured companies this week:</p>
+                <p><strong>Stripe</strong> - Payment processing platform</p>
+                <p><strong>Notion</strong> - All-in-one workspace</p>
+                <p><strong>Figma</strong> - Collaborative design tool</p>
+              </body>
+            </html>
+          `).toString('base64')
+        }
+      }
+    });
+  }
+};
+
+// Pipeline test utilities
+export const pipelineTestUtils = {
+  // Configure Gmail mocks for successful pipeline run
+  setupSuccessfulPipeline: () => {
+    gmailTestScenarios.successfulAuth();
+    gmailTestScenarios.substackEmails();
+    gmailMocks.mockProfileSuccess({
+      emailAddress: 'pipeline@test.com',
+      messagesTotal: 100
+    });
+  },
+  
+  // Configure Gmail mocks for failed pipeline run
+  setupFailedPipeline: (errorType: 'auth' | 'quota' | 'network' = 'auth') => {
+    switch (errorType) {
+      case 'auth':
+        gmailTestScenarios.invalidRefreshToken();
+        break;
+      case 'quota':
+        gmailTestScenarios.gmailApiQuotaExceeded();
+        break;
+      case 'network':
+        gmailTestScenarios.networkError();
+        break;
+    }
+  },
+  
+  // Configure mocks for configuration testing
+  setupConfigurationTest: (missingVars: string[] = []) => {
+    if (missingVars.includes('GOOGLE_CLIENT_ID') || missingVars.includes('GOOGLE_CLIENT_SECRET')) {
+      gmailMocks.mockAuthError(new Error('OAuth2 configuration incomplete'));
+    } else {
+      gmailMocks.mockSuccessfulAuth();
+    }
+  },
+  
+  // Reset all mocks to clean state
+  resetForTest: () => {
+    gmailMocks.resetAllMocks();
   }
 };
