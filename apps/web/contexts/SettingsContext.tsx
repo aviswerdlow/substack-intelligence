@@ -12,6 +12,7 @@ import {
   settingsTabSchemas,
   type ValidationError 
 } from '@/lib/validation/settings-schemas';
+import { settingsTelemetry } from '@/lib/telemetry/settings-telemetry';
 
 // Settings type definition
 export interface Settings {
@@ -299,46 +300,93 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [settings, hasUnsavedChanges]);
   
   // Load settings from API
-  const { data: serverSettings } = useQuery({
+  const { data: serverSettings, isLoading: isLoadingSettings, error: settingsError } = useQuery({
     queryKey: ['settings'],
     queryFn: async () => {
-      const response = await axios.get('/api/settings');
-      return response.data.settings;
-    },
-    onSuccess: (data) => {
-      if (data) {
-        setSettingsState(data);
+      const startTime = performance.now();
+      settingsTelemetry.trackLoadStart();
+      
+      try {
+        const response = await axios.get('/api/settings');
+        
+        // Track API call performance
+        const duration = performance.now() - startTime;
+        settingsTelemetry.trackApiCall('/api/settings', 'GET', duration, true);
+        
+        return response.data.settings;
+      } catch (error: any) {
+        // Track API call failure
+        const duration = performance.now() - startTime;
+        const errorType = error.response?.status === 401 ? 'auth' :
+                         error.response?.status === 403 ? 'auth' :
+                         error.response?.status >= 500 ? 'server' :
+                         'network';
+        
+        settingsTelemetry.trackApiCall('/api/settings', 'GET', duration, false, errorType);
+        settingsTelemetry.trackLoadError(error, errorType);
+        
+        // Log error for debugging
+        console.error('Failed to load settings:', error);
+        
+        // Throw a user-friendly error message
+        const message = error.response?.data?.error || 
+                       error.response?.status === 401 ? 'Authentication required. Please sign in again.' :
+                       error.response?.status === 403 ? 'Access denied. Please check your permissions.' :
+                       error.response?.status >= 500 ? 'Server error. Please try again later.' :
+                       'Failed to load settings. Please check your connection.';
+        
+        throw new Error(message);
       }
-    }
+    },
+    retry: (failureCount, error: any) => {
+      // Track retry attempts
+      settingsTelemetry.trackRetry(failureCount + 1, error.message);
+      
+      // Don't retry on authentication errors
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        return false;
+      }
+      // Retry up to 2 times for other errors
+      return failureCount < 2;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
+  
+  // Sync server settings to local state when data changes
+  useEffect(() => {
+    if (serverSettings) {
+      setSettingsState(serverSettings);
+      settingsTelemetry.trackLoadSuccess();
+      settingsTelemetry.trackQueryState('settings', 'success', serverSettings);
+    }
+  }, [serverSettings, setSettingsState]);
+  
+  // Track query state changes
+  useEffect(() => {
+    if (isLoadingSettings) {
+      settingsTelemetry.trackQueryState('settings', 'loading');
+    } else if (settingsError) {
+      settingsTelemetry.trackQueryState('settings', 'error', settingsError);
+    }
+  }, [isLoadingSettings, settingsError]);
   
   // Save settings mutation
   const saveMutation = useMutation({
     mutationFn: async (data: { tab?: string; settings: Settings }) => {
-      const response = await axios.put('/api/settings', data.settings);
-      return response.data;
-    },
-    onSuccess: (_, variables) => {
-      toast({
-        title: 'Settings saved',
-        description: variables.tab ? `${variables.tab} settings saved successfully` : 'All settings saved successfully',
-      });
-      
-      if (variables.tab) {
-        markTabClean(variables.tab);
-      } else {
-        // Mark all tabs as clean
-        Object.keys(tabStates).forEach(tab => markTabClean(tab));
+      try {
+        const response = await axios.put('/api/settings', data.settings);
+        return { data: response.data, variables: data };
+      } catch (error: any) {
+        console.error('Failed to save settings:', error);
+        
+        const message = error.response?.data?.error ||
+                       error.response?.status === 401 ? 'Authentication required. Please sign in again.' :
+                       error.response?.status === 403 ? 'Access denied. Please check your permissions.' :
+                       error.response?.status >= 500 ? 'Server error. Please try again later.' :
+                       'Failed to save settings. Please check your connection.';
+        
+        throw new Error(message);
       }
-      
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Save failed',
-        description: error.response?.data?.error || 'Failed to save settings',
-        variant: 'destructive',
-      });
     }
   });
   
@@ -437,10 +485,31 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     
     setIsSaving(true);
     try {
-      await saveMutation.mutateAsync({ tab, settings });
+      const result = await saveMutation.mutateAsync({ tab, settings });
+      
+      // Handle success
+      toast({
+        title: 'Settings saved',
+        description: tab ? `${tab} settings saved successfully` : 'All settings saved successfully',
+      });
+      
       if (tab) {
         markTabClean(tab);
+      } else {
+        // Mark all tabs as clean
+        Object.keys(tabStates).forEach(tab => markTabClean(tab));
       }
+      
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      
+    } catch (error: any) {
+      // Handle error
+      toast({
+        title: 'Save failed',
+        description: error.message || 'Failed to save settings',
+        variant: 'destructive',
+      });
+      console.error('Save settings error:', error);
     } finally {
       setIsSaving(false);
     }
@@ -577,9 +646,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     importSettings,
     validateTab,
     validateAll,
-    isLoading,
+    isLoading: isLoadingSettings || isLoading,
     isSaving,
-    error,
+    error: settingsError || error,
   };
   
   return (
