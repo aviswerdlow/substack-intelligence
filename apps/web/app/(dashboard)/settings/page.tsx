@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +53,107 @@ function SettingsPageContent() {
   const [newApiKeyName, setNewApiKeyName] = useState('');
   const [newWebhookUrl, setNewWebhookUrl] = useState('');
   const [connectingEmail, setConnectingEmail] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  
+  // Enhanced error handling function
+  const handleConnectionError = (errorType: string) => {
+    setConnectionError(errorType);
+    
+    const errorConfig = {
+      'missing_refresh_token': {
+        title: 'Authorization Issue',
+        description: 'Google didn\'t provide a refresh token. This usually happens when reconnecting an already authorized account.',
+        action: 'Revoke Access & Retry',
+        instructions: [
+          'Go to https://myaccount.google.com/permissions',
+          'Find this app and click "Remove access"',
+          'Wait 30 seconds, then try connecting again'
+        ]
+      },
+      'missing_access_token': {
+        title: 'Authentication Failed',
+        description: 'Google didn\'t provide an access token. This indicates a problem with the OAuth flow.',
+        action: 'Retry Connection',
+        instructions: [
+          'Check your internet connection',
+          'Make sure you complete the full Google authorization',
+          'Try again in a few moments'
+        ]
+      },
+      'token_exchange_failed': {
+        title: 'Token Exchange Failed',
+        description: 'Failed to exchange the authorization code for access tokens. This could be a timing issue.',
+        action: 'Retry Quickly',
+        instructions: [
+          'Try connecting again immediately',
+          'Complete the authorization process quickly (within 10 minutes)',
+          'Check that your system clock is accurate'
+        ]
+      },
+      'database_storage_failed': {
+        title: 'Save Error',
+        description: 'Successfully authenticated but failed to save the connection.',
+        action: 'Retry Save',
+        instructions: [
+          'This is a temporary issue on our end',
+          'Your Google authentication was successful',
+          'Try connecting again to save the tokens'
+        ]
+      },
+      'profile_fetch_failed': {
+        title: 'Profile Access Failed',
+        description: 'Successfully authenticated but couldn\'t access your Gmail profile.',
+        action: 'Check Permissions',
+        instructions: [
+          'Make sure Gmail API is enabled',
+          'Verify your Google account has Gmail access',
+          'Try disconnecting and reconnecting'
+        ]
+      },
+      'access_denied': {
+        title: 'Permission Denied',
+        description: 'You denied access to your Gmail account.',
+        action: 'Grant Permissions',
+        instructions: [
+          'Click "Connect Gmail" again',
+          'Make sure to click "Allow" when Google asks for permissions',
+          'Grant access to both email reading and management permissions'
+        ]
+      }
+    };
+    
+    const config = errorConfig[errorType as keyof typeof errorConfig] || {
+      title: 'Connection Failed',
+      description: `Gmail connection failed: ${errorType}`,
+      action: 'Try Again',
+      instructions: [
+        'Check your internet connection',
+        'Make sure popups are allowed',
+        'Verify Gmail API is enabled in Google Cloud Console'
+      ]
+    };
+    
+    toast.error(config.title, {
+      description: config.description,
+      duration: 10000,
+      action: {
+        label: config.action,
+        onClick: () => {
+          if (retryCount < 3) {
+            setRetryCount(prev => prev + 1);
+            setTimeout(() => handleEmailConnect(), 1000);
+          } else {
+            // Show detailed instructions after multiple failures
+            toast.info('Troubleshooting Steps', {
+              description: config.instructions.join(' • '),
+              duration: 15000,
+            });
+          }
+        }
+      }
+    });
+  };
   
   // Show loading state while settings are being fetched
   if (isLoading || !settings) {
@@ -76,13 +178,19 @@ function SettingsPageContent() {
         if (!response.ok) {
           // Handle configuration errors
           if (data.error === 'Configuration Error') {
-            alert(
-              `Gmail Configuration Error:\n\n` +
-              `Missing environment variables:\n` +
-              data.details.map((detail: string) => `• ${detail}`).join('\n') + '\n\n' +
-              `Instructions:\n` +
-              data.instructions.map((instruction: string) => `• ${instruction}`).join('\n')
-            );
+            toast.error('Gmail Configuration Error', {
+              description: `Missing environment variables: ${data.details.join(', ')}`,
+              duration: 15000,
+              action: {
+                label: 'Show Setup Guide',
+                onClick: () => {
+                  toast.info('Setup Instructions', {
+                    description: data.instructions.join(' • '),
+                    duration: 20000,
+                  });
+                }
+              }
+            });
             setConnectingEmail(false);
             return;
           }
@@ -100,13 +208,14 @@ function SettingsPageContent() {
           );
           
           if (!authWindow) {
-            alert(
-              'Popup blocked! Please allow popups for this site.\n\n' +
-              'To connect Gmail:\n' +
-              '1. Allow popups in your browser\n' +
-              '2. Click "Connect Gmail" again\n' +
-              '3. Or try disabling popup blockers'
-            );
+            toast.error('Popup Blocked', {
+              description: 'Please allow popups for this site to connect Gmail.',
+              duration: 10000,
+              action: {
+                label: 'Try Again',
+                onClick: () => handleEmailConnect()
+              }
+            });
             setConnectingEmail(false);
             return;
           }
@@ -140,27 +249,42 @@ function SettingsPageContent() {
                 }));
                 localStorage.removeItem('gmail_connected_email');
                 localStorage.removeItem('gmail_connection_time');
-                alert(`✅ Gmail connected successfully!\n\nConnected account: ${connectedEmail}`);
+                setConnectionError(null);
+                setRetryCount(0);
+                toast.success(`Gmail connected successfully!`, {
+                  description: `Connected account: ${connectedEmail}`,
+                  duration: 5000,
+                });
               } else if (connectionError) {
-                alert(`❌ Gmail connection failed: ${connectionError}\n\nPlease try again or check the error details in the popup window.`);
+                handleConnectionError(connectionError);
                 localStorage.removeItem('gmail_connection_error');
                 localStorage.removeItem('gmail_connection_error_time');
               } else {
                 // Window closed without clear success or error
-                alert(
-                  '⚠️ Gmail connection incomplete.\n\n' +
-                  'The authentication window was closed. Please try again and complete the full Google authorization process.'
-                );
+                setConnectionError('Connection incomplete - window was closed');
+                toast.error('Gmail connection incomplete', {
+                  description: 'The authentication window was closed. Please try again and complete the full Google authorization process.',
+                  duration: 8000,
+                  action: {
+                    label: 'Retry',
+                    onClick: () => handleEmailConnect()
+                  }
+                });
               }
               setConnectingEmail(false);
             } else if (checkCount >= maxChecks) {
               // Timeout - close window and show message
               clearInterval(checkInterval);
               authWindow.close();
-              alert(
-                '⏱️ Connection timeout.\n\n' +
-                'The Gmail connection process took too long. Please try again and complete the authorization quickly.'
-              );
+              setConnectionError('Connection timeout');
+              toast.error('Connection timeout', {
+                description: 'The Gmail connection process took too long. Please try again and complete the authorization quickly.',
+                duration: 8000,
+                action: {
+                  label: 'Retry',
+                  onClick: () => handleEmailConnect()
+                }
+              });
               setConnectingEmail(false);
             }
           }, 1000);
