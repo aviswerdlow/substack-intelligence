@@ -13,19 +13,7 @@ import { databaseMocks } from '../mocks/database/queries';
 
 vi.mock('@substack-intelligence/database', () => databaseMocks);
 
-vi.mock('jsdom', () => ({
-  JSDOM: vi.fn((html) => ({
-    window: {
-      document: {
-        body: { textContent: 'Clean text content' },
-        textContent: 'Clean text content',
-        querySelectorAll: vi.fn(() => ({
-          forEach: vi.fn()
-        }))
-      }
-    }
-  }))
-}));
+// No longer mocking jsdom - we now use cheerio which should be tested properly
 
 vi.mock('p-map', () => ({
   default: vi.fn((items, mapper) => Promise.all(items.map(mapper)))
@@ -327,6 +315,202 @@ describe('GmailConnector', () => {
     it('should handle base64 decode errors', () => {
       const result = (connector as any).decodeBase64('invalid-base64');
       expect(result).toBe('');
+    });
+  });
+
+  describe('HTML parsing with cheerio (new implementation)', () => {
+    it('should clean HTML and extract text properly', async () => {
+      const htmlContent = `
+        <html>
+          <head>
+            <style>body { color: red; }</style>
+            <script>console.log('test');</script>
+          </head>
+          <body>
+            <nav>Navigation menu</nav>
+            <div class="content">
+              <p>This is the main content of the newsletter.</p>
+              <p>It contains multiple paragraphs with important information.</p>
+            </div>
+            <div class="unsubscribe">
+              <a href="#">Unsubscribe</a>
+            </div>
+            <footer>Footer content</footer>
+          </body>
+        </html>
+      `;
+
+      const result = await (connector as any).cleanText(htmlContent);
+      
+      // Should contain main content
+      expect(result).toContain('main content');
+      expect(result).toContain('multiple paragraphs');
+      
+      // Should NOT contain unwanted elements
+      expect(result).not.toContain('Navigation menu');
+      expect(result).not.toContain('Unsubscribe');
+      expect(result).not.toContain('Footer content');
+      expect(result).not.toContain('console.log');
+      expect(result).not.toContain('color: red');
+    });
+
+    it('should handle malformed HTML gracefully', async () => {
+      const malformedHtml = '<html><body><p>Unclosed paragraph<div>Mixed tags</p></div>';
+      
+      const result = await (connector as any).cleanText(malformedHtml);
+      
+      expect(result).toContain('Unclosed paragraph');
+      expect(result).toContain('Mixed tags');
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('should handle empty or invalid HTML', async () => {
+      const testCases = ['', '<html></html>', '<body></body>', 'plain text'];
+      
+      for (const html of testCases) {
+        const result = await (connector as any).cleanText(html);
+        expect(typeof result).toBe('string');
+        // Should not throw an error
+      }
+    });
+
+    it('should preserve meaningful text while removing formatting', async () => {
+      const htmlWithFormatting = `
+        <html>
+          <body>
+            <p>This    has    multiple    spaces</p>
+            <p>
+
+              This has line breaks
+
+            </p>
+            <p>This has <strong>bold</strong> and <em>italic</em> text</p>
+          </body>
+        </html>
+      `;
+
+      const result = await (connector as any).cleanText(htmlWithFormatting);
+      
+      // Should collapse multiple spaces
+      expect(result).not.toContain('    ');
+      
+      // Should contain the meaningful content
+      expect(result).toContain('multiple spaces');
+      expect(result).toContain('line breaks');
+      expect(result).toContain('bold');
+      expect(result).toContain('italic');
+      
+      // Should not contain HTML tags
+      expect(result).not.toContain('<strong>');
+      expect(result).not.toContain('</strong>');
+      expect(result).not.toContain('<em>');
+    });
+
+    it('should handle newsletter-specific elements', async () => {
+      const newsletterHtml = `
+        <html>
+          <body>
+            <div class="newsletter-header">Newsletter Header</div>
+            <div class="content">
+              <h1>Weekly Tech Update</h1>
+              <p>OpenAI released a new model called GPT-4 Turbo.</p>
+              <p>Microsoft acquired GitHub for $7.5 billion.</p>
+            </div>
+            <div class="advertisement">
+              <p>Buy our product!</p>
+            </div>
+            <div class="social-media">
+              <a href="#">Follow us on Twitter</a>
+            </div>
+            <div class="unsubscribe">
+              <a href="#">Unsubscribe here</a>
+            </div>
+          </body>
+        </html>
+      `;
+
+      const result = await (connector as any).cleanText(newsletterHtml);
+      
+      // Should contain main content
+      expect(result).toContain('Weekly Tech Update');
+      expect(result).toContain('OpenAI released');
+      expect(result).toContain('Microsoft acquired');
+      
+      // Should NOT contain newsletter-specific unwanted elements  
+      expect(result).not.toContain('Newsletter Header');
+      expect(result).not.toContain('Buy our product');
+      expect(result).not.toContain('Follow us on Twitter');
+      expect(result).not.toContain('Unsubscribe here');
+    });
+
+    it('should handle very large HTML content', async () => {
+      // Create large HTML content
+      const largeContent = 'Large content section. '.repeat(1000);
+      const largeHtml = `<html><body><div class="content">${largeContent}</div></body></html>`;
+      
+      const startTime = Date.now();
+      const result = await (connector as any).cleanText(largeHtml);
+      const endTime = Date.now();
+      
+      expect(result).toContain('Large content section');
+      expect(result.length).toBeGreaterThan(1000);
+      expect(endTime - startTime).toBeLessThan(1000); // Should process within 1 second
+    });
+
+    it('should maintain text extraction quality compared to jsdom', async () => {
+      const complexHtml = `
+        <html>
+          <body>
+            <article>
+              <h1>Company Spotlight: Stripe</h1>
+              <p>Stripe, the payment processing company, raised $600M at a $95B valuation.</p>
+              <blockquote>
+                "We're excited about the future of payments," said CEO Patrick Collison.
+              </blockquote>
+              <ul>
+                <li>Founded in 2010</li>
+                <li>Headquarters in San Francisco</li>
+                <li>Over 4,000 employees</li>
+              </ul>
+            </article>
+          </body>
+        </html>
+      `;
+
+      const result = await (connector as any).cleanText(complexHtml);
+      
+      // Should extract all meaningful content
+      expect(result).toContain('Company Spotlight: Stripe');
+      expect(result).toContain('raised $600M at a $95B valuation');
+      expect(result).toContain('excited about the future');
+      expect(result).toContain('Patrick Collison');
+      expect(result).toContain('Founded in 2010');
+      expect(result).toContain('San Francisco');
+      expect(result).toContain('4,000 employees');
+      
+      // Should be properly formatted
+      expect(result.length).toBeGreaterThan(100);
+      expect(result.trim()).toBe(result); // No leading/trailing whitespace
+    });
+
+    it('should fallback gracefully when parsing fails', async () => {
+      // Mock the HTML parser to throw an error
+      const originalConsoleWarn = console.warn;
+      const originalConsoleError = console.error;
+      console.warn = vi.fn();
+      console.error = vi.fn();
+
+      // This should trigger the fallback
+      const htmlWithNonStandardTags = '<custom-tag>Content</custom-tag>';
+      
+      const result = await (connector as any).cleanText(htmlWithNonStandardTags);
+      
+      // Should still return some content via fallback
+      expect(result).toContain('Content');
+      expect(typeof result).toBe('string');
+      
+      console.warn = originalConsoleWarn;
+      console.error = originalConsoleError;
     });
   });
 

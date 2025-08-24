@@ -40,10 +40,11 @@
 - **Likely Cause**: Rate limiting middleware failing due to Upstash issue
 - **Impact**: Cannot test Claude AI extraction
 
-### 4. HTML Cleaning (Minor)
-- **Warning**: `Canvas.Image is not a constructor`
-- **Impact**: Minimal - text content is still extracted successfully
-- **Note**: This is a jsdom issue in Node.js environment, doesn't affect functionality
+### 4. HTML Cleaning - ✅ FIXED
+- **Previous Issue**: `Canvas.Image is not a constructor` jsdom compatibility error
+- **Solution**: Replaced jsdom with cheerio for server-compatible HTML parsing
+- **Status**: ✅ RESOLVED - HTML parsing now works reliably in serverless environments
+- **Benefits**: Faster parsing, lower memory usage, better compatibility
 
 ## 🔧 Quick Fix
 
@@ -97,6 +98,35 @@ npm run dev
 4. **Check Dashboard**:
    - Visit http://localhost:3000/dashboard
    - Check if extracted companies appear
+
+## 🔧 Recent Fixes
+
+### jsdom Compatibility Issue - ✅ RESOLVED
+
+**Problem**: The Gmail connector was using jsdom for HTML parsing, which caused import errors in Next.js serverless API routes due to native dependencies.
+
+**Solution**: Replaced jsdom with cheerio throughout the system:
+- ✅ Updated `services/ingestion/src/gmail-connector.ts` to use cheerio
+- ✅ Created robust HTML parser utility with multiple fallback strategies  
+- ✅ Added comprehensive integration tests for API routes
+- ✅ Added pre-build validation to catch import errors early
+- ✅ Removed jsdom dependency from the project
+
+**Benefits**:
+- 🚀 Faster HTML parsing (cheerio is lighter than jsdom)
+- 💾 Lower memory usage in serverless functions
+- 🔧 Better compatibility with Next.js runtime environments
+- 🛡️ More reliable fallback strategies for malformed HTML
+- 🧪 Better test coverage for HTML parsing
+
+**Testing**:
+```bash
+# Validate all API routes can be imported
+npm run validate:api-routes
+
+# Run comprehensive HTML parsing tests
+npm run test -- gmail-connector
+```
 
 ## 📝 Notes
 

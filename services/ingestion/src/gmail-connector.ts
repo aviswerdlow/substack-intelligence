@@ -1,7 +1,7 @@
 import { google, gmail_v1 } from 'googleapis';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import { z } from 'zod';
-import { JSDOM } from 'jsdom';
+import { parseNewsletterHTML } from './utils/html-parser';
 import pMap from 'p-map';
 import { GmailMessageSchema } from '@substack-intelligence/shared';
 import { axiomLogger } from './utils/logging';
@@ -303,46 +303,29 @@ export class GmailConnector {
     if (!html) return '';
     
     try {
-      // Use JSDOM to parse HTML and extract clean text
-      const dom = new JSDOM(html);
-      const document = dom.window.document;
+      // Use robust HTML parser with multiple fallback strategies
+      const text = await parseNewsletterHTML(html);
       
-      // Remove unwanted elements
-      const unwantedSelectors = [
-        'script',
-        'style',
-        'nav',
-        'footer',
-        '.unsubscribe',
-        '.footer',
-        '[data-testid="unsubscribe"]'
-      ];
-      
-      unwantedSelectors.forEach(selector => {
-        const elements = document.querySelectorAll(selector);
-        elements.forEach(el => el.remove());
-      });
-      
-      // Get clean text content
-      let text = document.body?.textContent || document.textContent || '';
-      
-      // Clean up whitespace and formatting
-      text = text
-        .replace(/\s+/g, ' ')
-        .replace(/\n\s*\n/g, '\n')
-        .trim();
+      // Additional validation
+      if (text.length < 50) {
+        console.warn('Extracted text too short, may indicate parsing issue');
+        await axiomLogger.logEmailEvent('html_text_too_short', {
+          textLength: text.length,
+          htmlLength: html.length
+        });
+      }
       
       return text;
       
     } catch (error) {
-      console.warn('Failed to clean HTML, returning raw content:', error);
+      console.error('HTML parsing failed completely:', error);
       
-      await axiomLogger.logEmailEvent('html_cleaning_failed', {
+      await axiomLogger.logEmailEvent('html_parsing_critical_failure', {
         error: error instanceof Error ? error.message : 'Unknown error',
         htmlLength: html.length
       });
       
-      // Fall back to simple HTML tag removal
+      // Emergency fallback - this should rarely be reached due to robust parser
       return html
         .replace(/<[^>]*>/g, ' ')
         .replace(/\s+/g, ' ')
