@@ -26,6 +26,7 @@ import {
 // Import all the new enhanced components
 import { SettingsProvider, useSettings } from '@/contexts/SettingsContext';
 import { SettingsAccordionNav } from '@/components/settings/SettingsAccordionNav';
+import { useSettingsTelemetry } from '@/lib/telemetry/settings-telemetry';
 import { SettingsTooltips } from '@/components/settings/SettingsTooltips';
 import { TabSaveControls } from '@/components/settings/TabSaveControls';
 import { ApiKeyValidator } from '@/components/settings/ApiKeyValidator';
@@ -47,19 +48,45 @@ const AI_MODELS = {
 };
 
 function SettingsPageContent() {
-  const { settings, setSettings, isLoading } = useSettings();
+  const { settings, setSettings, isLoading, error } = useSettings();
+  const telemetry = useSettingsTelemetry();
   const [activeTab, setActiveTab] = useState('account');
   const [newApiKeyName, setNewApiKeyName] = useState('');
   const [newWebhookUrl, setNewWebhookUrl] = useState('');
   const [connectingEmail, setConnectingEmail] = useState(false);
   
   // Show loading state while settings are being fetched
-  if (isLoading || !settings) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
           <p>Loading settings...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Show error state if settings failed to load
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">⚠️ Failed to load settings</div>
+          <p className="text-muted-foreground mb-4">{error.message}</p>
+          <Button onClick={() => window.location.reload()}>Retry</Button>
+        </div>
+      </div>
+    );
+  }
+  
+  // Show loading if settings haven't loaded yet (but no error)
+  if (!settings) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Initializing settings...</p>
         </div>
       </div>
     );
@@ -468,14 +495,7 @@ function SettingsPageContent() {
     }
   };
 
-  // Show loading state while settings are being fetched
-  if (isLoading || !settings) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
+  // This loading check is no longer needed as it's handled above
 
   return (
     <TooltipProvider>
