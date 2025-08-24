@@ -6,9 +6,10 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatDate(date: Date | string | null | undefined): string {
-  if (!date) return '';
-  const d = typeof date === 'string' ? new Date(date) : date;
-  if (isNaN(d.getTime())) return '';
+  if (!date) return 'Invalid Date';
+  const d = typeof date === 'string' ? new Date(date) : 
+           typeof date === 'number' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return 'Invalid Date';
   return d.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -17,9 +18,10 @@ export function formatDate(date: Date | string | null | undefined): string {
 }
 
 export function formatDateTime(date: Date | string | null | undefined): string {
-  if (!date) return '';
-  const d = typeof date === 'string' ? new Date(date) : date;
-  if (isNaN(d.getTime())) return '';
+  if (!date) return 'Invalid Date';
+  const d = typeof date === 'string' ? new Date(date) : 
+           typeof date === 'number' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return 'Invalid Date';
   return d.toLocaleString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -29,18 +31,22 @@ export function formatDateTime(date: Date | string | null | undefined): string {
   });
 }
 
-export function capitalizeFirst(str: string | null | undefined): string {
-  if (!str || typeof str !== 'string') return '';
-  return str.charAt(0).toUpperCase() + str.slice(1);
+export function capitalizeFirst(str: any): string {
+  if (str === null || str === undefined) return '';
+  const text = String(str);
+  if (!text) return '';
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-export function truncateText(text: string | null | undefined, maxLength: number): string {
-  if (!text || typeof text !== 'string') return '';
-  if (text.length <= maxLength) return text;
+export function truncateText(text: any, maxLength: number): string {
+  if (text === null || text === undefined) return '';
+  const str = String(text);
+  if (maxLength <= 0) return '...';
+  if (str.length <= maxLength) return str;
   
   // Handle unicode characters properly
-  const chars = Array.from(text);
-  if (chars.length <= maxLength) return text;
+  const chars = Array.from(str);
+  if (chars.length <= maxLength) return str;
   return chars.slice(0, maxLength).join('') + '...';
 }
 

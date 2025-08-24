@@ -1,25 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock dependencies
-global.fetch = vi.fn();
-const mockFetch = global.fetch as any;
-
-// Mock file system operations
+// Mock file system operations - MUST be hoisted before any imports
 vi.mock('fs', () => ({
-  readFileSync: vi.fn(),
+  readFileSync: vi.fn(() => 'file content'),
   writeFileSync: vi.fn(),
-  existsSync: vi.fn(),
+  existsSync: vi.fn(() => true),
   mkdirSync: vi.fn(),
   unlinkSync: vi.fn(),
   statSync: vi.fn(() => ({
     size: 1024,
-    mtime: new Date(),
+    mtime: new Date('2024-01-15T10:00:00Z'),
     isDirectory: () => false,
     isFile: () => true
   }))
 }));
 
-// Mock path operations
+// Mock path operations - MUST be hoisted before any imports
 vi.mock('path', () => ({
   join: vi.fn((...args) => args.join('/')),
   resolve: vi.fn((...args) => '/' + args.join('/')),
@@ -30,6 +26,15 @@ vi.mock('path', () => ({
     return parts.length > 1 ? '.' + parts.pop() : '';
   })
 }));
+
+// Mock dependencies
+global.fetch = vi.fn();
+const mockFetch = global.fetch as any;
+
+// Mock performance globally
+global.performance = {
+  now: vi.fn(() => Date.now())
+} as any;
 
 describe('Utilities and Services Comprehensive Tests', () => {
   beforeEach(() => {
@@ -962,18 +967,26 @@ describe('Utilities and Services Comprehensive Tests', () => {
     };
 
     it('should implement delay correctly', async () => {
+      vi.useRealTimers();
+      
       const startTime = Date.now();
       await asyncUtils.delay(100);
       const endTime = Date.now();
       
       expect(endTime - startTime).toBeGreaterThanOrEqual(90); // Allow some variance
+      
+      vi.useFakeTimers();
     });
 
     it('should implement timeout correctly', async () => {
+      vi.useRealTimers();
+      
       const slowPromise = new Promise(resolve => setTimeout(resolve, 200));
       
       await expect(asyncUtils.timeout(slowPromise, 100))
         .rejects.toThrow('Operation timed out after 100ms');
+        
+      vi.useFakeTimers();
     });
 
     it('should allow fast promises to complete within timeout', async () => {
@@ -984,6 +997,8 @@ describe('Utilities and Services Comprehensive Tests', () => {
     });
 
     it('should implement retry with exponential backoff', async () => {
+      vi.useRealTimers();
+      
       let attempts = 0;
       const flakyFunction = async () => {
         attempts++;
@@ -1000,6 +1015,8 @@ describe('Utilities and Services Comprehensive Tests', () => {
       expect(result).toBe('success');
       expect(attempts).toBe(3);
       expect(endTime - startTime).toBeGreaterThan(300); // Should have delays
+      
+      vi.useFakeTimers();
     });
 
     it('should fail retry after max attempts', async () => {
@@ -1036,6 +1053,8 @@ describe('Utilities and Services Comprehensive Tests', () => {
     });
 
     it('should handle batch processing with delays', async () => {
+      vi.useRealTimers();
+      
       const items = [1, 2, 3, 4, 5];
       const processor = async (item: number) => item;
       
@@ -1045,6 +1064,8 @@ describe('Utilities and Services Comprehensive Tests', () => {
       
       // Should have at least 2 delays (3 batches - 1)
       expect(endTime - startTime).toBeGreaterThan(100);
+      
+      vi.useFakeTimers();
     });
 
     it('should implement promise race with timeout', async () => {
@@ -1058,15 +1079,21 @@ describe('Utilities and Services Comprehensive Tests', () => {
     });
 
     it('should handle race timeout', async () => {
+      vi.useRealTimers();
+      
       const promises = [
         new Promise(resolve => setTimeout(() => resolve('too slow'), 200))
       ];
       
       await expect(asyncUtils.race(promises, 100))
         .rejects.toThrow('Race timed out after 100ms');
+        
+      vi.useFakeTimers();
     });
 
     it('should execute tasks in parallel with concurrency limit', async () => {
+      vi.useRealTimers();
+      
       let concurrentCount = 0;
       let maxConcurrent = 0;
       
@@ -1085,9 +1112,13 @@ describe('Utilities and Services Comprehensive Tests', () => {
       expect(results).toHaveLength(10);
       expect(maxConcurrent).toBeLessThanOrEqual(3);
       expect(results.every(r => r === 'done')).toBe(true);
+      
+      vi.useFakeTimers();
     });
 
     it('should create abortable promises', async () => {
+      vi.useRealTimers();
+      
       const { promise, abort } = asyncUtils.createAbortablePromise<string>((resolve, reject, signal) => {
         const timeoutId = setTimeout(() => {
           if (!signal.aborted) {
@@ -1103,9 +1134,13 @@ describe('Utilities and Services Comprehensive Tests', () => {
       setTimeout(() => abort(), 50);
       
       await expect(promise).rejects.toThrow('Operation aborted');
+      
+      vi.useFakeTimers();
     });
 
     it('should handle concurrent operations safely', async () => {
+      vi.useRealTimers();
+      
       const sharedResource = { value: 0 };
       const mutex: Promise<void>[] = [];
       
@@ -1127,6 +1162,8 @@ describe('Utilities and Services Comprehensive Tests', () => {
       // Due to race conditions, the final value might not be 10
       // In a real implementation, you'd use proper locking mechanisms
       expect(sharedResource.value).toBeGreaterThan(0);
+      
+      vi.useFakeTimers();
     });
   });
 
@@ -1265,10 +1302,7 @@ describe('Utilities and Services Comprehensive Tests', () => {
       }
     };
 
-    // Mock performance.now
-    vi.stubGlobal('performance', {
-      now: vi.fn(() => Date.now())
-    });
+    // Performance is already mocked globally
 
     it('should memoize function results', () => {
       let callCount = 0;
@@ -1303,7 +1337,9 @@ describe('Utilities and Services Comprehensive Tests', () => {
       expect(callCount).toBe(1);
     });
 
-    it('should debounce function calls', (done) => {
+    it('should debounce function calls', async () => {
+      vi.useRealTimers();
+      
       let callCount = 0;
       
       const fn = () => {
@@ -1320,10 +1356,11 @@ describe('Utilities and Services Comprehensive Tests', () => {
       // Should not have been called yet
       expect(callCount).toBe(0);
       
-      setTimeout(() => {
-        expect(callCount).toBe(1);
-        done();
-      }, 150);
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      expect(callCount).toBe(1);
+      
+      vi.useFakeTimers();
     });
 
     it('should throttle function calls', () => {
@@ -1428,7 +1465,9 @@ describe('Utilities and Services Comprehensive Tests', () => {
       expect(batches[0]).toEqual([1, 2, 3]);
     });
 
-    it('should batch updates by time', (done) => {
+    it('should batch updates by time', async () => {
+      vi.useRealTimers();
+      
       const batches: number[][] = [];
       
       const batcher = perfUtils.batchUpdates<number>(
@@ -1442,11 +1481,12 @@ describe('Utilities and Services Comprehensive Tests', () => {
       
       expect(batches).toHaveLength(0);
       
-      setTimeout(() => {
-        expect(batches).toHaveLength(1);
-        expect(batches[0]).toEqual([1, 2]);
-        done();
-      }, 150);
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      expect(batches).toHaveLength(1);
+      expect(batches[0]).toEqual([1, 2]);
+      
+      vi.useFakeTimers();
     });
 
     it('should handle manual flush', () => {
