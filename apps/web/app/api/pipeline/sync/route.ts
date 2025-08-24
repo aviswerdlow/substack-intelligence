@@ -3,6 +3,8 @@ import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import { GmailConnector } from '@substack-intelligence/ingestion';
 import { ClaudeExtractor } from '@substack-intelligence/ai';
+import { PipelineMonitor, createPipelineAlert, logPipelineHealthCheck } from '@/lib/monitoring/pipeline-metrics';
+import { pipelineCacheManager } from '@/lib/cache/pipeline-cache';
 
 // Force Node.js runtime for full compatibility
 export const runtime = 'nodejs';
@@ -36,6 +38,12 @@ export async function GET(request: NextRequest) {
       }, { status: 401 });
     }
 
+    // Check Gmail OAuth configuration for status reporting
+    const oauthValidation = validateGmailOAuthConfig();
+    if (!oauthValidation.isValid) {
+      console.warn('Gmail OAuth configuration missing for status check:', oauthValidation.missingVars);
+    }
+
     // Check if data is fresh (less than 15 minutes old)
     const dataIsFresh = pipelineStatus.lastSync && 
       (Date.now() - pipelineStatus.lastSync.getTime()) < 15 * 60 * 1000;
@@ -47,7 +55,11 @@ export async function GET(request: NextRequest) {
         dataIsFresh,
         nextSyncIn: dataIsFresh ? 
           Math.max(0, 15 * 60 * 1000 - (Date.now() - (pipelineStatus.lastSync?.getTime() || 0))) : 
-          0
+          0,
+        configurationStatus: {
+          isOAuthConfigured: oauthValidation.isValid,
+          missingEnvVars: oauthValidation.missingVars
+        }
       },
       meta: {
         timestamp: new Date().toISOString(),
@@ -63,18 +75,93 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Validate Gmail OAuth environment variables
+function validateGmailOAuthConfig(): { isValid: boolean; missingVars: string[] } {
+  const requiredEnvVars = [
+    'GOOGLE_CLIENT_ID',
+    'GOOGLE_CLIENT_SECRET', 
+    'GOOGLE_REFRESH_TOKEN'
+  ];
+  
+  const missingVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+  
+  return {
+    isValid: missingVars.length === 0,
+    missingVars
+  };
+}
+
 // POST endpoint to trigger unified pipeline
 export async function POST(request: NextRequest) {
+  const monitor = new PipelineMonitor();
+  
   try {
+    monitor.startStep('authentication', { userAgent: request.headers.get('user-agent') });
+    
     const user = await currentUser();
     const isDevelopment = process.env.NODE_ENV === 'development';
     
     if (!user && !isDevelopment) {
+      monitor.failStep('authentication', new Error('Unauthorized access attempt'));
+      createPipelineAlert('error', 'Authentication Failed', 'Unauthorized pipeline access attempt');
+      
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
       }, { status: 401 });
     }
+    
+    monitor.completeStep('authentication', { userId: user?.id || 'development' });
+
+    // Validate Gmail OAuth configuration
+    monitor.startStep('configuration_validation');
+    const oauthValidation = validateGmailOAuthConfig();
+    
+    if (!oauthValidation.isValid) {
+      monitor.setHealthStatus('configuration', false, `Missing environment variables: ${oauthValidation.missingVars.join(', ')}`);
+      monitor.failStep('configuration_validation', new Error('OAuth configuration incomplete'));
+      
+      createPipelineAlert('error', 'Configuration Error', 
+        `Gmail OAuth configuration incomplete. Missing: ${oauthValidation.missingVars.join(', ')}`,
+        { missingVars: oauthValidation.missingVars }
+      );
+      
+      return NextResponse.json({
+        success: false,
+        error: `Gmail OAuth configuration incomplete. Missing environment variables: ${oauthValidation.missingVars.join(', ')}. Please check your environment setup.`,
+        details: {
+          missingVars: oauthValidation.missingVars,
+          setupRequired: true
+        }
+      }, { status: 500 });
+    }
+    
+    monitor.completeStep('configuration_validation', { configurationValid: true });
+    monitor.setHealthStatus('configuration', true);
+
+    // Check for concurrent pipeline runs
+    monitor.startStep('sync_lock_check');
+    if (pipelineCacheManager.getSyncLock()) {
+      monitor.failStep('sync_lock_check', new Error('Pipeline already running'));
+      
+      createPipelineAlert('warning', 'Concurrent Pipeline Run Blocked', 
+        'Another pipeline sync is already in progress',
+        { sessionId: monitor.getCurrentMetrics() }
+      );
+      
+      return NextResponse.json({
+        success: false,
+        error: 'Pipeline sync already in progress. Please wait for the current sync to complete.',
+        details: {
+          concurrentRunBlocked: true,
+          retryAfter: 300 // seconds
+        }
+      }, { status: 429 });
+    }
+    
+    // Acquire sync lock
+    pipelineCacheManager.setSyncLock();
+    monitor.completeStep('sync_lock_check', { lockAcquired: true });
 
     // Parse request body for options
     let options = {
@@ -107,6 +194,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Start pipeline
+    monitor.startStep('gmail_fetch', { daysBack: options.daysBack, forceRefresh: options.forceRefresh });
+    
     pipelineStatus = {
       status: 'fetching',
       progress: 10,
@@ -121,40 +210,67 @@ export async function POST(request: NextRequest) {
     };
 
     // Step 1: Fetch emails from Gmail
-    console.log('Starting unified pipeline - Step 1: Fetching emails');
-    const connector = new GmailConnector();
-    
-    const emails = await connector.fetchDailySubstacks(options.daysBack);
-    
-    pipelineStatus.stats.emailsFetched = emails.length;
-    pipelineStatus.progress = 40;
-    pipelineStatus.message = `Fetched ${emails.length} emails, extracting companies...`;
-    
-    console.log(`Fetched ${emails.length} emails from Gmail`);
+    try {
+      const connector = new GmailConnector();
+      const fetchStartTime = Date.now();
+      
+      const emails = await connector.fetchDailySubstacks(options.daysBack);
+      const fetchDuration = Date.now() - fetchStartTime;
+      
+      monitor.setMetric('emailsFetched', emails.length);
+      monitor.trackGmailApiCall('fetchDailySubstacks', true, fetchDuration);
+      monitor.completeStep('gmail_fetch', { 
+        emailsCount: emails.length, 
+        duration: fetchDuration,
+        daysBack: options.daysBack 
+      });
+      
+      pipelineStatus.stats.emailsFetched = emails.length;
+      pipelineStatus.progress = 40;
+      pipelineStatus.message = `Fetched ${emails.length} emails, extracting companies...`;
+      
+      if (emails.length === 0) {
+        createPipelineAlert('warning', 'No Emails Found', 
+          `No Substack emails found in the last ${options.daysBack} days`,
+          { daysBack: options.daysBack }
+        );
+      }
+    } catch (gmailError) {
+      monitor.setHealthStatus('gmail', false, gmailError instanceof Error ? gmailError.message : 'Gmail fetch failed');
+      monitor.trackGmailApiCall('fetchDailySubstacks', false, undefined, gmailError instanceof Error ? gmailError : new Error('Gmail fetch failed'));
+      throw gmailError;
+    }
 
     // Step 2: Extract companies from emails
+    monitor.startStep('company_extraction');
     pipelineStatus.status = 'extracting';
-    
-    const supabase = createServiceRoleClient();
-    const extractor = new ClaudeExtractor();
-    
-    // Get the latest emails from database (just inserted by fetchDailySubstacks)
-    const { data: dbEmails, error: fetchError } = await supabase
-      .from('emails')
-      .select('*')
-      .order('received_at', { ascending: false })
-      .limit(Math.min(emails.length || 10, 50)); // Process up to 50 emails
-    
-    if (fetchError) {
-      throw new Error(`Failed to fetch emails from database: ${fetchError.message}`);
-    }
     
     let totalCompaniesExtracted = 0;
     let newCompaniesCount = 0;
     let totalMentions = 0;
     
-    if (dbEmails && dbEmails.length > 0) {
-      console.log(`Processing ${dbEmails.length} emails for company extraction`);
+    try {
+      const supabase = createServiceRoleClient();
+      const extractor = new ClaudeExtractor();
+      
+      // Get the latest emails from database (just inserted by fetchDailySubstacks)
+      const dbQueryStartTime = Date.now();
+      const { data: dbEmails, error: fetchError } = await supabase
+        .from('emails')
+        .select('*')
+        .order('received_at', { ascending: false })
+        .limit(Math.min(pipelineStatus.stats.emailsFetched || 10, 50)); // Process up to 50 emails
+      
+      monitor.trackDatabaseOperation('select', 'emails', dbEmails?.length, !fetchError, fetchError || undefined);
+      
+      if (fetchError) {
+        monitor.setHealthStatus('database', false, fetchError.message);
+        throw new Error(`Failed to fetch emails from database: ${fetchError.message}`);
+      }
+      
+      if (dbEmails && dbEmails.length > 0) {
+        monitor.setMetric('emailsProcessed', dbEmails.length);
+        monitor.completeStep('database_fetch', { emailsRetrieved: dbEmails.length, duration: Date.now() - dbQueryStartTime });
       
       // Process each email
       for (let i = 0; i < dbEmails.length; i++) {
@@ -245,30 +361,78 @@ export async function POST(request: NextRequest) {
             totalMentions++;
           }
         } catch (emailError) {
-          console.error(`Failed to process email ${email.id}:`, emailError);
+          monitor.trackExtractionOperation(email.id, 0, false, emailError instanceof Error ? emailError : new Error('Email processing failed'));
+          
+          createPipelineAlert('warning', 'Email Processing Failed', 
+            `Failed to process email: ${email.subject}`,
+            { emailId: email.id, error: emailError instanceof Error ? emailError.message : 'Unknown error' }
+          );
         }
       }
+      
+      monitor.completeStep('company_extraction', {
+        emailsProcessed: dbEmails.length,
+        totalCompaniesExtracted,
+        newCompaniesCount,
+        totalMentions
+      });
+    } else {
+      monitor.completeStep('company_extraction', { emailsProcessed: 0, reason: 'no_emails' });
+      createPipelineAlert('warning', 'No Emails to Process', 'No emails found in database for company extraction');
+    }
+    } catch (extractionError) {
+      monitor.failStep('company_extraction', extractionError instanceof Error ? extractionError : new Error('Company extraction failed'));
+      throw extractionError;
     }
     
     // Complete pipeline
+    monitor.startStep('pipeline_completion');
+    
     pipelineStatus = {
       status: 'complete',
       progress: 100,
       message: 'Pipeline completed successfully',
       lastSync: new Date(),
       stats: {
-        emailsFetched: emails.length,
+        emailsFetched: pipelineStatus.stats.emailsFetched,
         companiesExtracted: totalCompaniesExtracted,
         newCompanies: newCompaniesCount,
         totalMentions: totalMentions
       }
     };
     
-    console.log('Pipeline completed:', pipelineStatus.stats);
+    // Update final metrics
+    monitor.setMetric('companiesExtracted', totalCompaniesExtracted);
+    monitor.setMetric('newCompanies', newCompaniesCount);
+    monitor.setMetric('totalMentions', totalMentions);
+    
+    const monitoringResults = monitor.complete(true, pipelineStatus.stats);
+    
+    // Create success alert for significant results
+    if (totalCompaniesExtracted > 0) {
+      createPipelineAlert('info', 'Pipeline Completed Successfully', 
+        `Pipeline extracted ${totalCompaniesExtracted} companies (${newCompaniesCount} new) from ${pipelineStatus.stats.emailsFetched} emails`,
+        {
+          ...pipelineStatus.stats,
+          executionTime: monitoringResults.metrics.executionTime,
+          sessionId: monitoringResults.sessionId
+        }
+      );
+    }
+    
+    // Invalidate cache after successful pipeline run
+    pipelineCacheManager.invalidateAll();
+    
+    // Release sync lock
+    pipelineCacheManager.clearSyncLock();
     
     return NextResponse.json({
       success: true,
       data: pipelineStatus,
+      monitoring: {
+        sessionId: monitoringResults.sessionId,
+        summary: monitoringResults.summary
+      },
       meta: {
         timestamp: new Date().toISOString(),
         version: '1.0.0'
@@ -276,20 +440,41 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Pipeline failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown pipeline error';
+    const monitoringResults = monitor.complete(false);
+    
+    // Release sync lock on error
+    pipelineCacheManager.clearSyncLock();
+    
+    // Create critical alert for pipeline failure
+    createPipelineAlert('error', 'Pipeline Failed', 
+      `Pipeline execution failed: ${errorMessage}`,
+      {
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+        sessionId: monitoringResults.sessionId,
+        executionTime: monitoringResults.metrics.executionTime,
+        metrics: monitoringResults.metrics
+      }
+    );
     
     pipelineStatus = {
       status: 'error',
       progress: 0,
-      message: error instanceof Error ? error.message : 'Pipeline failed',
+      message: errorMessage,
       lastSync: pipelineStatus.lastSync,
       stats: pipelineStatus.stats
     };
     
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      data: pipelineStatus
+      error: errorMessage,
+      data: pipelineStatus,
+      monitoring: {
+        sessionId: monitoringResults.sessionId,
+        summary: monitoringResults.summary,
+        errorCount: monitoringResults.metrics.errors?.length || 0
+      }
     }, { status: 500 });
   }
 }
