@@ -1,7 +1,25 @@
+/**
+ * Report Services (Fixed) - Mock Infrastructure Validation Tests
+ * 
+ * This test file validates that the centralized mock infrastructure from Issue #20
+ * is working correctly for all external services used by the report services.
+ * 
+ * Tests validate that global mocks from tests/setup.ts work properly:
+ * - Puppeteer: PDF generation functionality
+ * - Resend: Email sending functionality  
+ * - Anthropic SDK: AI processing functionality
+ * - OpenAI SDK: Embeddings functionality
+ * - Database functions: Data retrieval functionality
+ * - Supabase client: Database operations
+ * 
+ * These tests ensure the mock infrastructure supports the report services
+ * and help identify any issues with the centralized mock setup.
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Test the actual implementation classes using dependency injection
-// This avoids conflicts with module mocks
+// This file tests the centralized mock infrastructure to ensure
+// all external services are properly mocked for report services
 
 describe('Report Services (Fixed)', () => {
   beforeEach(() => {
@@ -87,7 +105,7 @@ describe('Report Services (Fixed)', () => {
       const { getDailyIntelligence, createServiceRoleClient } = await import('@substack-intelligence/database');
       
       expect(getDailyIntelligence).toBeDefined();
-      const dailyData = await getDailyIntelligence(new Date());
+      const dailyData = await getDailyIntelligence({} as any, { limit: 100, days: 1 });
       
       expect(Array.isArray(dailyData)).toBe(true);
       expect(dailyData.length).toBeGreaterThan(0);
@@ -133,7 +151,7 @@ describe('Report Services (Fixed)', () => {
       const { getDailyIntelligence } = await import('@substack-intelligence/database');
       
       // Get data
-      const dailyData = await getDailyIntelligence(new Date());
+      const dailyData = await getDailyIntelligence({} as any, { limit: 100, days: 1 });
       expect(dailyData).toHaveLength(1);
       
       // Generate PDF
