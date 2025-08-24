@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Joyride, { Step, CallBackProps, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -251,7 +251,7 @@ export function SettingsOnboardingTour({
   // Check if user has completed tour before
   useEffect(() => {
     const completed = Cookies.get('settings-tour-completed');
-    const isFirstTime = !completed && !settings.account.name;
+    const isFirstTime = !completed && !settings?.account?.name;
     
     if (autoStart && isFirstTime) {
       setTimeout(() => setRun(true), 1000);
@@ -262,7 +262,7 @@ export function SettingsOnboardingTour({
     if (saved) {
       setUnlockedAchievements(JSON.parse(saved));
     }
-  }, [autoStart, settings.account.name]);
+  }, [autoStart, settings?.account?.name]);
   
   const handleJoyrideCallback = (data: CallBackProps) => {
     const { status, action, index, type } = data;
@@ -288,35 +288,40 @@ export function SettingsOnboardingTour({
     }
   };
   
-  const unlockAchievement = (achievementId: string) => {
-    if (!unlockedAchievements.includes(achievementId)) {
-      const achievement = achievements.find(a => a.id === achievementId);
-      if (achievement) {
-        setUnlockedAchievements(prev => [...prev, achievementId]);
-        setShowAchievement(achievement);
-        
-        // Save to localStorage
-        localStorage.setItem(
-          'settings-achievements',
-          JSON.stringify([...unlockedAchievements, achievementId])
-        );
-        
-        // Hide achievement notification after 3 seconds
-        setTimeout(() => setShowAchievement(null), 3000);
+  const unlockAchievement = useCallback((achievementId: string) => {
+    setUnlockedAchievements(prev => {
+      if (!prev.includes(achievementId)) {
+        const achievement = achievements.find(a => a.id === achievementId);
+        if (achievement) {
+          setShowAchievement(achievement);
+          
+          // Save to localStorage
+          const newAchievements = [...prev, achievementId];
+          localStorage.setItem(
+            'settings-achievements',
+            JSON.stringify(newAchievements)
+          );
+          
+          // Hide achievement notification after 3 seconds
+          setTimeout(() => setShowAchievement(null), 3000);
+          
+          return newAchievements;
+        }
       }
-    }
-  };
+      return prev;
+    });
+  }, []);
   
   // Monitor for achievements
   useEffect(() => {
-    if (settings.ai.apiKey || settings.ai.anthropicApiKey || settings.ai.openaiApiKey) {
+    if (settings?.ai?.apiKey || settings?.ai?.anthropicApiKey || settings?.ai?.openaiApiKey) {
       unlockAchievement('api-connected');
     }
     
-    if (settings.companies.tracking.length > 0) {
+    if (settings?.companies?.tracking?.length > 0) {
       unlockAchievement('company-added');
     }
-  }, [settings]);
+  }, [settings, unlockAchievement]);
   
   const startTour = () => {
     setRun(true);

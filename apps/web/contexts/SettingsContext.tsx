@@ -276,8 +276,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   ] = useUndo(getDefaultSettings());
   
-  const { present: settings } = settingsState;
+  const { present: settings = getDefaultSettings() } = settingsState || { present: getDefaultSettings() };
   
+  // Helper to get default tab state
+  const getDefaultTabState = (): TabState => ({
+    isDirty: false,
+    changes: {},
+    originalValues: {},
+    lastSaved: null,
+    validationErrors: []
+  });
+
   // Tab states
   const [tabStates, setTabStates] = useState<Record<string, TabState>>({});
   
@@ -393,7 +402,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Methods
   const setSettings = useCallback((newSettings: Settings | ((prev: Settings) => Settings)) => {
     if (typeof newSettings === 'function') {
-      setSettingsState((prev) => newSettings(prev.present));
+      setSettingsState((prev) => {
+        const currentSettings = prev?.present || getDefaultSettings();
+        return newSettings(currentSettings);
+      });
     } else {
       setSettingsState(newSettings);
     }
@@ -407,7 +419,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setTabStates(prev => ({
       ...prev,
       [tab]: {
-        ...prev[tab],
+        ...(prev[tab] || getDefaultTabState()),
         isDirty: true
       }
     }));
@@ -417,7 +429,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setTabStates(prev => ({
       ...prev,
       [tab]: {
-        ...prev[tab],
+        ...(prev[tab] || getDefaultTabState()),
         isDirty: false,
         lastSaved: new Date()
       }
@@ -626,7 +638,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [setSettings]);
   
   const value: SettingsContextType = {
-    settings,
+    settings: settings || getDefaultSettings(),
     setSettings,
     tabStates,
     setTabState,

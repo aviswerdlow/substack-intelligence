@@ -190,7 +190,8 @@ async function logSecurityIncident(incident: {
 
 export const config = {
   matcher: [
-    '/((?!.*\\..*|_next).*)',
+    // Skip all internal paths and static files
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|css|js)).*)',
     '/',
     '/(api|trpc)(.*)'
   ]

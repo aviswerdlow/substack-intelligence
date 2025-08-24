@@ -194,6 +194,15 @@ function SettingsPageContent() {
     );
   }
 
+  // Helper function to safely update settings
+  const safeUpdateSettings = (updater: (prev: any) => any) => {
+    setSettings((prev: any) => {
+      const safePrev = prev || {};
+      const result = updater(safePrev);
+      return result;
+    });
+  };
+
   const handleEmailConnect = async () => {
     setConnectingEmail(true);
     try {
@@ -262,15 +271,15 @@ function SettingsPageContent() {
               const connectionError = localStorage.getItem('gmail_connection_error');
               
               if (connectedEmail) {
-                setSettings((prev: any) => ({
+                safeUpdateSettings((prev: any) => ({
                   ...prev,
                   email: {
-                    ...prev.email,
+                    ...(prev?.email || {}),
                     connected: true,
                     lastSync: new Date().toISOString()
                   },
                   account: {
-                    ...prev.account,
+                    ...(prev?.account || {}),
                     email: connectedEmail
                   }
                 }));
@@ -324,15 +333,15 @@ function SettingsPageContent() {
         const data = await response.json();
         
         if (response.ok && data.success) {
-          setSettings((prev: any) => ({
+          safeUpdateSettings((prev: any) => ({
             ...prev,
             email: {
-              ...(prev.email || {}),
+              ...(prev?.email || {}),
               connected: false,
               lastSync: null
             },
             account: {
-              ...(prev.account || {}),
+              ...(prev?.account || {}),
               email: ''
             }
           }));
@@ -651,8 +660,8 @@ function SettingsPageContent() {
               <TabSaveControls tab={activeTab} />
             </div>
 
-            {/* Settings content */}
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
+            {/* Settings content - disable keyboard shortcuts within settings forms */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} data-no-shortcuts>
               {/* Account Settings */}
               <TabsContent value="account">
                 <Card>
@@ -669,7 +678,7 @@ function SettingsPageContent() {
                           value={settings?.account?.name || ''}
                           onChange={(e) => setSettings((prev: any) => ({
                             ...prev,
-                            account: { ...prev.account, name: e.target.value }
+                            account: { ...(prev?.account || {}), name: e.target.value }
                           }))}
                         />
                       </div>
@@ -681,7 +690,7 @@ function SettingsPageContent() {
                           value={settings?.account?.email || ''}
                           onChange={(e) => setSettings((prev: any) => ({
                             ...prev,
-                            account: { ...prev.account, email: e.target.value }
+                            account: { ...(prev?.account || {}), email: e.target.value }
                           }))}
                         />
                       </div>
@@ -699,7 +708,7 @@ function SettingsPageContent() {
                           value={settings?.account?.timezone || 'America/New_York'}
                           onValueChange={(value) => setSettings((prev: any) => ({
                             ...prev,
-                            account: { ...prev.account, timezone: value }
+                            account: { ...(prev?.account || {}), timezone: value }
                           }))}
                         >
                           <SelectTrigger>
@@ -737,7 +746,7 @@ function SettingsPageContent() {
                         </p>
                       </div>
                       <Switch
-                        checked={settings.newsletters.autoSubscribe}
+                        checked={settings?.newsletters?.autoSubscribe || false}
                         onCheckedChange={(checked) => setSettings((prev: any) => ({
                           ...prev,
                           newsletters: { ...prev.newsletters, autoSubscribe: checked }
@@ -826,7 +835,7 @@ function SettingsPageContent() {
                         </p>
                       </div>
                       <Switch
-                        checked={settings.companies.autoDetect}
+                        checked={settings?.companies?.autoDetect || false}
                         onCheckedChange={(checked) => setSettings((prev: any) => ({
                           ...prev,
                           companies: { ...prev.companies, autoDetect: checked }
@@ -838,9 +847,9 @@ function SettingsPageContent() {
                       <Label>Tracked Companies</Label>
                       <div className="space-y-2">
                         {(settings?.companies?.tracking || []).map((company: any) => (
-                          <div key={company.id} className="p-3 border rounded-lg">
+                          <div key={company.id} className="p-3 border rounded-lg" data-no-shortcuts>
                             <div className="flex items-start justify-between">
-                              <div className="flex items-start gap-3">
+                              <div className="flex items-start gap-3 flex-1">
                                 <Switch
                                   checked={company.enabled}
                                   onCheckedChange={(checked) => {
@@ -855,16 +864,56 @@ function SettingsPageContent() {
                                     }));
                                   }}
                                 />
-                                <div>
-                                  <p className="font-medium">{company.name}</p>
-                                  <p className="text-sm text-muted-foreground">{company.domain}</p>
-                                  <div className="flex gap-1 mt-1 flex-wrap">
-                                    {company.keywords.map((keyword: string, i: number) => (
-                                      <Badge key={i} variant="secondary" className="text-xs">
-                                        {keyword}
-                                      </Badge>
-                                    ))}
-                                  </div>
+                                <div className="flex-1 space-y-2">
+                                  <Input
+                                    value={company.name}
+                                    onChange={(e) => {
+                                      setSettings((prev: any) => ({
+                                        ...prev,
+                                        companies: {
+                                          ...prev.companies,
+                                          tracking: (prev.companies?.tracking || []).map((c: any) =>
+                                            c.id === company.id ? { ...c, name: e.target.value } : c
+                                          )
+                                        }
+                                      }));
+                                    }}
+                                    placeholder="Company name"
+                                    className="font-medium"
+                                  />
+                                  <Input
+                                    value={company.domain}
+                                    onChange={(e) => {
+                                      setSettings((prev: any) => ({
+                                        ...prev,
+                                        companies: {
+                                          ...prev.companies,
+                                          tracking: (prev.companies?.tracking || []).map((c: any) =>
+                                            c.id === company.id ? { ...c, domain: e.target.value } : c
+                                          )
+                                        }
+                                      }));
+                                    }}
+                                    placeholder="example.com"
+                                    className="text-sm"
+                                  />
+                                  <Input
+                                    value={company.keywords.join(', ')}
+                                    onChange={(e) => {
+                                      const keywords = e.target.value.split(',').map(k => k.trim()).filter(k => k);
+                                      setSettings((prev: any) => ({
+                                        ...prev,
+                                        companies: {
+                                          ...prev.companies,
+                                          tracking: (prev.companies?.tracking || []).map((c: any) =>
+                                            c.id === company.id ? { ...c, keywords } : c
+                                          )
+                                        }
+                                      }));
+                                    }}
+                                    placeholder="Keywords (comma separated)"
+                                    className="text-sm"
+                                  />
                                 </div>
                               </div>
                               <Button 
@@ -983,7 +1032,7 @@ function SettingsPageContent() {
                     {settings?.ai?.provider === 'anthropic' ? (
                       <ApiKeyValidator
                         provider="anthropic"
-                        value={settings.ai.anthropicApiKey}
+                        value={settings?.ai?.anthropicApiKey || ''}
                         onChange={(value) => setSettings((prev: any) => ({
                           ...prev,
                           ai: { ...prev.ai, anthropicApiKey: value }
@@ -994,7 +1043,7 @@ function SettingsPageContent() {
                     ) : (
                       <ApiKeyValidator
                         provider="openai"
-                        value={settings.ai.openaiApiKey}
+                        value={settings?.ai?.openaiApiKey || ''}
                         onChange={(value) => setSettings((prev: any) => ({
                           ...prev,
                           ai: { ...prev.ai, openaiApiKey: value }
@@ -1007,14 +1056,14 @@ function SettingsPageContent() {
                     <div className="space-y-4">
                       <div>
                         <div className="flex justify-between mb-2">
-                          <Label>Temperature: {settings.ai.temperature}</Label>
+                          <Label>Temperature: {settings?.ai?.temperature || 0.7}</Label>
                         </div>
                         <input
                           type="range"
                           min="0"
                           max="1"
                           step="0.1"
-                          value={settings.ai.temperature}
+                          value={settings?.ai?.temperature || 0.7}
                           onChange={(e) => setSettings((prev: any) => ({
                             ...prev,
                             ai: { ...prev.ai, temperature: parseFloat(e.target.value) }
@@ -1031,7 +1080,7 @@ function SettingsPageContent() {
                           </p>
                         </div>
                         <Switch
-                          checked={settings.ai.enableEnrichment}
+                          checked={settings?.ai?.enableEnrichment || false}
                           onCheckedChange={(checked) => setSettings((prev: any) => ({
                             ...prev,
                             ai: { ...prev.ai, enableEnrichment: checked }
@@ -1070,7 +1119,7 @@ function SettingsPageContent() {
                                 <>
                                   <span className="text-green-600 font-medium">Connected</span>
                                   {settings.account?.email && (
-                                    <span className="text-xs block">{settings.account.email}</span>
+                                    <span className="text-xs block">{settings?.account?.email || ''}</span>
                                   )}
                                 </>
                               ) : (
@@ -1126,7 +1175,7 @@ function SettingsPageContent() {
                           <div className="flex items-center gap-2">
                             <span>Last synced: {new Date(settings?.email?.lastSync).toLocaleString()}</span>
                             <Badge variant="secondary" className="text-xs">
-                              {settings.email.connected ? 'Active' : 'Inactive'}
+                              {settings?.email?.connected ? 'Active' : 'Inactive'}
                             </Badge>
                           </div>
                         </div>
@@ -1165,7 +1214,7 @@ function SettingsPageContent() {
                         <Label>Data Retention Period (days)</Label>
                         <Input
                           type="number"
-                          value={settings.privacy.dataRetention}
+                          value={settings?.privacy?.dataRetention || 365}
                           onChange={(e) => setSettings((prev: any) => ({
                             ...prev,
                             privacy: { ...prev.privacy, dataRetention: parseInt(e.target.value) }
@@ -1181,7 +1230,7 @@ function SettingsPageContent() {
                           </p>
                         </div>
                         <Switch
-                          checked={settings.privacy.shareAnalytics}
+                          checked={settings?.privacy?.shareAnalytics || false}
                           onCheckedChange={(checked) => setSettings((prev: any) => ({
                             ...prev,
                             privacy: { ...prev.privacy, shareAnalytics: checked }
@@ -1197,7 +1246,7 @@ function SettingsPageContent() {
                           </p>
                         </div>
                         <Switch
-                          checked={settings.privacy.allowExport}
+                          checked={settings?.privacy?.allowExport || false}
                           onCheckedChange={(checked) => setSettings((prev: any) => ({
                             ...prev,
                             privacy: { ...prev.privacy, allowExport: checked }
@@ -1221,7 +1270,7 @@ function SettingsPageContent() {
                       <div>
                         <Label>Theme</Label>
                         <Select
-                          value={settings.appearance.theme}
+                          value={settings?.appearance?.theme || 'system'}
                           onValueChange={(value: 'light' | 'dark' | 'system') => setSettings((prev: any) => ({
                             ...prev,
                             appearance: { ...prev.appearance, theme: value }
@@ -1241,7 +1290,7 @@ function SettingsPageContent() {
                       <div>
                         <Label>Accent Color</Label>
                         <Select
-                          value={settings.appearance.accentColor}
+                          value={settings?.appearance?.accentColor || 'blue'}
                           onValueChange={(value) => setSettings((prev: any) => ({
                             ...prev,
                             appearance: { ...prev.appearance, accentColor: value }
@@ -1263,7 +1312,7 @@ function SettingsPageContent() {
                       <div>
                         <Label>Font Size</Label>
                         <Select
-                          value={settings.appearance.fontSize}
+                          value={settings?.appearance?.fontSize || 'medium'}
                           onValueChange={(value: 'small' | 'medium' | 'large') => setSettings((prev: any) => ({
                             ...prev,
                             appearance: { ...prev.appearance, fontSize: value }
@@ -1290,7 +1339,7 @@ function SettingsPageContent() {
                           </p>
                         </div>
                         <Switch
-                          checked={settings.appearance.compactMode}
+                          checked={settings?.appearance?.compactMode || false}
                           onCheckedChange={(checked) => setSettings((prev: any) => ({
                             ...prev,
                             appearance: { ...prev.appearance, compactMode: checked }
@@ -1306,7 +1355,7 @@ function SettingsPageContent() {
                           </p>
                         </div>
                         <Switch
-                          checked={settings.appearance.showTips}
+                          checked={settings?.appearance?.showTips || false}
                           onCheckedChange={(checked) => setSettings((prev: any) => ({
                             ...prev,
                             appearance: { ...prev.appearance, showTips: checked }
@@ -1330,7 +1379,7 @@ function SettingsPageContent() {
                       <div>
                         <Label>Default Format</Label>
                         <Select
-                          value={settings.reports.defaultFormat}
+                          value={settings?.reports?.defaultFormat || 'pdf'}
                           onValueChange={(value) => setSettings((prev: any) => ({
                             ...prev,
                             reports: { ...prev.reports, defaultFormat: value }
@@ -1352,7 +1401,7 @@ function SettingsPageContent() {
                         <Label>Delivery Time</Label>
                         <Input
                           type="time"
-                          value={settings.reports.deliveryTime}
+                          value={settings?.reports?.deliveryTime || '09:00'}
                           onChange={(e) => setSettings((prev: any) => ({
                             ...prev,
                             reports: { ...prev.reports, deliveryTime: e.target.value }
@@ -1367,7 +1416,7 @@ function SettingsPageContent() {
                         <div className="flex items-center justify-between">
                           <Label className="font-normal">Daily Reports</Label>
                           <Switch
-                            checked={settings.reports.autoGenerate.daily}
+                            checked={settings?.reports?.autoGenerate?.daily || false}
                             onCheckedChange={(checked) => setSettings((prev: any) => ({
                               ...prev,
                               reports: { 
@@ -1381,7 +1430,7 @@ function SettingsPageContent() {
                         <div className="flex items-center justify-between">
                           <Label className="font-normal">Weekly Reports</Label>
                           <Switch
-                            checked={settings.reports.autoGenerate.weekly}
+                            checked={settings?.reports?.autoGenerate?.weekly || false}
                             onCheckedChange={(checked) => setSettings((prev: any) => ({
                               ...prev,
                               reports: { 
@@ -1395,7 +1444,7 @@ function SettingsPageContent() {
                         <div className="flex items-center justify-between">
                           <Label className="font-normal">Monthly Reports</Label>
                           <Switch
-                            checked={settings.reports.autoGenerate.monthly}
+                            checked={settings?.reports?.autoGenerate?.monthly || false}
                             onCheckedChange={(checked) => setSettings((prev: any) => ({
                               ...prev,
                               reports: { 
@@ -1415,7 +1464,7 @@ function SettingsPageContent() {
                           </p>
                         </div>
                         <Switch
-                          checked={settings.reports.includeCharts}
+                          checked={settings?.reports?.includeCharts || false}
                           onCheckedChange={(checked) => setSettings((prev: any) => ({
                             ...prev,
                             reports: { ...prev.reports, includeCharts: checked }
@@ -1431,7 +1480,7 @@ function SettingsPageContent() {
                           </p>
                         </div>
                         <Switch
-                          checked={settings.reports.includeSentiment}
+                          checked={settings?.reports?.includeSentiment || false}
                           onCheckedChange={(checked) => setSettings((prev: any) => ({
                             ...prev,
                             reports: { ...prev.reports, includeSentiment: checked }
@@ -1504,7 +1553,7 @@ function SettingsPageContent() {
                         <div className="flex items-center justify-between">
                           <Label className="font-normal">Enable In-App Notifications</Label>
                           <Switch
-                            checked={settings.notifications.inApp.enabled}
+                            checked={settings?.notifications?.inApp?.enabled || false}
                             onCheckedChange={(checked) => setSettings((prev: any) => ({
                               ...prev,
                               notifications: { 
@@ -1518,7 +1567,7 @@ function SettingsPageContent() {
                         <div className="flex items-center justify-between">
                           <Label className="font-normal">Sound Enabled</Label>
                           <Switch
-                            checked={settings.notifications.inApp.soundEnabled}
+                            checked={settings?.notifications?.inApp?.soundEnabled || false}
                             onCheckedChange={(checked) => setSettings((prev: any) => ({
                               ...prev,
                               notifications: { 
@@ -1541,7 +1590,7 @@ function SettingsPageContent() {
                             step="0.1"
                             min="-1"
                             max="0"
-                            value={settings.notifications.thresholds.negativeSentiment}
+                            value={settings?.notifications?.thresholds?.negativeSentiment || -0.5}
                             onChange={(e) => setSettings((prev: any) => ({
                               ...prev,
                               notifications: { 
@@ -1560,7 +1609,7 @@ function SettingsPageContent() {
                           <Input
                             type="number"
                             min="1"
-                            value={settings.notifications.thresholds.mentionVolume}
+                            value={settings?.notifications?.thresholds?.mentionVolume || 10}
                             onChange={(e) => setSettings((prev: any) => ({
                               ...prev,
                               notifications: { 
@@ -1577,7 +1626,7 @@ function SettingsPageContent() {
                         <div className="flex items-center justify-between">
                           <Label className="font-normal">Alert on Competitor Mentions</Label>
                           <Switch
-                            checked={settings.notifications.thresholds.competitorMentions}
+                            checked={settings?.notifications?.thresholds?.competitorMentions || false}
                             onCheckedChange={(checked) => setSettings((prev: any) => ({
                               ...prev,
                               notifications: { 
@@ -1620,9 +1669,9 @@ function SettingsPageContent() {
                           onChange={(e) => setNewApiKeyName(e.target.value)}
                         />
                         
-                        {settings.api.keys.length > 0 ? (
+                        {settings?.api?.keys?.length > 0 ? (
                           <div className="space-y-2">
-                            {settings.api.keys.map((key: any) => (
+                            {settings?.api?.keys?.map((key: any) => (
                               <div key={key.id} className="p-3 border rounded-lg">
                                 <div className="flex items-center justify-between">
                                   <div>
@@ -1689,9 +1738,9 @@ function SettingsPageContent() {
                           onChange={(e) => setNewWebhookUrl(e.target.value)}
                         />
                         
-                        {settings.api.webhooks.length > 0 ? (
+                        {settings?.api?.webhooks?.length > 0 ? (
                           <div className="space-y-2">
-                            {settings.api.webhooks.map((webhook: any) => (
+                            {settings?.api?.webhooks?.map((webhook: any) => (
                               <div key={webhook.id} className="p-3 border rounded-lg">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-3">

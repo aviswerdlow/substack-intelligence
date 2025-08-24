@@ -114,7 +114,7 @@ export function SettingsAccordionNav({
     const state = tabStates[tabId];
     if (!state) return 'idle';
     
-    if (state.validationErrors.some(e => e.severity === 'error')) {
+    if (state.validationErrors?.some(e => e.severity === 'error')) {
       return 'error';
     }
     if (state.isDirty) {

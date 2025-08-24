@@ -146,9 +146,13 @@ export function KeyboardShortcuts() {
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Don't trigger shortcuts when typing in inputs
-    if (e.target instanceof HTMLInputElement || 
-        e.target instanceof HTMLTextAreaElement || 
-        e.target instanceof HTMLSelectElement) {
+    const target = e.target as HTMLElement;
+    if (target instanceof HTMLInputElement || 
+        target instanceof HTMLTextAreaElement || 
+        target instanceof HTMLSelectElement ||
+        target.contentEditable === 'true' ||
+        target.closest('[data-no-shortcuts]') ||
+        target.closest('input, textarea, select, [contenteditable="true"]')) {
       return;
     }
 
