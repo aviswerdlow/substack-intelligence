@@ -12,6 +12,8 @@ export default defineConfig({
     clearMocks: true,
     restoreMocks: true,
     testTimeout: 30000,
+    pool: 'forks',
+    isolate: true,
     deps: {
       inline: ['server-only']
     },
@@ -41,8 +43,11 @@ export default defineConfig({
     }
   },
   resolve: {
+    conditions: ['node'],
+    mainFields: ['module', 'main'],
     alias: {
-      'server-only': path.resolve(__dirname, './tests/mocks/server-only.ts'),
+      'server-only': false,
+      '@clerk/nextjs/server': path.resolve(__dirname, './tests/mocks/auth/clerk-server.ts'),
       '@': path.resolve(__dirname, './apps/web'),
       '@substack-intelligence/shared': path.resolve(__dirname, './packages/shared/src'),
       '@substack-intelligence/database': path.resolve(__dirname, './packages/database/src'),

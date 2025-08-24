@@ -252,6 +252,16 @@ class MockNextResponseImpl implements MockNextResponse {
   async getBody(): Promise<any> {
     return this._body;
   }
+  
+  // Add json() method to match Response API for tests
+  async json(): Promise<any> {
+    return this._body;
+  }
+  
+  // Add text() method to match Response API for tests
+  async text(): Promise<string> {
+    return typeof this._body === 'string' ? this._body : JSON.stringify(this._body);
+  }
 }
 
 // Factory functions
