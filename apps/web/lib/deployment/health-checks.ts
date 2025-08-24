@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { createServiceRoleClient } from '@substack-intelligence/database';
+import { createServiceRoleClientSafe } from '@substack-intelligence/database';
 import { axiomLogger } from '../monitoring/axiom';
 
 export interface HealthCheckResult {
@@ -97,9 +97,20 @@ async function checkDatabase(): Promise<HealthCheckResult> {
   const startTime = Date.now();
   
   try {
-    const supabase = createServiceRoleClient();
+    const supabase = createServiceRoleClientSafe();
+    
+    // If client couldn't be created, database is not configured
+    if (!supabase) {
+      return {
+        service: 'database',
+        status: 'degraded',
+        latency: Date.now() - startTime,
+        error: 'Database client not configured - missing environment variables'
+      };
+    }
     
     // Test basic connectivity
+    let dbConnected = false;
     const { data, error } = await supabase
       .from('emails')
       .select('count(*)')
@@ -113,18 +124,29 @@ async function checkDatabase(): Promise<HealthCheckResult> {
         error: error.message
       };
     }
+    
+    dbConnected = true;
 
-    // Test RLS policies
-    const { error: rlsError } = await supabase
-      .rpc('check_rls_enabled');
+    // Test RLS policies (only if basic connectivity works)
+    let rlsEnabled = false;
+    if (dbConnected) {
+      try {
+        const { error: rlsError } = await supabase
+          .rpc('check_rls_enabled');
+        rlsEnabled = !rlsError;
+      } catch {
+        // RLS check is optional, don't fail health check
+        rlsEnabled = false;
+      }
+    }
 
     return {
       service: 'database',
-      status: rlsError ? 'degraded' : 'healthy',
+      status: dbConnected ? (rlsEnabled ? 'healthy' : 'degraded') : 'unhealthy',
       latency: Date.now() - startTime,
       details: {
-        rlsEnabled: !rlsError,
-        connection: 'active'
+        rlsEnabled,
+        connection: dbConnected ? 'active' : 'failed'
       }
     };
     
