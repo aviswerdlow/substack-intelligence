@@ -4,77 +4,10 @@ import { NextRequest } from 'next/server';
 // Mock server-only module first to prevent import errors
 vi.mock('server-only', () => ({}));
 
-// Clear any existing mocks from global setup
-vi.unmock('@clerk/nextjs');
-vi.unmock('@clerk/nextjs/server');
-vi.unmock('@substack-intelligence/database');
-
 // Import centralized mock utilities
 import { createMockNextRequest } from '../mocks/nextjs/server';
-
-// Hoist mock functions to make them available in vi.mock
-const { mockAuth, mockCurrentUser, mockGetCompanies, mockGetDailyIntelligence, mockSupabaseClient, mockServiceClient } = vi.hoisted(() => {
-  const auth = vi.fn(() => ({ userId: 'test-user-id' }));
-  const currentUser = vi.fn(() => Promise.resolve({ 
-    id: 'test-user-id', 
-    emailAddress: 'test@example.com' 
-  }));
-  const getCompanies = vi.fn();
-  const getDailyIntelligence = vi.fn();
-  
-  const supabaseClient = {
-    from: vi.fn(() => ({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      range: vi.fn().mockReturnThis(),
-      ilike: vi.fn().mockReturnThis(),
-      single: vi.fn(),
-      data: [],
-      error: null
-    }))
-  };
-  
-  const serviceClient = {
-    from: vi.fn(() => ({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn(() => Promise.resolve({
-        data: [],
-        error: null
-      }))
-    }))
-  };
-  
-  return {
-    mockAuth: auth,
-    mockCurrentUser: currentUser,
-    mockGetCompanies: getCompanies,
-    mockGetDailyIntelligence: getDailyIntelligence,
-    mockSupabaseClient: supabaseClient,
-    mockServiceClient: serviceClient
-  };
-});
-
-// Mock @clerk/nextjs BEFORE importing routes
-vi.mock('@clerk/nextjs', () => ({
-  auth: mockAuth
-}));
-
-// Mock @clerk/nextjs/server BEFORE importing routes  
-vi.mock('@clerk/nextjs/server', () => ({
-  currentUser: mockCurrentUser
-}));
-
-// Mock database BEFORE importing routes
-vi.mock('@substack-intelligence/database', () => ({
-  createServerComponentClient: vi.fn(() => mockSupabaseClient),
-  createServiceRoleClient: vi.fn(() => mockServiceClient),
-  getCompanies: mockGetCompanies,
-  getDailyIntelligence: mockGetDailyIntelligence
-}));
+import { clerkMocks } from '../mocks/auth/clerk';
+import { databaseQueryMocks } from '../mocks/database/queries';
 
 // Route handlers will be imported dynamically in beforeAll
 
@@ -132,12 +65,21 @@ describe('API Routes', () => {
   let getIntelligence: any;
 
   beforeAll(async () => {
-    // Dynamically import route handlers after mocks are set up
-    const companiesRoute = await import('../../apps/web/app/api/companies/route');
-    getCompanies = companiesRoute.GET;
-    
-    const intelligenceRoute = await import('../../apps/web/app/api/intelligence/route');
-    getIntelligence = intelligenceRoute.GET;
+    try {
+      // Dynamically import route handlers after mocks are set up
+      const companiesRoute = await import('../../apps/web/app/api/companies/route');
+      getCompanies = companiesRoute.GET;
+      
+      const intelligenceRoute = await import('../../apps/web/app/api/intelligence/route');
+      getIntelligence = intelligenceRoute.GET;
+      
+      if (!getCompanies || !getIntelligence) {
+        throw new Error('Failed to import route handlers');
+      }
+    } catch (error) {
+      console.error('Error importing route handlers:', error);
+      throw error;
+    }
   });
 
   beforeEach(() => {
@@ -146,6 +88,16 @@ describe('API Routes', () => {
       NODE_ENV: 'test'
     };
     vi.clearAllMocks();
+    
+    // Reset centralized mocks to default state
+    clerkMocks.resetAllMocks();
+    databaseQueryMocks.resetAllMocks();
+    
+    // Configure default authenticated user
+    clerkMocks.mockSignedInUser({
+      id: 'test-user-id',
+      emailAddress: 'test@example.com'
+    });
   });
 
   afterEach(() => {
@@ -158,8 +110,8 @@ describe('API Routes', () => {
     beforeEach(() => {
       mockRequest = createMockNextRequest('https://example.com/api/companies');
       
-      // Configure the getCompanies mock to return expected data structure
-      mockGetCompanies.mockResolvedValue({
+      // Configure the getCompanies mock using centralized database mocks
+      databaseQueryMocks.mockResolvedValue('getCompanies', {
         companies: mockCompanies,
         total: mockCompanies.length,
         hasMore: false
@@ -194,7 +146,7 @@ describe('API Routes', () => {
 
       await getCompanies(mockRequest);
 
-      expect(mockGetCompanies).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
           limit: 10,
           offset: 20
@@ -207,7 +159,7 @@ describe('API Routes', () => {
 
       await getCompanies(mockRequest);
 
-      expect(mockGetCompanies).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
           search: 'test'
         })
@@ -219,7 +171,7 @@ describe('API Routes', () => {
 
       await getCompanies(mockRequest);
 
-      expect(mockGetCompanies).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
           fundingStatus: 'Series A'
         })
@@ -227,7 +179,7 @@ describe('API Routes', () => {
     });
 
     it('should return 401 when not authenticated', async () => {
-      mockAuth.mockReturnValueOnce({ userId: null });
+      clerkMocks.auth.mockReturnValueOnce({ userId: null });
 
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
@@ -240,7 +192,7 @@ describe('API Routes', () => {
     });
 
     it('should handle empty result set', async () => {
-      mockGetCompanies.mockResolvedValue({
+      databaseQueryMocks.mockResolvedValue('getCompanies', {
         companies: [],
         total: 0,
         hasMore: false
@@ -262,7 +214,7 @@ describe('API Routes', () => {
     });
 
     it('should handle database errors gracefully', async () => {
-      mockGetCompanies.mockRejectedValue(new Error('Database connection failed'));
+      databaseQueryMocks.mockRejectedValue('getCompanies', new Error('Database connection failed'));
 
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
@@ -279,7 +231,7 @@ describe('API Routes', () => {
 
       await getCompanies(mockRequest);
 
-      expect(mockGetCompanies).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
           orderBy: 'created_at',
           orderDirection: 'asc'
@@ -290,7 +242,7 @@ describe('API Routes', () => {
     it('should use default ordering when not specified', async () => {
       await getCompanies(mockRequest);
 
-      expect(mockGetCompanies).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
           orderBy: 'mention_count',
           orderDirection: 'desc'
@@ -364,7 +316,7 @@ describe('API Routes', () => {
 
     it('should return 401 when not authenticated in production', async () => {
       process.env.NODE_ENV = 'production';
-      mockCurrentUser.mockResolvedValueOnce(null);
+      clerkMocks.currentUser.mockResolvedValueOnce(null);
 
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -378,7 +330,7 @@ describe('API Routes', () => {
 
     it('should allow unauthenticated access in development', async () => {
       process.env.NODE_ENV = 'development';
-      mockCurrentUser.mockResolvedValueOnce(null);
+      clerkMocks.currentUser.mockResolvedValueOnce(null);
 
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -519,7 +471,7 @@ describe('API Routes', () => {
     it('should have consistent response format for success', async () => {
       const mockRequest = createMockNextRequest('https://example.com/api/companies');
       
-      mockGetCompanies.mockResolvedValue({
+      databaseQueryMocks.mockResolvedValue('getCompanies', {
         companies: mockCompanies,
         total: mockCompanies.length,
         hasMore: false
@@ -538,7 +490,7 @@ describe('API Routes', () => {
     it('should have consistent response format for errors', async () => {
       const mockRequest = createMockNextRequest('https://example.com/api/companies');
       
-      mockAuth.mockReturnValueOnce({ userId: null });
+      clerkMocks.auth.mockReturnValueOnce({ userId: null });
 
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();

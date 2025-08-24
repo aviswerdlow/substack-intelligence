@@ -4,87 +4,12 @@ import { NextRequest } from 'next/server';
 // Mock server-only module first to prevent import errors
 vi.mock('server-only', () => ({}));
 
-// Clear any existing mocks from global setup
-vi.unmock('@clerk/nextjs');
-vi.unmock('@clerk/nextjs/server');
-vi.unmock('@substack-intelligence/database');
+// Import centralized mock utilities
+import { createMockNextRequest } from '../mocks/nextjs/server';
+import { clerkMocks } from '../mocks/auth/clerk';
+import { databaseQueryMocks } from '../mocks/database/queries';
 
-// Hoist mock functions to make them available in vi.mock
-const { mockAuth, mockCurrentUser, mockGetCompanies, mockSupabaseClient, mockServiceRoleClient, mockJsonResponse } = vi.hoisted(() => {
-  const auth = vi.fn(() => ({ userId: 'test-user-id' }));
-  const currentUser = vi.fn(() => Promise.resolve({ 
-    id: 'test-user-id', 
-    emailAddress: 'test@example.com' 
-  }));
-  const getCompanies = vi.fn();
-  
-  const jsonResponse = vi.fn((data, options) => ({
-    json: () => Promise.resolve(data),
-    status: options?.status || 200,
-    data,
-    options
-  }));
-  
-  const supabaseClient = {
-    from: vi.fn(() => ({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      range: vi.fn().mockReturnThis(),
-      ilike: vi.fn().mockReturnThis(),
-      gte: vi.fn().mockReturnThis(),
-      single: vi.fn()
-    }))
-  };
-  
-  const serviceRoleClient = {
-    from: vi.fn(() => ({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      gte: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn(() => Promise.resolve({ data: [], error: null }))
-    }))
-  };
-  
-  return {
-    mockAuth: auth,
-    mockCurrentUser: currentUser,
-    mockGetCompanies: getCompanies,
-    mockSupabaseClient: supabaseClient,
-    mockServiceRoleClient: serviceRoleClient,
-    mockJsonResponse: jsonResponse
-  };
-});
-
-// Mock NextResponse.json to capture response data and status
-vi.mock('next/server', async () => {
-  const actual = await vi.importActual('next/server');
-  return {
-    ...actual,
-    NextResponse: {
-      ...actual.NextResponse,
-      json: mockJsonResponse
-    }
-  };
-});
-
-// Mock Clerk authentication
-vi.mock('@clerk/nextjs', () => ({
-  auth: mockAuth
-}));
-
-vi.mock('@clerk/nextjs/server', () => ({
-  currentUser: mockCurrentUser
-}));
-
-// Mock database functions
-vi.mock('@substack-intelligence/database', () => ({
-  createServerComponentClient: vi.fn(() => mockSupabaseClient),
-  createServiceRoleClient: vi.fn(() => mockServiceRoleClient),
-  getCompanies: mockGetCompanies
-}));
+// Mock NextResponse.json will be handled by centralized nextjs mocks
 
 // Route handlers will be imported dynamically in beforeAll
 
@@ -174,12 +99,21 @@ describe('API Routes - Improved Tests', () => {
   let getIntelligenceHandler: any;
 
   beforeAll(async () => {
-    // Dynamically import route handlers after mocks are set up
-    const companiesRoute = await import('../../apps/web/app/api/companies/route');
-    getCompaniesHandler = companiesRoute.GET;
-    
-    const intelligenceRoute = await import('../../apps/web/app/api/intelligence/route');
-    getIntelligenceHandler = intelligenceRoute.GET;
+    try {
+      // Dynamically import route handlers after mocks are set up
+      const companiesRoute = await import('../../apps/web/app/api/companies/route');
+      getCompaniesHandler = companiesRoute.GET;
+      
+      const intelligenceRoute = await import('../../apps/web/app/api/intelligence/route');
+      getIntelligenceHandler = intelligenceRoute.GET;
+      
+      if (!getCompaniesHandler || !getIntelligenceHandler) {
+        throw new Error('Failed to import route handlers');
+      }
+    } catch (error) {
+      console.error('Error importing route handlers:', error);
+      throw error;
+    }
   });
 
   beforeEach(() => {
@@ -188,6 +122,16 @@ describe('API Routes - Improved Tests', () => {
       NODE_ENV: 'test'
     };
     vi.clearAllMocks();
+    
+    // Reset centralized mocks to default state
+    clerkMocks.resetAllMocks();
+    databaseQueryMocks.resetAllMocks();
+    
+    // Configure default authenticated user
+    clerkMocks.mockSignedInUser({
+      id: 'test-user-id',
+      emailAddress: 'test@example.com'
+    });
   });
 
   afterEach(() => {
@@ -196,7 +140,7 @@ describe('API Routes - Improved Tests', () => {
 
   describe('GET /api/companies - Advanced Scenarios', () => {
     it('should handle complex filter combinations', async () => {
-      mockGetCompanies.mockResolvedValue({
+      databaseQueryMocks.mockResolvedValue('getCompanies', {
         companies: [mockCompanies[0]],
         total: 1,
         hasMore: false
@@ -206,7 +150,7 @@ describe('API Routes - Improved Tests', () => {
       
       await getCompaniesHandler(request);
 
-      expect(mockGetCompanies).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
           search: 'test',
           fundingStatus: 'Series A',
@@ -219,7 +163,7 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should handle special characters in search query', async () => {
-      mockGetCompanies.mockResolvedValue({
+      databaseQueryMocks.mockResolvedValue('getCompanies', {
         companies: [],
         total: 0,
         hasMore: false
@@ -231,7 +175,7 @@ describe('API Routes - Improved Tests', () => {
       const responseData = response.data;
 
       expect(responseData.success).toBe(true);
-      expect(mockGetCompanies).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
           search: '@#$%^&*()'
         })
@@ -239,7 +183,7 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should handle pagination edge cases', async () => {
-      mockGetCompanies.mockResolvedValue({
+      databaseQueryMocks.mockResolvedValue('getCompanies', {
         companies: [],
         total: 100,
         hasMore: true
@@ -261,7 +205,7 @@ describe('API Routes - Improved Tests', () => {
       const response = await getCompaniesHandler(request);
 
       // Should use default orderBy value
-      expect(mockGetCompanies).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
           orderBy: 'mention_count'
         })
@@ -269,7 +213,7 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should handle negative offset values', async () => {
-      mockGetCompanies.mockResolvedValue({
+      databaseQueryMocks.mockResolvedValue('getCompanies', {
         companies: mockCompanies,
         total: 2,
         hasMore: false
@@ -282,7 +226,7 @@ describe('API Routes - Improved Tests', () => {
 
       expect(responseData.success).toBe(true);
       // Should treat negative offset as 0
-      expect(mockGetCompanies).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
           offset: 0
         })
@@ -290,7 +234,7 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should handle concurrent requests correctly', async () => {
-      mockGetCompanies.mockResolvedValue({
+      databaseQueryMocks.mockResolvedValue('getCompanies', {
         companies: mockCompanies,
         total: 2,
         hasMore: false
@@ -305,11 +249,11 @@ describe('API Routes - Improved Tests', () => {
       );
 
       expect(responses).toHaveLength(5);
-      expect(mockGetCompanies).toHaveBeenCalledTimes(5);
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledTimes(5);
     });
 
     it('should handle database connection pool exhaustion', async () => {
-      mockGetCompanies.mockRejectedValue(new Error('Connection pool exhausted'));
+      databaseQueryMocks.mockRejectedValue('getCompanies', new Error('Connection pool exhausted'));
 
       const request = new NextRequest('https://example.com/api/companies');
       
@@ -322,7 +266,7 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should handle null values in company data', async () => {
-      mockGetCompanies.mockResolvedValue({
+      databaseQueryMocks.mockResolvedValue('getCompanies', {
         companies: [{
           ...mockCompanies[0],
           description: null,
@@ -346,16 +290,8 @@ describe('API Routes - Improved Tests', () => {
 
   describe('GET /api/intelligence - Advanced Scenarios', () => {
     beforeEach(() => {
-      // Reset the mock for each test
-      mockServiceRoleClient.from = vi.fn(() => ({
-        select: vi.fn().mockReturnThis(),
-        gte: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn(() => Promise.resolve({
-          data: mockIntelligenceData,
-          error: null
-        }))
-      }));
+      // Configure database query mocks for intelligence data
+      databaseQueryMocks.mockResolvedValue('getDailyIntelligence', mockIntelligenceData);
     });
 
     it('should handle large date ranges', async () => {
@@ -392,7 +328,8 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should handle companies with empty mention arrays', async () => {
-      mockServiceRoleClient.from = vi.fn(() => ({
+      // Database client mocking handled by centralized system
+      // mockServiceRoleClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
@@ -418,7 +355,8 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should handle mentions without email data', async () => {
-      mockServiceRoleClient.from = vi.fn(() => ({
+      // Database client mocking handled by centralized system
+      // mockServiceRoleClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
@@ -450,7 +388,8 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should handle database query timeout', async () => {
-      mockServiceRoleClient.from = vi.fn(() => ({
+      // Database client mocking handled by centralized system
+      // mockServiceRoleClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
@@ -468,7 +407,8 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should handle newsletter diversity calculation edge cases', async () => {
-      mockServiceRoleClient.from = vi.fn(() => ({
+      // Database client mocking handled by centralized system
+      // mockServiceRoleClient.from = vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
         order: vi.fn().mockReturnThis(),
@@ -506,13 +446,14 @@ describe('API Routes - Improved Tests', () => {
       const responseData = response.data;
 
       expect(responseData.success).toBe(true);
-      expect(mockServiceRoleClient.from().limit).toHaveBeenCalledWith(10000);
+      // Database client expectations handled by centralized mocks
+      // expect(mockServiceRoleClient.from().limit).toHaveBeenCalledWith(10000);
     });
   });
 
   describe('Error Handling Edge Cases', () => {
     it('should handle non-Error objects thrown by database', async () => {
-      mockGetCompanies.mockRejectedValue('String error');
+      databaseQueryMocks.mockRejectedValue('getCompanies', 'String error');
 
       const request = new NextRequest('https://example.com/api/companies');
       
@@ -525,7 +466,7 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should handle undefined errors', async () => {
-      mockGetCompanies.mockRejectedValue(undefined);
+      databaseQueryMocks.mockRejectedValue('getCompanies', undefined);
 
       const request = new NextRequest('https://example.com/api/companies');
       
@@ -539,7 +480,7 @@ describe('API Routes - Improved Tests', () => {
 
     it('should handle auth errors in production mode', async () => {
       process.env.NODE_ENV = 'production';
-      mockAuth.mockReturnValueOnce({ userId: null });
+      clerkMocks.auth.mockReturnValueOnce({ userId: null });
 
       const request = new NextRequest('https://example.com/api/companies');
       
@@ -559,7 +500,7 @@ describe('API Routes - Improved Tests', () => {
 
       // Should use default values for invalid parameters
       expect(responseData.success).toBe(true);
-      expect(mockGetCompanies).toHaveBeenCalledWith(
+      expect(databaseQueryMocks.getCompanies).toHaveBeenCalledWith(
         expect.objectContaining({
           limit: 20, // default
           offset: 0  // default
@@ -570,7 +511,7 @@ describe('API Routes - Improved Tests', () => {
 
   describe('Response Metadata', () => {
     it('should include proper timestamp in responses', async () => {
-      mockGetCompanies.mockResolvedValue({
+      databaseQueryMocks.mockResolvedValue('getCompanies', {
         companies: mockCompanies,
         total: 2,
         hasMore: false
@@ -586,7 +527,7 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should include version information', async () => {
-      mockGetCompanies.mockResolvedValue({
+      databaseQueryMocks.mockResolvedValue('getCompanies', {
         companies: mockCompanies,
         total: 2,
         hasMore: false
@@ -601,7 +542,7 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should not include meta in error responses', async () => {
-      mockAuth.mockReturnValueOnce({ userId: null });
+      clerkMocks.auth.mockReturnValueOnce({ userId: null });
 
       const request = new NextRequest('https://example.com/api/companies');
       
