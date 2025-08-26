@@ -263,7 +263,7 @@ export function InteractiveChart({
               stroke={chartConfig.colors![0]}
               strokeWidth={2}
               dot={{ r: 4 }}
-              activeDot={{ r: 6, onClick: onDataPointClick }}
+              activeDot={{ r: 6, onClick: onDataPointClick as any }}
               animationDuration={chartConfig.animated ? 1000 : 0}
             />
             {chartConfig.showBrush && <Brush dataKey="date" height={30} />}
