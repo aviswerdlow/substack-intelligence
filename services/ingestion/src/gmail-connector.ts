@@ -487,13 +487,13 @@ export class GmailConnector {
       }, {} as Record<string, number>);
       
       const sortedNewsletters = Object.entries(newsletterCounts)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count)
+        .map(([name, count]) => ({ name, count: count as number }))
+        .sort((a, b) => (b.count as number) - (a.count as number))
         .slice(0, 10);
       
       const stats = {
-        totalEmails: totalResult.count || 0,
-        recentEmails: recentResult.count || 0,
+        totalEmails: Number(totalResult.count) || 0,
+        recentEmails: Number(recentResult.count) || 0,
         topNewsletters: sortedNewsletters
       };
       

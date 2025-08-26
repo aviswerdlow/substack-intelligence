@@ -163,8 +163,6 @@ export class HTMLParser {
   private async parseWithCheerio(html: string, config: ParseOptions): Promise<ParseResult> {
     try {
       const $ = cheerio.load(html, {
-        withDomLvl1: true,
-        normalizeWhitespace: !config.preserveWhitespace,
         xmlMode: false,
         decodeEntities: true
       });

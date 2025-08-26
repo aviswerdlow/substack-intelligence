@@ -12,8 +12,11 @@
     "@substack-intelligence/database": "workspace:*",
     "@substack-intelligence/shared": "workspace:*",
     "@supabase/supabase-js": "^2.38.4",
+    "@types/jsdom": "^21.1.7",
     "cheerio": "1.0.0-rc.12",
+    "google-auth-library": "^10.3.0",
     "googleapis": "^126.0.1",
+    "jsdom": "^26.1.0",
     "p-map": "^7.0.1",
     "zod": "^3.22.4"
   },
