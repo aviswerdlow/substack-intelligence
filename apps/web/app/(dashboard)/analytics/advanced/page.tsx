@@ -292,6 +292,7 @@ export default function AdvancedAnalyticsPage() {
                 title=""
                 data={companyData.map(c => ({
                   date: c.name,
+                  value: c.mentions,
                   mentions: c.mentions,
                   sentiment: c.sentiment * 100,
                   growth: c.growth
