@@ -171,8 +171,8 @@ export async function GET(
         React.createElement(ReportPDFTemplate, { data: reportData }) as any
       );
 
-      // Return PDF as response
-      return new NextResponse(pdfBuffer, {
+      // Return PDF as response (convert Buffer to Uint8Array for NextResponse)
+      return new NextResponse(pdfBuffer as any, {
         headers: {
           'Content-Type': 'application/pdf',
           'Content-Disposition': `inline; filename="report-${reportId}.pdf"`,
@@ -195,10 +195,10 @@ export async function GET(
     };
 
     const pdfBuffer = await renderToBuffer(
-      React.createElement(ReportPDFTemplate, { data: reportData })
+      React.createElement(ReportPDFTemplate, { data: reportData }) as any
     );
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBuffer as any, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="report-${reportId}.pdf"`,
