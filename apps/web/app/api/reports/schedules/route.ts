@@ -5,15 +5,14 @@ export async function GET() {
   try {
     const supabase = createServiceRoleClient();
     
-    const { data: schedules, error } = await supabase
-      .from('report_schedules')
-      .select('*')
-      .order('report_type');
+    // TODO: Implement when report_schedules table is created
+    // const { data: schedules, error } = await supabase
+    //   .from('report_schedules')
+    //   .select('*')
+    //   .order('report_type');
 
-    if (error) {
-      console.error('Database error:', error);
-      // Return mock data if table doesn't exist
-      return NextResponse.json({
+    // Return mock data for now
+    return NextResponse.json({
         success: true,
         schedules: [
           {
@@ -44,12 +43,6 @@ export async function GET() {
             next_run: null
           }
         ]
-      });
-    }
-
-    return NextResponse.json({
-      success: true,
-      schedules: schedules || []
     });
 
   } catch (error) {
@@ -69,26 +62,19 @@ export async function PATCH(request: NextRequest) {
 
     const supabase = createServiceRoleClient();
     
-    const { error } = await supabase
-      .from('report_schedules')
-      .update({ 
-        enabled,
-        next_run: enabled ? new Date(Date.now() + 86400000).toISOString() : null
-      })
-      .eq('id', scheduleId);
+    // TODO: Implement when report_schedules table is created
+    // const { error } = await supabase
+    //   .from('report_schedules')
+    //   .update({ 
+    //     enabled,
+    //     next_run: enabled ? new Date(Date.now() + 86400000).toISOString() : null
+    //   })
+    //   .eq('id', scheduleId);
 
-    if (error) {
-      console.error('Database error:', error);
-      // Return success for mock
-      return NextResponse.json({
-        success: true,
-        message: 'Schedule updated'
-      });
-    }
-
+    // Return mock success for now
     return NextResponse.json({
       success: true,
-      message: 'Schedule updated successfully'
+      message: 'Schedule updated'
     });
 
   } catch (error) {

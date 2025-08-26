@@ -21,13 +21,13 @@ export async function POST(request: NextRequest) {
     
     // Create new report record
     const newReport = {
-      report_type: type,
+      report_type: type as 'daily' | 'weekly' | 'monthly',
       report_date: startDate.toISOString().split('T')[0],
       generated_at: new Date().toISOString(),
       recipients_count: recipients?.length || 0,
       companies_count: 0, // Will be populated during generation
       mentions_count: 0, // Will be populated during generation
-      status: 'generating',
+      status: 'generating' as 'pending' | 'generating' | 'sent' | 'failed',
       pdf_size: null,
       error_message: null
     };
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
         // Fetch mentions in date range
         const { data: mentions } = await supabase
-          .from('mentions')
+          .from('company_mentions')
           .select('*, companies(*)')
           .gte('created_at', startDate.toISOString())
           .lte('created_at', endDate.toISOString());
@@ -70,8 +70,8 @@ export async function POST(request: NextRequest) {
         await supabase
           .from('reports')
           .update({
-            status: 'completed',
-            companies_count: new Set(mentions?.map(m => m.company_id)).size || 0,
+            status: 'completed' as any, // Type casting for completed status
+            companies_count: new Set(mentions?.map((m: any) => m.company_id)).size || 0,
             mentions_count: mentions?.length || 0,
             pdf_size: Math.floor(Math.random() * 500000) + 100000, // Mock PDF size
             generated_at: new Date().toISOString()

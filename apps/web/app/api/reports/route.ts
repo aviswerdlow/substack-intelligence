@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     // Apply filters
     if (type !== 'all') {
-      query = query.eq('report_type', type);
+      query = query.eq('report_type', type as 'daily' | 'weekly' | 'monthly');
     }
 
     if (days !== 'all') {
