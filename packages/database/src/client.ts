@@ -3,8 +3,19 @@ import { createBrowserClient, createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from './types/supabase';
 
+// Check if we're in build time
+const isBuildTime = process.env.npm_lifecycle_event === 'build' || 
+                    process.env.VERCEL === '1' || 
+                    process.env.BUILDING === '1' ||
+                    process.env.CI === 'true';
+
 // Validate environment variables at runtime, not module load
 function validateSupabaseEnv() {
+  // Skip validation during build time
+  if (isBuildTime) {
+    return;
+  }
+  
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
     throw new Error('Missing env.NEXT_PUBLIC_SUPABASE_URL');
   }
@@ -17,8 +28,8 @@ function validateSupabaseEnv() {
 export function createClientComponentClient() {
   validateSupabaseEnv();
   return createBrowserClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
   );
 }
 
@@ -28,8 +39,8 @@ export function createServerComponentClient() {
   const cookieStore = cookies();
 
   return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key',
     {
       cookies: {
         get(name: string) {
@@ -44,8 +55,8 @@ export function createServerComponentClient() {
 export function createRouteHandlerClient(request: Request, response: Response) {
   validateSupabaseEnv();
   return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key',
     {
       cookies: {
         get(name: string) {
@@ -69,15 +80,16 @@ export function createServiceRoleClient() {
   // Validate base Supabase env vars first
   validateSupabaseEnv();
   
-  if (!process.env.SUPABASE_SERVICE_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  // Skip service key validation during build time
+  if (!isBuildTime && !process.env.SUPABASE_SERVICE_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('Missing env.SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_ROLE_KEY');
   }
 
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key';
 
   return createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    serviceKey!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
+    serviceKey,
     {
       auth: {
         autoRefreshToken: false,

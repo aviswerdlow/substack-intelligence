@@ -1,9 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceRoleClient } from '@substack-intelligence/database';
-import { axiomLogger } from '@/lib/monitoring/axiom';
-import { alertManager } from '@/lib/monitoring/alert-config';
+
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+// Check if we're in build time
+const isBuildTime = process.env.npm_lifecycle_event === 'build' || 
+                    process.env.VERCEL === '1' || 
+                    process.env.BUILDING === '1' ||
+                    process.env.CI === 'true';
 
 export async function GET(request: NextRequest) {
+  // Skip during build time
+  if (isBuildTime) {
+    return NextResponse.json({ 
+      message: 'Build-time execution skipped',
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  // Lazy load dependencies to avoid build-time validation
+  const { createServiceRoleClient } = await import('@substack-intelligence/database');
+  const { axiomLogger } = await import('@/lib/monitoring/axiom');
+  const { alertManager } = await import('@/lib/monitoring/alert-config');
   try {
     // Verify cron secret for security
     const authHeader = request.headers.get('authorization');
