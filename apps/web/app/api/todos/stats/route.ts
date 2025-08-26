@@ -58,28 +58,28 @@ export async function GET(request: NextRequest) {
       data: {
         stats: {
           // Core stats from database function
-          totalTodos: parseInt(stats.total_todos),
-          completedTodos: parseInt(stats.completed_todos),
-          activeTodos: parseInt(stats.active_todos),
-          overdueeTodos: parseInt(stats.overdue_todos),
-          dueToday: parseInt(stats.due_today),
-          dueThisWeek: parseInt(stats.due_this_week),
-          completionRate: parseFloat(stats.completion_rate),
+          totalTodos: parseInt((stats as any).total_todos),
+          completedTodos: parseInt((stats as any).completed_todos),
+          activeTodos: parseInt((stats as any).active_todos),
+          overdueeTodos: parseInt((stats as any).overdue_todos),
+          dueToday: parseInt((stats as any).due_today),
+          dueThisWeek: parseInt((stats as any).due_this_week),
+          completionRate: parseFloat((stats as any).completion_rate),
           
           // Calculated stats
           productivity: {
-            completionRate: parseFloat(stats.completion_rate),
-            overdueRate: stats.active_todos > 0 ? 
-              Math.round((stats.overdue_todos / stats.active_todos) * 100 * 100) / 100 : 0,
-            onTimeRate: stats.active_todos > 0 ? 
-              Math.round(((stats.active_todos - stats.overdue_todos) / stats.active_todos) * 100 * 100) / 100 : 100,
+            completionRate: parseFloat((stats as any).completion_rate),
+            overdueRate: (stats as any).active_todos > 0 ? 
+              Math.round(((stats as any).overdue_todos / (stats as any).active_todos) * 100 * 100) / 100 : 0,
+            onTimeRate: (stats as any).active_todos > 0 ? 
+              Math.round((((stats as any).active_todos - (stats as any).overdue_todos) / (stats as any).active_todos) * 100 * 100) / 100 : 100,
           },
           
           summary: {
-            todayFocus: parseInt(stats.due_today),
-            weekAhead: parseInt(stats.due_this_week),
-            needsAttention: parseInt(stats.overdue_todos),
-            inProgress: parseInt(stats.active_todos)
+            todayFocus: parseInt((stats as any).due_today),
+            weekAhead: parseInt((stats as any).due_this_week),
+            needsAttention: parseInt((stats as any).overdue_todos),
+            inProgress: parseInt((stats as any).active_todos)
           }
         },
         metadata: {

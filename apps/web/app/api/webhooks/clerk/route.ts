@@ -71,23 +71,24 @@ export async function POST(req: Request) {
       try {
         const supabase = createServiceRoleClient();
         
-        // Store the Google account info in your database
-        const { error } = await supabase
-          .from('user_settings')
-          .upsert({
-            user_id: id,
-            gmail_connected: true,
-            gmail_email: googleAccount.email_address,
-            updated_at: new Date().toISOString()
-          }, {
-            onConflict: 'user_id'
-          });
+        // TODO: Store the Google account info when user_settings table is created
+        // const { error } = await supabase
+        //   .from('user_settings')
+        //   .upsert({
+        //     user_id: id,
+        //     gmail_connected: true,
+        //     gmail_email: googleAccount.email_address,
+        //     updated_at: new Date().toISOString()
+        //   }, {
+        //     onConflict: 'user_id'
+        //   });
 
-        if (error) {
-          console.error('Failed to update user settings:', error);
-        } else {
-          console.log(`Updated Gmail connection status for user ${id}`);
-        }
+        // if (error) {
+        //   console.error('Failed to update user settings:', error);
+        // } else {
+        //   console.log(`Updated Gmail connection status for user ${id}`);
+        // }
+        console.log(`Gmail connected for user ${id}: ${googleAccount.email_address}`);
 
         // Important: To get actual Gmail API access, you'll need to:
         // 1. Use Clerk's OAuth token management
