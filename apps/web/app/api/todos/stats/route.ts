@@ -28,6 +28,24 @@ export async function GET(request: NextRequest) {
     const supabase = createServerComponentClient();
     const stats = await getTodoStats(supabase, userId);
 
+    // If no stats available, return zeros
+    if (!stats) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          stats: {
+            totalTodos: 0,
+            completedTodos: 0,
+            activeTodos: 0,
+            overdueeTodos: 0,
+            dueToday: 0,
+            dueThisWeek: 0,
+            completionRate: 0,
+          }
+        }
+      });
+    }
+
     // Calculate additional statistics
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
