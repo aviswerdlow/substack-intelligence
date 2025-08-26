@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       .from('emails')
       .delete()
       .lt('received_at', oneYearAgo.toISOString())
-      .select('*', { count: 'exact', head: true });
+      .select();
     
     cleanupResults.oldEmails = deletedEmails || 0;
 
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
         FROM company_mentions 
         WHERE created_at > '${sixMonthsAgo.toISOString()}'
       )`)
-      .select('*', { count: 'exact', head: true });
+      .select();
     
     cleanupResults.orphanedCompanies = deletedCompanies || 0;
 
@@ -70,9 +70,7 @@ export async function GET(request: NextRequest) {
       .delete()
       .lt('created_at', twoYearsAgo.toISOString());
 
-    // 4. Update statistics
-    const { data: stats } = await supabase
-      .rpc('update_database_stats');
+    // 4. Update statistics (removed RPC call - not implemented)
 
     // Log cleanup results
     await axiomLogger.log('cron-jobs', 'cleanup_completed', {
