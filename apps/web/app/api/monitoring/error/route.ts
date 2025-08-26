@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { axiomLogger } from '@/lib/monitoring/axiom';
-import { ServerErrorHandler } from '@/lib/monitoring/server-error-handler';
 import { z } from 'zod';
+
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+// Check if we're in build time
+const isBuildTime = process.env.npm_lifecycle_event === 'build' || 
+                    process.env.VERCEL === '1' || 
+                    process.env.BUILDING === '1' ||
+                    process.env.CI === 'true';
 
 const ErrorReportSchema = z.object({
   type: z.string(),
@@ -19,6 +27,18 @@ const ErrorReportSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  // Skip during build time
+  if (isBuildTime) {
+    return NextResponse.json({ 
+      message: 'Build-time execution skipped',
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  // Lazy load dependencies to avoid build-time validation
+  const { axiomLogger } = await import('@/lib/monitoring/axiom');
+  const { ServerErrorHandler } = await import('@/lib/monitoring/server-error-handler');
+  
   try {
     const body = await request.json();
     const errorData = ErrorReportSchema.parse(body);

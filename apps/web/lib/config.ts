@@ -1,10 +1,11 @@
 import { z } from 'zod';
 
 // Check if we're in build time - be more lenient with validation
+// During Vercel build, VERCEL_ENV is set but we're still building
 const isBuildTime = process.env.npm_lifecycle_event === 'build' || 
-                    process.env.VERCEL === '1' || 
                     process.env.BUILDING === '1' ||
-                    process.env.CI === 'true';
+                    process.env.CI === 'true' ||
+                    (process.env.VERCEL === '1' && !process.env.NEXT_PUBLIC_APP_URL?.startsWith('http://localhost'));
 
 // Environment validation schema
 const envSchema = z.object({
@@ -71,32 +72,42 @@ const envSchema = z.object({
 
 // Validate environment variables
 function validateEnv() {
+  // During build, skip validation entirely and return placeholder config
+  if (isBuildTime) {
+    console.warn(`⚠️ Build time detected - using placeholder environment configuration`);
+    return {
+      NODE_ENV: process.env.NODE_ENV || 'production',
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || 'https://placeholder.vercel.app',
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key',
+      SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key',
+      NEXT_PUBLIC_SUPABASE_PROJECT_ID: process.env.NEXT_PUBLIC_SUPABASE_PROJECT_ID,
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_placeholder',
+      CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY || 'sk_test_placeholder',
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in',
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL || '/sign-up',
+      NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL || '/dashboard',
+      NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL || '/dashboard',
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || 'placeholder-api-key',
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || 'placeholder-client-id',
+      GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || 'placeholder-client-secret',
+      GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN || 'placeholder-refresh-token',
+      RESEND_API_KEY: process.env.RESEND_API_KEY,
+      UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+      UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
+      AXIOM_TOKEN: process.env.AXIOM_TOKEN,
+      AXIOM_ORG_ID: process.env.AXIOM_ORG_ID,
+      INNGEST_EVENT_KEY: process.env.INNGEST_EVENT_KEY,
+      INNGEST_SIGNING_KEY: process.env.INNGEST_SIGNING_KEY
+    };
+  }
+  
   try {
     return envSchema.parse(process.env);
   } catch (error) {
     if (error instanceof z.ZodError) {
       const missingVars = error.errors.map(err => err.path.join('.')).join(', ');
-      
-      // During build, log warning but don't fail
-      if (isBuildTime) {
-        console.warn(`⚠️ Build time environment validation: Some variables are using placeholders`);
-        console.warn(`   This is normal during build. Real values will be validated at runtime.`);
-        // Return a valid config with placeholder values during build
-        return envSchema.parse({
-          ...process.env,
-          // Ensure all required fields have at least placeholder values
-          NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key',
-          SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY || 'placeholder-service-key',
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_placeholder',
-          CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY || 'sk_test_placeholder',
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || 'placeholder-api-key',
-          GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || 'placeholder-client-id',
-          GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || 'placeholder-client-secret',
-          GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN || 'placeholder-refresh-token',
-        });
-      }
-      
       throw new Error(`Missing or invalid environment variables: ${missingVars}`);
     }
     throw error;
