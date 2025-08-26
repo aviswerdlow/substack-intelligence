@@ -206,6 +206,102 @@ export interface Database {
         }
         Relationships: []
       }
+      report_history: {
+        Row: {
+          id: string
+          report_type: 'daily' | 'weekly' | 'monthly'
+          report_date: string
+          generated_at: string
+          recipients_count: number
+          companies_count: number
+          mentions_count: number
+          email_id: string | null
+          pdf_size: number | null
+          status: 'pending' | 'generating' | 'sent' | 'failed'
+          error_message: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          report_type: 'daily' | 'weekly' | 'monthly'
+          report_date: string
+          generated_at?: string
+          recipients_count?: number
+          companies_count?: number
+          mentions_count?: number
+          email_id?: string | null
+          pdf_size?: number | null
+          status?: 'pending' | 'generating' | 'sent' | 'failed'
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          report_type?: 'daily' | 'weekly' | 'monthly'
+          report_date?: string
+          generated_at?: string
+          recipients_count?: number
+          companies_count?: number
+          mentions_count?: number
+          email_id?: string | null
+          pdf_size?: number | null
+          status?: 'pending' | 'generating' | 'sent' | 'failed'
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      reports: {
+        Row: {
+          id: string
+          report_type: 'daily' | 'weekly' | 'monthly'
+          report_date: string
+          generated_at: string
+          recipients_count: number
+          companies_count: number
+          mentions_count: number
+          email_id: string | null
+          pdf_size: number | null
+          status: 'pending' | 'generating' | 'sent' | 'failed'
+          error_message: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          report_type: 'daily' | 'weekly' | 'monthly'
+          report_date: string
+          generated_at?: string
+          recipients_count?: number
+          companies_count?: number
+          mentions_count?: number
+          email_id?: string | null
+          pdf_size?: number | null
+          status?: 'pending' | 'generating' | 'sent' | 'failed'
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          report_type?: 'daily' | 'weekly' | 'monthly'
+          report_date?: string
+          generated_at?: string
+          recipients_count?: number
+          companies_count?: number
+          mentions_count?: number
+          email_id?: string | null
+          pdf_size?: number | null
+          status?: 'pending' | 'generating' | 'sent' | 'failed'
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       daily_intelligence: {
