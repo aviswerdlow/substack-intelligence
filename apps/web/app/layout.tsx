@@ -20,7 +20,17 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
+  metadataBase: (() => {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    // Ensure URL has protocol
+    const urlWithProtocol = appUrl.startsWith('http') ? appUrl : `https://${appUrl}`;
+    try {
+      return new URL(urlWithProtocol);
+    } catch {
+      // Fallback to localhost if URL is invalid
+      return new URL('http://localhost:3000');
+    }
+  })(),
   openGraph: {
     title: 'Substack Intelligence',
     description: 'AI-powered venture intelligence platform for consumer VC deal sourcing',
