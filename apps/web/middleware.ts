@@ -47,7 +47,7 @@ function applySecurityPolicies(request: NextRequest): NextResponse | null {
   const vercelEnv = process.env.VERCEL_ENV;
   
   // CRITICAL: Block debug mode in production
-  if ((isProduction || vercelEnv === 'production') && process.env.DEBUG === 'true') {
+  if ((isProduction || vercelEnv === 'production') && process.env.APP_DEBUG_MODE === 'true') {
     console.error('[SECURITY] DEBUG mode detected in production - BLOCKING REQUEST');
     
     // Log security incident
@@ -72,7 +72,7 @@ function applySecurityPolicies(request: NextRequest): NextResponse | null {
   }
   
   // For staging environment, check if debug mode should auto-disable
-  if (vercelEnv === 'preview' && process.env.DEBUG === 'true') {
+  if (vercelEnv === 'preview' && process.env.APP_DEBUG_MODE === 'true') {
     checkDebugModeTimeout();
   }
   
@@ -83,7 +83,7 @@ function applySecurityPolicies(request: NextRequest): NextResponse | null {
  * Check if debug mode should be auto-disabled in staging (1-hour timeout)
  */
 function checkDebugModeTimeout() {
-  const debugEnabledAt = process.env.DEBUG_ENABLED_AT;
+  const debugEnabledAt = process.env.APP_DEBUG_MODE_ENABLED_AT;
   if (debugEnabledAt) {
     const enabledTime = new Date(debugEnabledAt).getTime();
     const currentTime = new Date().getTime();

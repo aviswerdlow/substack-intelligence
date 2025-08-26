@@ -336,8 +336,8 @@ export function performRuntimeSecurityChecks(): {
   const isProduction = process.env.NODE_ENV === 'production';
   checks.push({
     name: 'Environment Isolation',
-    passed: !isProduction || !process.env.DEBUG,
-    message: !isProduction || !process.env.DEBUG ? 'Debug mode is properly configured' : 'Debug mode should be disabled in production'
+    passed: !isProduction || !process.env.APP_DEBUG_MODE,
+    message: !isProduction || !process.env.APP_DEBUG_MODE ? 'Debug mode is properly configured' : 'Debug mode should be disabled in production'
   });
   
   // Check for sensitive env vars in client bundle

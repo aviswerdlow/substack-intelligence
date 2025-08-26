@@ -8,8 +8,8 @@ const nextConfig = {
     '@substack-intelligence/shared'
   ],
   env: {
-    // SECURITY: Force DEBUG=false in production builds
-    DEBUG: process.env.NODE_ENV === 'production' ? 'false' : process.env.DEBUG || 'false'
+    // SECURITY: Force APP_DEBUG_MODE=false in production builds
+    APP_DEBUG_MODE: process.env.NODE_ENV === 'production' ? 'false' : process.env.APP_DEBUG_MODE || 'false'
   },
   webpack: (config, { isServer, dev }) => {
     // Additional security: Strip debug code in production builds

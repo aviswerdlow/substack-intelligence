@@ -246,7 +246,7 @@ async function validateRuntimeConfiguration() {
       name: 'Environment Isolation',
       check: () => {
         const isProduction = process.env.NODE_ENV === 'production';
-        const hasDebug = process.env.DEBUG === 'true';
+        const hasDebug = process.env.APP_DEBUG_MODE === 'true';
         const passed = !isProduction || !hasDebug;
         return {
           passed,

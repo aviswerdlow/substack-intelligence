@@ -280,7 +280,7 @@ async function checkApplicationHealth(): Promise<SystemHealthCheck> {
 
     // Check if debug mode is enabled in production
     const isProduction = process.env.NODE_ENV === 'production';
-    const debugEnabled = process.env.DEBUG === 'true';
+    const debugEnabled = process.env.APP_DEBUG_MODE === 'true';
     
     if (isProduction && debugEnabled) {
       return {
