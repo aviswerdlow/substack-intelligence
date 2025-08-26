@@ -9,7 +9,7 @@ CREATE TABLE report_history (
   mentions_count INTEGER DEFAULT 0,
   email_id TEXT,
   pdf_size INTEGER,
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'generating', 'sent', 'failed', 'completed')),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'generating', 'sent', 'failed')),
   error_message TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

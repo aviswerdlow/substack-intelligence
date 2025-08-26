@@ -217,7 +217,7 @@ export interface Database {
           mentions_count: number
           email_id: string | null
           pdf_size: number | null
-          status: 'pending' | 'generating' | 'sent' | 'failed' | 'completed'
+          status: 'pending' | 'generating' | 'sent' | 'failed'
           error_message: string | null
           created_at: string
           updated_at: string
@@ -265,7 +265,7 @@ export interface Database {
           mentions_count: number
           email_id: string | null
           pdf_size: number | null
-          status: 'pending' | 'generating' | 'sent' | 'failed' | 'completed'
+          status: 'pending' | 'generating' | 'sent' | 'failed'
           error_message: string | null
           created_at: string
           updated_at: string

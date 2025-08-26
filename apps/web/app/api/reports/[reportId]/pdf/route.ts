@@ -23,10 +23,10 @@ export async function GET(
       // Generate mock report for demo purposes
       const mockReport = {
         id: reportId,
-        report_type: 'weekly' as 'weekly' | 'daily',
+        report_type: 'weekly' as 'daily' | 'weekly' | 'monthly',
         report_date: new Date().toISOString(),
         generated_at: new Date().toISOString(),
-        status: 'completed',
+        status: 'sent',
       };
       
       // Fetch real intelligence data for the report

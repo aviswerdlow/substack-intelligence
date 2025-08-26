@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
         await supabase
           .from('reports')
           .update({
-            status: 'completed' as any, // Type casting for completed status
+            status: 'sent' as 'pending' | 'generating' | 'sent' | 'failed', // Use 'sent' to indicate completion
             companies_count: new Set(mentions?.map((m: any) => m.company_id)).size || 0,
             mentions_count: mentions?.length || 0,
             pdf_size: Math.floor(Math.random() * 500000) + 100000, // Mock PDF size
