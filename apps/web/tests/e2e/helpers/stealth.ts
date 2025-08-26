@@ -26,12 +26,12 @@ export async function applyStealthMode(page: Page) {
     const originalQuery = window.navigator.permissions.query;
     window.navigator.permissions.query = (parameters) => (
       parameters.name === 'notifications' ?
-        Promise.resolve({ state: Notification.permission }) :
+        Promise.resolve({ state: Notification.permission } as PermissionStatus) :
         originalQuery(parameters)
     );
 
     // Override chrome runtime
-    window.chrome = {
+    (window as any).chrome = {
       runtime: {},
       // Add other chrome properties as needed
     };

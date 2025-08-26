@@ -140,7 +140,7 @@ export async function checkRateLimit(
     return {
       success: result.success,
       remaining: result.remaining,
-      reset: result.reset,
+      reset: new Date(result.reset),
       limit: result.limit
     };
   } catch (error) {
@@ -247,7 +247,7 @@ export class BurstProtection {
     if (!this.burstLimits.has(key)) {
       this.burstLimits.set(key, new Ratelimit({
         redis,
-        limiter: Ratelimit.fixedWindow(limit, window),
+        limiter: Ratelimit.fixedWindow(limit, window as any),
         prefix: `burst:${key}`
       }));
     }

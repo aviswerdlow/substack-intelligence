@@ -60,14 +60,15 @@ export interface SecurityContext {
 // Enhanced authentication context
 export async function getSecurityContext(request: NextRequest): Promise<SecurityContext | null> {
   try {
-    const { userId, sessionId, orgId } = auth();
+    const { userId, sessionId, orgId } = await auth();
     
     if (!userId || !sessionId) {
       return null;
     }
 
     // Get user details from Clerk
-    const user = await clerkClient.users.getUser(userId);
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
     
     if (!user) {
       return null;
@@ -75,7 +76,7 @@ export async function getSecurityContext(request: NextRequest): Promise<Security
 
     // Extract role from user metadata or organization membership
     const role = await getUserRole(userId, orgId);
-    const permissions = ROLE_PERMISSIONS[role] || [];
+    const permissions = [...(ROLE_PERMISSIONS[role] || [])];
     
     // Get client information
     const forwardedFor = request.headers.get('x-forwarded-for');
@@ -104,7 +105,8 @@ export async function getUserRole(userId: string, orgId?: string): Promise<UserR
   try {
     if (orgId) {
       // Get role from organization membership
-      const orgMemberships = await clerkClient.organizations.getOrganizationMembershipList({
+      const client = await clerkClient();
+      const orgMemberships = await client.organizations.getOrganizationMembershipList({
         organizationId: orgId,
         limit: 100
       });
@@ -119,7 +121,8 @@ export async function getUserRole(userId: string, orgId?: string): Promise<UserR
     }
     
     // Get role from user metadata
-    const user = await clerkClient.users.getUser(userId);
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
     const role = user.publicMetadata?.role as UserRole;
     
     return role || 'viewer'; // Default to viewer

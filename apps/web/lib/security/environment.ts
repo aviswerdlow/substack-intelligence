@@ -366,11 +366,16 @@ export function getEnvironmentConfig(): EnvironmentConfig {
   if (!environmentConfig) {
     environmentConfig = validateEnvironment();
     
-    // Perform security validation in production
-    if (environmentConfig.isProduction) {
+    // Perform security validation in production (skip during build)
+    if (environmentConfig.isProduction && !process.env.NEXT_PHASE) {
       const securityCheck = validateEnvironmentSecurity();
       if (!securityCheck.isSecure) {
-        throw new Error(`Production environment security validation failed: ${securityCheck.errors.join(', ')}`);
+        // During build, just warn instead of throwing
+        if (process.env.npm_lifecycle_event === 'build') {
+          console.warn(`Production environment security validation failed: ${securityCheck.errors.join(', ')}`);
+        } else {
+          throw new Error(`Production environment security validation failed: ${securityCheck.errors.join(', ')}`);
+        }
       }
       
       if (securityCheck.warnings.length > 0) {

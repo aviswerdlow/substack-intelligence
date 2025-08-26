@@ -221,7 +221,14 @@ const tourSteps: Step[] = [
 ];
 
 // Achievement system
-const achievements = [
+interface Achievement {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+}
+
+const achievements: Achievement[] = [
   { id: 'first-save', name: 'First Save', icon: '💾', description: 'Save your first setting' },
   { id: 'api-connected', name: 'API Connected', icon: '🔗', description: 'Connect an AI provider' },
   { id: 'company-added', name: 'Tracker Set', icon: '📊', description: 'Add your first company' },
@@ -267,7 +274,7 @@ export function SettingsOnboardingTour({
   const handleJoyrideCallback = (data: CallBackProps) => {
     const { status, action, index, type } = data;
     
-    if ([STATUS.FINISHED, STATUS.SKIPPED].includes(status)) {
+    if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
       setRun(false);
       setTourCompleted(true);
       Cookies.set('settings-tour-completed', 'true', { expires: 365 });
@@ -444,7 +451,7 @@ function AchievementGallery({
   achievements,
   unlockedAchievements,
 }: {
-  achievements: typeof achievements;
+  achievements: Achievement[];
   unlockedAchievements: string[];
 }) {
   const [showGallery, setShowGallery] = useState(false);

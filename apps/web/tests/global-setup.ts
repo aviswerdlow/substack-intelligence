@@ -23,7 +23,8 @@ async function setupTestDatabase() {
     if (process.env.SUPABASE_PROJECT_ID?.includes('test') || process.env.NODE_ENV === 'test') {
       await supabase.from('emails').delete().like('sender_email', '%test%');
       await supabase.from('companies').delete().like('name', '%test%');
-      await supabase.from('user_settings').delete().like('user_id', '%test%');
+      // TODO: Add user_settings table to database
+      // await supabase.from('user_settings').delete().like('user_id', '%test%');
       console.log('Test database cleaned');
     }
   }

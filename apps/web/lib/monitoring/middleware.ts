@@ -8,7 +8,7 @@ export function withApiLogging(
 ) {
   return async (req: NextRequest): Promise<NextResponse> => {
     const start = Date.now();
-    const { userId } = auth();
+    const { userId } = await auth();
     
     // Extract request info
     const method = req.method;

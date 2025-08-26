@@ -402,14 +402,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Methods
   const setSettings = useCallback((newSettings: Settings | ((prev: Settings) => Settings)) => {
     if (typeof newSettings === 'function') {
-      setSettingsState((prev) => {
-        const currentSettings = prev?.present || getDefaultSettings();
-        return newSettings(currentSettings);
-      });
+      // When using a function updater, we need to get the current value from the state
+      const currentSettings = settingsState?.present || getDefaultSettings();
+      const updatedSettings = newSettings(currentSettings);
+      setSettingsState(updatedSettings);
     } else {
       setSettingsState(newSettings);
     }
-  }, [setSettingsState]);
+  }, [setSettingsState, settingsState]);
   
   const setTabState = useCallback((tab: string, state: TabState) => {
     setTabStates(prev => ({ ...prev, [tab]: state }));
@@ -622,7 +622,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         return;
       }
       
-      setSettings(validationResult.data!);
+      // Deep merge imported settings with defaults to ensure all properties exist
+      const defaults = getDefaultSettings();
+      const importedData = validationResult.data as any;
+      const mergedSettings: Settings = {
+        account: { ...defaults.account, ...(importedData?.account || {}) },
+        newsletters: { ...defaults.newsletters, ...(importedData?.newsletters || {}) },
+        companies: { ...defaults.companies, ...(importedData?.companies || {}) },
+        ai: { ...defaults.ai, ...(importedData?.ai || {}) },
+        email: { ...defaults.email, ...(importedData?.email || {}) },
+        reports: { ...defaults.reports, ...(importedData?.reports || {}) },
+        notifications: { ...defaults.notifications, ...(importedData?.notifications || {}) },
+        api: { ...defaults.api, ...(importedData?.api || {}) },
+        privacy: { ...defaults.privacy, ...(importedData?.privacy || {}) },
+        appearance: { ...defaults.appearance, ...(importedData?.appearance || {}) },
+      };
+      setSettings(mergedSettings);
       
       toast({
         title: 'Settings imported',

@@ -127,7 +127,7 @@ class PipelineMonitor {
   }
 
   setMetric(metric: keyof PipelineMetrics, value: any) {
-    this.metrics[metric] = value;
+    (this.metrics as any)[metric] = value;
   }
 
   // Gmail API tracking

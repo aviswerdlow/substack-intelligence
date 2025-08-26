@@ -98,7 +98,7 @@ export async function performHealthChecks(): Promise<SystemHealthCheck[]> {
   const totalCount = checks.length;
   
   await axiomLogger.logHealthCheck('system', 
-    healthyCount === totalCount ? 'healthy' : 'degraded',
+    healthyCount === totalCount ? 'healthy' : 'unhealthy',
     {
       totalChecks: totalCount,
       healthyChecks: healthyCount,

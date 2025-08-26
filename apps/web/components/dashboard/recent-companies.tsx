@@ -15,7 +15,7 @@ interface Company {
   industry?: string;
   funding_status?: string;
   total_funding?: number;
-  sentiment?: string;
+  sentiment?: 'positive' | 'negative' | 'neutral';
   confidence_score?: number;
   mentioned_at?: string;
   newsletter_name?: string;

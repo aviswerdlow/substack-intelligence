@@ -100,7 +100,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
     const key = await crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
-        salt: salt,
+        salt: salt as unknown as ArrayBuffer,
         iterations: PBKDF2_ITERATIONS,
         hash: 'SHA-256'
       },
@@ -192,7 +192,7 @@ export async function encryptSettings(
     const encryptedBuffer = await crypto.subtle.encrypt(
       {
         name: ALGORITHM,
-        iv: iv,
+        iv: iv as unknown as ArrayBuffer,
         tagLength: TAG_LENGTH * 8 // Convert bytes to bits
       },
       key,
@@ -206,10 +206,10 @@ export async function encryptSettings(
     
     // Convert to base64 for storage
     return {
-      encryptedData: btoa(String.fromCharCode(...encryptedData)),
-      salt: btoa(String.fromCharCode(...salt)),
-      iv: btoa(String.fromCharCode(...iv)),
-      tag: btoa(String.fromCharCode(...tag))
+      encryptedData: btoa(String.fromCharCode.apply(null, Array.from(encryptedData))),
+      salt: btoa(String.fromCharCode.apply(null, Array.from(salt))),
+      iv: btoa(String.fromCharCode.apply(null, Array.from(iv))),
+      tag: btoa(String.fromCharCode.apply(null, Array.from(tag)))
     };
     
   } catch (error) {
@@ -254,11 +254,11 @@ export async function decryptSettings(
     const decryptedBuffer = await crypto.subtle.decrypt(
       {
         name: ALGORITHM,
-        iv: iv,
+        iv: iv as unknown as ArrayBuffer,
         tagLength: TAG_LENGTH * 8 // Convert bytes to bits
       },
       key,
-      ciphertext
+      ciphertext as unknown as ArrayBuffer
     );
     
     // Convert back to string and parse JSON

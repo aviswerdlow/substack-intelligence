@@ -37,7 +37,7 @@ export async function withSecurity(
     const rateLimitResponse = await withRateLimit(request, options.rateLimitEndpoint);
     if (rateLimitResponse) {
       await logSecurityEvent('rate_limit_exceeded', request);
-      return { response: rateLimitResponse };
+      return { response: rateLimitResponse as NextResponse };
     }
 
     // 3. IP blocking and geolocation checks

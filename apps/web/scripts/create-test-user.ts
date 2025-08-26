@@ -26,7 +26,8 @@ async function createTestUser() {
     console.log('🔍 Checking if test user already exists...');
     
     // Check if user already exists
-    const existingUsers = await clerkClient.users.getUserList({
+    const client = await clerkClient();
+    const existingUsers = await client.users.getUserList({
       emailAddress: [TEST_USER.email],
     });
 
@@ -39,7 +40,7 @@ async function createTestUser() {
     console.log('📝 Creating new test user...');
     
     // Create the test user
-    const user = await clerkClient.users.createUser({
+    const user = await client.users.createUser({
       emailAddress: [TEST_USER.email],
       password: TEST_USER.password,
       firstName: TEST_USER.firstName,

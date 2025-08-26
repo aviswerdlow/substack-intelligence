@@ -150,8 +150,9 @@ export function validateEnvironment(): EnvValidationResult {
       
       // Check alternates if primary is missing
       let actualValue = value;
-      if (!value && config.alternates) {
-        for (const alt of config.alternates) {
+      if (!value && 'alternates' in config && config.alternates) {
+        const alternates = (config as any).alternates as string[];
+        for (const alt of alternates) {
           if (process.env[alt]) {
             actualValue = process.env[alt];
             break;

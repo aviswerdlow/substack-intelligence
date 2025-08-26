@@ -52,11 +52,11 @@ class MemoryCache {
   cleanup(): void {
     const now = Date.now();
     
-    for (const [key, entry] of this.cache.entries()) {
+    Array.from(this.cache.entries()).forEach(([key, entry]) => {
       if (now - entry.timestamp > entry.ttl) {
         this.cache.delete(key);
       }
-    }
+    });
   }
   
   // Get cache statistics
@@ -68,11 +68,11 @@ class MemoryCache {
     const now = Date.now();
     let expired = 0;
     
-    for (const entry of this.cache.values()) {
+    Array.from(this.cache.values()).forEach(entry => {
       if (now - entry.timestamp > entry.ttl) {
         expired++;
       }
-    }
+    });
     
     return {
       size: this.cache.size,

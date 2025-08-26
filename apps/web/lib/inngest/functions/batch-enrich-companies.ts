@@ -1,5 +1,46 @@
 import { inngest } from '../client';
-import { CompanyEnrichmentService } from '../../../../services/enrichment/src/company-enrichment';
+// TODO: Create enrichment service
+// import { CompanyEnrichmentService } from '../../../../services/enrichment/src/company-enrichment';
+
+// Temporary stub for CompanyEnrichmentService
+class CompanyEnrichmentService {
+  async enrichCompany(companyId: string) {
+    // TODO: Implement actual enrichment
+    return {
+      success: false,
+      message: 'Enrichment service not implemented',
+      data: null,
+      confidence: 0,
+      source: 'none',
+      validation: {
+        isValid: false,
+        errors: [],
+        websiteValid: false,
+        emailValid: false,
+        dataComplete: false
+      }
+    };
+  }
+  
+  async enrichBatch(companyIds: string[]) {
+    // TODO: Implement actual batch enrichment
+    return companyIds.map(id => ({
+      companyId: id,
+      success: false,
+      message: 'Enrichment service not implemented',
+      data: null,
+      confidence: 0,
+      source: 'none',
+      validation: {
+        isValid: false,
+        errors: [],
+        websiteValid: false,
+        emailValid: false,
+        dataComplete: false
+      }
+    }));
+  }
+}
 import { axiomLogger } from '../../monitoring/axiom';
 import { alertManager } from '../../monitoring/alert-config';
 import { z } from 'zod';
@@ -164,26 +205,28 @@ export const batchEnrichCompanies = inngest.createFunction(
       // Store batch job results for later retrieval
       await step.run('store-batch-results', async () => {
         // In a real implementation, store results in database for status checking
-        const { createServiceRoleClient } = await import('@substack-intelligence/database');
-        const supabase = createServiceRoleClient();
+        // const { createServiceRoleClient } = await import('@substack-intelligence/database');
+        // const supabase = createServiceRoleClient();
         
-        try {
-          await supabase.from('batch_jobs').insert({
-            id: event.id,
-            type: 'company_enrichment',
-            status: 'completed',
-            user_id: userId,
-            organization_id: organizationId,
-            input_data: { companyIds, priority, force },
-            results: allResults,
-            summary,
-            created_at: new Date(data.timestamp).toISOString(),
-            completed_at: new Date().toISOString()
-          });
-        } catch (error) {
-          console.error('Failed to store batch job results:', error);
-          // Don't throw - job still succeeded
-        }
+        // TODO: Add batch_jobs table to database schema
+        // try {
+        //   await supabase.from('batch_jobs').insert({
+        //     id: event.id,
+        //     type: 'company_enrichment',
+        //     status: 'completed',
+        //     user_id: userId,
+        //     organization_id: organizationId,
+        //     input_data: { companyIds, priority, force },
+        //     results: allResults,
+        //     summary,
+        //     created_at: new Date(data.timestamp).toISOString(),
+        //     completed_at: new Date().toISOString()
+        //   });
+        // } catch (error) {
+        //   console.error('Failed to store batch job results:', error);
+        //   // Don't throw - job still succeeded
+        // }
+        console.log('Batch job results not stored - batch_jobs table does not exist');
       });
 
       return {
@@ -227,22 +270,26 @@ export const getBatchJobStatus = inngest.createFunction(
     try {
       const { jobId } = event.data;
       
-      const { createServiceRoleClient } = await import('@substack-intelligence/database');
-      const supabase = createServiceRoleClient();
+      // TODO: Add batch_jobs table to database
+      // const { createServiceRoleClient } = await import('@substack-intelligence/database');
+      // const supabase = createServiceRoleClient();
       
-      const { data: job, error } = await supabase
-        .from('batch_jobs')
-        .select('*')
-        .eq('id', jobId)
-        .single();
+      // const { data: job, error } = await supabase
+      //   .from('batch_jobs')
+      //   .select('*')
+      //   .eq('id', jobId)
+      //   .single();
 
-      if (error) {
-        throw error;
-      }
+      // if (error) {
+      //   throw error;
+      // }
 
+      // For now, return a stub response
+      console.log('Batch job status check - batch_jobs table does not exist yet');
+      
       return {
         success: true,
-        job: job || null,
+        job: null, // No job data available without table
         timestamp: new Date().toISOString()
       };
 

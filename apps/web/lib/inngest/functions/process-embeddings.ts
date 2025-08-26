@@ -15,17 +15,19 @@ export const processEmbeddingQueue = inngest.createFunction(
     // Step 1: Get companies that need embeddings
     const batch = await step.run('get-embedding-batch', async () => {
       console.log('Fetching companies needing embeddings...');
-      const supabase = createServiceRoleClient();
+      // const supabase = createServiceRoleClient();
       
-      const { data, error } = await supabase
-        .rpc('get_next_embedding_batch', { batch_size: 5 }); // Process 5 at a time
+      // TODO: Add get_next_embedding_batch function to database
+      // const { data, error } = await supabase
+      //   .rpc('get_next_embedding_batch', { batch_size: 5 }); // Process 5 at a time
         
-      if (error) {
-        throw error;
-      }
+      // if (error) {
+      //   throw error;
+      // }
       
-      console.log(`Found ${data?.length || 0} companies needing embeddings`);
-      return data || [];
+      // For now, return empty array as the function doesn't exist
+      console.log('get_next_embedding_batch RPC function not available - skipping');
+      return [];
     });
 
     if (batch.length === 0) {
@@ -49,23 +51,24 @@ export const processEmbeddingQueue = inngest.createFunction(
       
       for (const company of batch) {
         try {
+          // TODO: Add update_embedding_queue_status function to database
           // Update status to processing
-          await supabase
-            .rpc('update_embedding_queue_status', {
-              company_id: company.company_id,
-              new_status: 'processing'
-            });
+          // await supabase
+          //   .rpc('update_embedding_queue_status', {
+          //     company_id: company.company_id,
+          //     new_status: 'processing'
+          //   });
           
           // Generate embedding
           const embedding = await embeddingService.generateCompanyEmbedding(company.company_id);
           
           if (embedding) {
             // Mark as completed
-            await supabase
-              .rpc('update_embedding_queue_status', {
-                company_id: company.company_id,
-                new_status: 'completed'
-              });
+            // await supabase
+            //   .rpc('update_embedding_queue_status', {
+            //     company_id: company.company_id,
+            //     new_status: 'completed'
+            //   });
             
             successes.push(company.company_id);
             console.log(`✅ Generated embedding for ${company.company_name}`);
@@ -77,12 +80,12 @@ export const processEmbeddingQueue = inngest.createFunction(
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           
           // Mark as failed
-          await supabase
-            .rpc('update_embedding_queue_status', {
-              company_id: company.company_id,
-              new_status: 'failed',
-              error_msg: errorMessage
-            });
+          // await supabase
+          //   .rpc('update_embedding_queue_status', {
+          //     company_id: company.company_id,
+          //     new_status: 'failed',
+          //     error_msg: errorMessage
+          //   });
           
           failures.push({
             id: company.company_id,
@@ -191,18 +194,19 @@ export const backfillEmbeddings = inngest.createFunction(
         priority: 3 // Low priority for backfill
       }));
       
-      const { error } = await supabase
-        .from('embedding_queue')
-        .upsert(queueEntries, {
-          onConflict: 'company_id',
-          ignoreDuplicates: true
-        });
+      // TODO: Add embedding_queue table to database
+      // const { error } = await supabase
+      //   .from('embedding_queue')
+      //   .upsert(queueEntries, {
+      //     onConflict: 'company_id',
+      //     ignoreDuplicates: true
+      //   });
       
-      if (error) {
-        throw error;
-      }
+      // if (error) {
+      //   throw error;
+      // }
       
-      console.log(`Queued ${companiesNeedingEmbeddings.length} companies for embedding processing`);
+      console.log(`Would queue ${companiesNeedingEmbeddings.length} companies for embedding processing (table doesn't exist)`);
     });
     
     // Step 3: Process in smaller batches

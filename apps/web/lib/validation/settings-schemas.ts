@@ -257,6 +257,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 export interface ValidationError {
   field: string;
   message: string;
+  severity?: 'error' | 'warning' | 'info';
   path?: (string | number)[];
 }
 
@@ -265,6 +266,7 @@ export function formatZodErrors(error: z.ZodError): ValidationError[] {
   return error.errors.map((err) => ({
     field: err.path.join('.'),
     message: err.message,
+    severity: 'error' as const,
     path: err.path,
   }));
 }

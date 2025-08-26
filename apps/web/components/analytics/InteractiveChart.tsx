@@ -281,7 +281,11 @@ export function InteractiveChart({
             <Bar 
               dataKey={chartConfig.dataKey}
               fill={chartConfig.colors![0]}
-              onClick={onDataPointClick}
+              onClick={(data: any) => {
+                if (onDataPointClick && data && data.payload) {
+                  onDataPointClick(data.payload as DataPoint);
+                }
+              }}
               animationDuration={chartConfig.animated ? 1000 : 0}
             />
           </BarChart>
@@ -301,7 +305,11 @@ export function InteractiveChart({
               stroke={chartConfig.colors![0]}
               fill={chartConfig.colors![0]}
               fillOpacity={0.3}
-              onClick={onDataPointClick}
+              onClick={(data: any) => {
+                if (onDataPointClick && data && data.payload) {
+                  onDataPointClick(data.payload as DataPoint);
+                }
+              }}
               animationDuration={chartConfig.animated ? 1000 : 0}
             />
           </AreaChart>
@@ -317,7 +325,11 @@ export function InteractiveChart({
               cx="50%"
               cy="50%"
               outerRadius={height / 3}
-              onClick={onDataPointClick}
+              onClick={(data: any) => {
+                if (onDataPointClick && data && data.payload) {
+                  onDataPointClick(data.payload as DataPoint);
+                }
+              }}
               animationDuration={chartConfig.animated ? 1000 : 0}
             >
               {processedData.map((entry, index) => (
@@ -340,7 +352,11 @@ export function InteractiveChart({
             <Scatter 
               data={processedData}
               fill={chartConfig.colors![0]}
-              onClick={onDataPointClick}
+              onClick={(data: any) => {
+                if (onDataPointClick && data && data.payload) {
+                  onDataPointClick(data.payload as DataPoint);
+                }
+              }}
               animationDuration={chartConfig.animated ? 1000 : 0}
             />
           </ScatterChart>

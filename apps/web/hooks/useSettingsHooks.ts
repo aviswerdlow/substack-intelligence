@@ -7,7 +7,8 @@ import { z } from 'zod';
 import axios from 'axios';
 import { useToast } from '@/hooks/use-toast';
 import { useSettings } from '@/contexts/SettingsContext';
-import type { Settings, ValidationError } from '@/contexts/SettingsContext';
+import type { Settings } from '@/contexts/SettingsContext';
+import type { ValidationError } from '@/lib/validation/settings-schemas';
 import { 
   encryptSettings, 
   decryptSettings, 

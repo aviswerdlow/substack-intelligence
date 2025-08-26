@@ -143,7 +143,7 @@ export function usePerformanceTracking() {
           
           if (navigation) {
             const metrics = [
-              { name: 'page_load_time', value: navigation.loadEventEnd - navigation.navigationStart },
+              { name: 'page_load_time', value: navigation.loadEventEnd - navigation.fetchStart },
               { name: 'dns_time', value: navigation.domainLookupEnd - navigation.domainLookupStart },
               { name: 'tcp_time', value: navigation.connectEnd - navigation.connectStart },
               { name: 'response_time', value: navigation.responseEnd - navigation.requestStart },

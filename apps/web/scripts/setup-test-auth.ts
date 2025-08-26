@@ -6,7 +6,7 @@
  * Usage: npm run test:auth-setup
  */
 
-import { chromium } from 'playwright';
+import { chromium } from '@playwright/test';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as fs from 'fs';

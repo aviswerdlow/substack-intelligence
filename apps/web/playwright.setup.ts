@@ -9,7 +9,8 @@ dotenv.config({ path: path.resolve(__dirname, '.env.test.local') });
 async function globalSetup(config: FullConfig) {
   console.log('\n🔐 Setting up authentication for tests...\n');
   
-  const { baseURL, use } = config.projects[0];
+  const project = config.projects[0];
+  const baseURL = (project.use as any)?.baseURL || 'http://localhost:3000';
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();

@@ -142,12 +142,12 @@ class HealthCheckCache {
     const now = Date.now();
     const keysToDelete: string[] = [];
     
-    for (const [key, value] of this.cache.entries()) {
+    Array.from(this.cache.entries()).forEach(([key, value]) => {
       const age = now - value.timestamp;
       if (age > value.ttl) {
         keysToDelete.push(key);
       }
-    }
+    });
     
     for (const key of keysToDelete) {
       this.cache.delete(key);
