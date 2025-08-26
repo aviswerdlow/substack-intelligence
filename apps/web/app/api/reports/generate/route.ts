@@ -32,11 +32,9 @@ export async function POST(request: NextRequest) {
       error_message: null
     };
 
-    const { data: report, error } = await supabase
-      .from('reports')
-      .insert(newReport)
-      .select()
-      .single();
+    // Reports table not yet implemented - using mock data
+    const report = null;
+    const error = "Reports table not implemented";
 
     if (error) {
       console.error('Database error:', error);
