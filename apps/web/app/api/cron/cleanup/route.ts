@@ -75,8 +75,7 @@ export async function GET(request: NextRequest) {
     // Log cleanup results
     await axiomLogger.log('cron-jobs', 'cleanup_completed', {
       timestamp: new Date().toISOString(),
-      results: cleanupResults,
-      stats
+      results: cleanupResults
     });
 
     // Track metrics

@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const testResults = {
+    const testResults: any = {
       timestamp: new Date().toISOString(),
       tests: []
     };
