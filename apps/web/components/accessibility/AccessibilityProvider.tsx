@@ -57,7 +57,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     }
 
     // Apply settings to document
-    applySettingsToDocument({ reduceMotion, highContrast });
+    applySettingsToDocument(settings);
   }, []);
 
   // Apply settings to document element
