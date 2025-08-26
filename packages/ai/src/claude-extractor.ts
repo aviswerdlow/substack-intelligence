@@ -5,7 +5,7 @@ import { Redis } from '@upstash/redis';
 import { ExtractionResultSchema, hashContent } from '@substack-intelligence/shared';
 
 export class ClaudeExtractor {
-  private client: Anthropic;
+  private client!: Anthropic;
   private ratelimit: Ratelimit | null = null;
   private cache: Redis | null = null;
   private maxRetries: number = 3;
@@ -209,7 +209,7 @@ export class ClaudeExtractor {
       }
       
       // Parse the response
-      const responseText = response.content[0]?.text;
+      const responseText = (response.content[0] as any)?.text;
       if (!responseText) {
         console.error('[ClaudeExtractor] ❌ Empty response from Claude');
         console.error('[ClaudeExtractor] Full response object:', JSON.stringify(response, null, 2));
