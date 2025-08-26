@@ -15,3 +15,4 @@ build/
 *.swo
 *~
 .vercel
+VERCEL_ENV_SETUP.md

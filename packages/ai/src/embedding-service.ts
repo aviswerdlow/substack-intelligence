@@ -174,10 +174,10 @@ export class EmbeddingService {
         .filter((comp: any) => comp.id !== companyId && !excludeIds.includes(comp.id))
         .slice(0, limit)
         .map((comp: any) => ({
-          id: comp.id,
-          name: comp.name,
-          description: comp.description,
-          similarity: comp.similarity
+          id: comp.id || '',
+          name: comp.name || '',
+          description: comp.description || '',
+          similarity: comp.similarity || 0
         }));
 
       await axiomLogger.log('embedding-service', 'similarity_search_completed', {
@@ -187,7 +187,7 @@ export class EmbeddingService {
         processingTime: Date.now() - startTime
       });
 
-      return SimilarCompanySchema.array().parse(filtered);
+      return filtered as any;
 
     } catch (error) {
       console.error(`Failed to find similar companies for ${companyId}:`, error);

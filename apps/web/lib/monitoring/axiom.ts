@@ -104,7 +104,7 @@ class AxiomLogger {
 
   // Security Events
   async logSecurityEvent(event: string, request?: any, data: Record<string, any> = {}) {
-    const securityData = {
+    const securityData: Record<string, any> = {
       ...data,
       component: 'security-middleware'
     };
