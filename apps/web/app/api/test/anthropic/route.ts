@@ -54,11 +54,12 @@ export async function GET() {
       });
 
       results.checks.apiCallSuccess = true;
-      results.checks.apiResponse = response.content[0]?.text || 'No response text';
+      const firstContent = response.content[0];
+      results.checks.apiResponse = (firstContent && 'text' in firstContent) ? firstContent.text : 'No response text';
       results.checks.apiUsage = response.usage;
       results.checks.apiModel = response.model;
       
-      console.log('[Test] API call successful:', response.content[0]?.text);
+      console.log('[Test] API call successful:', (firstContent && 'text' in firstContent) ? firstContent.text : 'No response');
     } catch (apiError: any) {
       console.error('[Test] API call failed:', apiError);
       results.checks.apiCallSuccess = false;
