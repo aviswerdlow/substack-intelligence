@@ -1,0 +1,49 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - heading "Get Started" [level=1] [ref=e6]
+        - paragraph [ref=e7]: Create your Substack Intelligence account
+      - generic [ref=e9]:
+        - generic [ref=e10]:
+          - generic [ref=e12]:
+            - heading "Create your account" [level=1] [ref=e13]
+            - paragraph [ref=e14]: Welcome! Please fill in the details to get started.
+          - generic [ref=e15]:
+            - button "Sign in with Google Continue with Google" [ref=e18] [cursor=pointer]:
+              - generic [ref=e19] [cursor=pointer]:
+                - img "Sign in with Google" [ref=e21] [cursor=pointer]
+                - generic [ref=e22] [cursor=pointer]: Continue with Google
+            - paragraph [ref=e25]: or
+            - generic [ref=e27]:
+              - generic [ref=e28]:
+                - generic [ref=e31]:
+                  - generic [ref=e33]: Email address
+                  - textbox "Email address" [ref=e34]
+                - generic [ref=e37]:
+                  - generic [ref=e39]: Password
+                  - generic [ref=e40]:
+                    - textbox "Password" [ref=e41]
+                    - button "Show password" [ref=e42] [cursor=pointer]:
+                      - img [ref=e43] [cursor=pointer]
+              - button "Continue" [ref=e48] [cursor=pointer]:
+                - generic [ref=e49] [cursor=pointer]:
+                  - text: Continue
+                  - img [ref=e50] [cursor=pointer]
+        - generic [ref=e52]:
+          - generic [ref=e53]:
+            - generic [ref=e54]: Already have an account?
+            - link "Sign in" [ref=e55] [cursor=pointer]:
+              - /url: http://localhost:3000/sign-in
+          - generic [ref=e57]:
+            - generic [ref=e59]:
+              - paragraph [ref=e60]: Secured by
+              - link "Clerk logo" [ref=e61] [cursor=pointer]:
+                - /url: https://go.clerk.com/components
+                - img [ref=e62] [cursor=pointer]
+            - paragraph [ref=e67]: Development mode
+  - alert [ref=e69]
+```
