@@ -61,7 +61,9 @@ export async function GET(request: NextRequest) {
       };
       
       existing.mentions++;
-      existing.totalSentiment += mention.sentiment_score || 0;
+      // Convert sentiment to numeric score if needed
+      const sentimentValue = mention.confidence || 0.5; // Use confidence as sentiment score
+      existing.totalSentiment += sentimentValue;
       
       // Note: We'd need to fetch emails separately to get newsletter names
       // For now, we'll skip the newsletter aggregation

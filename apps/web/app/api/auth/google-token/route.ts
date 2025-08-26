@@ -34,7 +34,7 @@ export async function GET() {
         return NextResponse.json({
           success: true,
           hasGmailAccess: true,
-          email: token.external_account_id,
+          email: token.externalAccountId,
           // Don't send the actual token to the client
           // Instead, store it server-side and use it for API calls
         });

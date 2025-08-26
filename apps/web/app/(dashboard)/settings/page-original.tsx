@@ -284,7 +284,7 @@ export default function SettingsPage() {
   const updateSettings = (updater: (prev: Settings) => Settings, tab?: string) => {
     setSettings(updater);
     if (tab) {
-      setUnsavedChanges(prev => new Set([...prev, tab]));
+      setUnsavedChanges(prev => new Set(Array.from(prev).concat(tab)));
     }
   };
 

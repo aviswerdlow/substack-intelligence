@@ -100,7 +100,7 @@ export default function EmailsPage() {
         setNewsletters(data.newsletters || []);
         
         // Track which emails are processing
-        const processing = new Set(
+        const processing = new Set<string>(
           data.emails
             .filter((e: Email) => e.processing_status === 'processing')
             .map((e: Email) => e.id)

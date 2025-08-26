@@ -32,8 +32,9 @@ export async function GET(request: NextRequest) {
     
     companies?.forEach(company => {
       // Count industries
-      const industry = company.industry || 'Unknown';
-      industryMap.set(industry, (industryMap.get(industry) || 0) + 1);
+      const industries = company.industry || ['Unknown'];
+      const industryStr = Array.isArray(industries) ? industries.join(', ') : industries;
+      industryMap.set(industryStr, (industryMap.get(industryStr) || 0) + 1);
       
       // Count funding stages
       const fundingStage = company.funding_status || 'Unknown';
