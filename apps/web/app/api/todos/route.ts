@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
 
     // Create todo in database
     const supabase = createServerComponentClient();
-    const newTodo = await createTodo(supabase, userId, todoData);
+    const newTodo = await createTodo(supabase, userId, todoData as { title: string; description?: string; priority?: "low" | "medium" | "high" | "urgent"; due_date?: string; category?: string; tags?: string[] });
 
     return NextResponse.json({
       success: true,

@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     // Reorder todos in database
     const supabase = createServerComponentClient();
-    await reorderTodos(supabase, userId, todoUpdates);
+    await reorderTodos(supabase, userId, todoUpdates as { id: string; position: number }[]);
 
     return NextResponse.json({
       success: true,
