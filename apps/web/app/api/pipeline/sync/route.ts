@@ -5,7 +5,7 @@ import { GmailConnector } from '@substack-intelligence/ingestion';
 import { ClaudeExtractor } from '@substack-intelligence/ai';
 import { PipelineMonitor, createPipelineAlert, logPipelineHealthCheck } from '@/lib/monitoring/pipeline-metrics';
 import { pipelineCacheManager } from '@/lib/cache/pipeline-cache';
-import { pushPipelineUpdate } from './stream/route';
+import { pushPipelineUpdate } from '@/lib/pipeline-updates';
 
 // Force Node.js runtime for full compatibility
 export const runtime = 'nodejs';
