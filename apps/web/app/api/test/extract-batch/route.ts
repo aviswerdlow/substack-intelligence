@@ -82,11 +82,12 @@ export async function POST(request: NextRequest) {
               .from('companies')
               .upsert({
                 name: company.name,
+                normalized_name: company.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
                 description: company.description,
                 website: company.website,
                 funding_status: company.fundingStatus || 'unknown'
               }, {
-                onConflict: 'name',
+                onConflict: 'normalized_name',
                 ignoreDuplicates: false
               })
               .select('id')

@@ -103,7 +103,8 @@ export async function GET() {
         });
 
         results.checks.extractionTest = true;
-        results.checks.extractionResponse = extractionResponse.content[0]?.text;
+        const extractContent = extractionResponse.content[0];
+        results.checks.extractionResponse = (extractContent && 'text' in extractContent) ? extractContent.text : 'No response';
         console.log('[Test] Extraction test successful');
       } catch (extractError: any) {
         results.checks.extractionTest = false;
@@ -193,7 +194,8 @@ export async function POST(request: Request) {
       }]
     });
 
-    const responseText = response.content[0]?.text;
+    const responseContent = response.content[0];
+    const responseText = (responseContent && 'text' in responseContent) ? responseContent.text : undefined;
     let parsedResponse;
     
     try {

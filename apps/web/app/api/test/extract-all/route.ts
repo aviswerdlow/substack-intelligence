@@ -62,12 +62,13 @@ export async function POST() {
               .from('companies')
               .upsert({
                 name: company.name,
+                normalized_name: company.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
                 description: company.description,
                 website: company.website,
                 funding_status: company.fundingStatus || 'unknown',
                 mention_count: 1
               }, {
-                onConflict: 'name',
+                onConflict: 'normalized_name',
                 ignoreDuplicates: false
               })
               .select('id')
@@ -86,10 +87,10 @@ export async function POST() {
                   extracted_at: new Date().toISOString()
                 });
               
-              // Increment mention count
-              await supabase.rpc('increment_mention_count', {
-                company_id: companyData.id
-              });
+              // TODO: Increment mention count when RPC function is implemented
+              // await supabase.rpc('increment_mention_count', {
+              //   company_id: companyData.id
+              // });
               
               totalCompanies++;
             }
