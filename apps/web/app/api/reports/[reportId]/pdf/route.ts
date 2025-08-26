@@ -12,12 +12,9 @@ export async function GET(
     const { reportId } = params;
     const supabase = createServiceRoleClient();
     
-    // Fetch report data
-    const { data: report, error: reportError } = await supabase
-      .from('reports')
-      .select('*')
-      .eq('id', reportId)
-      .single();
+    // Fetch report data (reports table not yet implemented, using mock)
+    const report = null;
+    const reportError = "Reports table not implemented";
 
     if (reportError || !report) {
       // Generate mock report for demo purposes

@@ -310,7 +310,7 @@ export class ConfigManager {
   static getAllKeys(): string[] {
     const envKeys = Object.keys(process.env);
     const configKeys = Array.from(this.configs.keys());
-    return [...new Set([...envKeys, ...configKeys])].sort();
+    return Array.from(new Set([...envKeys, ...configKeys])).sort();
   }
 
   // Validate required configurations

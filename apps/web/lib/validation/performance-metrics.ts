@@ -130,7 +130,7 @@ export class PerformanceTracker extends EventEmitter {
   }
 
   getOperationTypes(): string[] {
-    return [...new Set(this.metrics.map(m => m.operation))];
+    return Array.from(new Set(this.metrics.map(m => m.operation)));
   }
 
   clearMetrics(): void {

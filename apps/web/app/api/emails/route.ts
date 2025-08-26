@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
       .select('newsletter_name')
       .limit(100);
     
-    const uniqueNewsletters = [...new Set(newsletters?.map(n => n.newsletter_name) || [])];
+    const uniqueNewsletters = Array.from(new Set(newsletters?.map(n => n.newsletter_name) || []));
 
     return NextResponse.json({
       success: true,

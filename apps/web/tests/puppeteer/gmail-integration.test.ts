@@ -303,7 +303,7 @@ describe('Gmail Integration Pipeline', () => {
       
       if (sources.length > 0) {
         console.log('\n📰 Newsletter sources:');
-        [...new Set(sources)].forEach(source => {
+        Array.from(new Set(sources)).forEach(source => {
           console.log(`  - ${source}`);
         });
       }
