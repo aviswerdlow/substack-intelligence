@@ -5,7 +5,6 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 export type WidgetSize = 'small' | 'medium' | 'large' | 'full';
 export type WidgetType = 
   | 'stats' 
-  | 'recent-companies' 
   | 'quick-actions' 
   | 'system-status' 
   | 'chart' 
@@ -13,8 +12,9 @@ export type WidgetType =
   | 'email-stats'
   | 'top-newsletters'
   | 'sentiment-analysis'
-  | 'pipeline-status'
   | 'todos';
+// Note: 'recent-companies' is shown in the main dashboard
+// Note: 'pipeline-status' is handled by ActiveOperationsBar
 
 export interface WidgetConfig {
   id: string;
@@ -55,43 +55,26 @@ const DEFAULT_WIDGETS: WidgetConfig[] = [
     isVisible: true
   },
   {
-    id: 'recent-companies-1',
-    type: 'recent-companies',
-    title: 'Recent Companies',
-    size: 'medium',
-    position: { x: 0, y: 1 },
-    isVisible: true
-  },
-  {
     id: 'quick-actions-1',
     type: 'quick-actions',
     title: 'Quick Actions',
     size: 'medium',
-    position: { x: 2, y: 1 },
-    isVisible: true
-  },
-  {
-    id: 'system-status-1',
-    type: 'system-status',
-    title: 'System Status',
-    size: 'full',
-    position: { x: 0, y: 2 },
+    position: { x: 0, y: 1 },
     isVisible: true
   }
+  // Note: system-status is now shown in the sidebar
 ];
 
 const AVAILABLE_WIDGETS: Omit<WidgetConfig, 'id' | 'position'>[] = [
   { type: 'stats', title: 'Key Metrics', size: 'full', isVisible: true },
-  { type: 'recent-companies', title: 'Recent Companies', size: 'medium', isVisible: true },
   { type: 'quick-actions', title: 'Quick Actions', size: 'medium', isVisible: true },
-  { type: 'system-status', title: 'System Status', size: 'full', isVisible: true },
   { type: 'todos', title: 'Todo List', size: 'medium', isVisible: true },
   { type: 'chart', title: 'Analytics Chart', size: 'large', isVisible: true },
   { type: 'activity-feed', title: 'Activity Feed', size: 'medium', isVisible: true },
   { type: 'email-stats', title: 'Email Statistics', size: 'small', isVisible: true },
   { type: 'top-newsletters', title: 'Top Newsletters', size: 'medium', isVisible: true },
-  { type: 'sentiment-analysis', title: 'Sentiment Trends', size: 'medium', isVisible: true },
-  { type: 'pipeline-status', title: 'Pipeline Status', size: 'small', isVisible: true }
+  { type: 'sentiment-analysis', title: 'Sentiment Trends', size: 'medium', isVisible: true }
+  // Note: system-status is now permanently shown in the sidebar
 ];
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);

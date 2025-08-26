@@ -20,6 +20,22 @@ export declare const RATE_LIMITS: {
         readonly requests: number;
         readonly window: "1h";
     };
+    readonly 'api/todos': {
+        readonly requests: number;
+        readonly window: "1h";
+    };
+    readonly 'api/todos/stats': {
+        readonly requests: number;
+        readonly window: "1h";
+    };
+    readonly 'api/todos/batch': {
+        readonly requests: number;
+        readonly window: "1h";
+    };
+    readonly 'api/todos/reorder': {
+        readonly requests: number;
+        readonly window: "1h";
+    };
     readonly 'api/test/anthropic': {
         readonly requests: number;
         readonly window: "1h";

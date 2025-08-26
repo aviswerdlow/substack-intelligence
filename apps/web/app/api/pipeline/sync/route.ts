@@ -5,6 +5,7 @@ import { GmailConnector } from '@substack-intelligence/ingestion';
 import { ClaudeExtractor } from '@substack-intelligence/ai';
 import { PipelineMonitor, createPipelineAlert, logPipelineHealthCheck } from '@/lib/monitoring/pipeline-metrics';
 import { pipelineCacheManager } from '@/lib/cache/pipeline-cache';
+import { pushPipelineUpdate } from './stream/route';
 
 // Force Node.js runtime for full compatibility
 export const runtime = 'nodejs';
@@ -196,6 +197,8 @@ export async function POST(request: NextRequest) {
     // Start pipeline
     monitor.startStep('gmail_fetch', { daysBack: options.daysBack, forceRefresh: options.forceRefresh });
     
+    const userId = user?.id || 'dev';
+    
     pipelineStatus = {
       status: 'fetching',
       progress: 10,
@@ -208,6 +211,15 @@ export async function POST(request: NextRequest) {
         totalMentions: 0
       }
     };
+    
+    // Push initial status update
+    pushPipelineUpdate(userId, {
+      type: 'status',
+      status: 'fetching',
+      progress: 10,
+      message: 'Connecting to Gmail...',
+      stats: pipelineStatus.stats
+    });
 
     // Step 1: Fetch emails from Gmail
     try {
@@ -228,6 +240,16 @@ export async function POST(request: NextRequest) {
       pipelineStatus.stats.emailsFetched = emails.length;
       pipelineStatus.progress = 40;
       pipelineStatus.message = `Fetched ${emails.length} emails, extracting companies...`;
+      
+      // Push update after fetching emails
+      pushPipelineUpdate(userId, {
+        type: 'emails_fetched',
+        status: 'extracting',
+        progress: 40,
+        message: `Found ${emails.length} newsletters to analyze`,
+        stats: pipelineStatus.stats,
+        emailCount: emails.length
+      });
       
       if (emails.length === 0) {
         createPipelineAlert('warning', 'No Emails Found', 
@@ -273,6 +295,10 @@ export async function POST(request: NextRequest) {
         monitor.completeStep('database_fetch', { emailsRetrieved: dbEmails.length, duration: Date.now() - dbQueryStartTime });
       
       // Process each email
+      const companiesFound: any[] = [];
+      const newlyDiscoveredCompanies = new Set<string>(); // Track companies discovered in this run
+      const processingStartTime = Date.now();
+      
       for (let i = 0; i < dbEmails.length; i++) {
         const email = dbEmails[i];
         
@@ -280,6 +306,29 @@ export async function POST(request: NextRequest) {
         const extractionProgress = 40 + (40 * (i + 1) / dbEmails.length);
         pipelineStatus.progress = Math.round(extractionProgress);
         pipelineStatus.message = `Extracting companies from email ${i + 1}/${dbEmails.length}...`;
+        
+        // Push granular progress update
+        const elapsedTime = (Date.now() - processingStartTime) / 1000;
+        const emailsPerSecond = (i + 1) / elapsedTime;
+        const remainingEmails = dbEmails.length - (i + 1);
+        const estimatedTimeRemaining = remainingEmails / emailsPerSecond;
+        
+        pushPipelineUpdate(userId, {
+          type: 'processing_email',
+          status: 'extracting',
+          progress: Math.round(extractionProgress),
+          message: `Analyzing "${email.newsletter_name || email.subject}"...`,
+          stats: {
+            ...pipelineStatus.stats,
+            companiesExtracted: totalCompaniesExtracted,
+            newCompanies: newCompaniesCount,
+            totalMentions: totalMentions  // Include current totalMentions in progress updates
+          },
+          currentEmail: i + 1,
+          totalEmails: dbEmails.length,
+          estimatedTimeRemaining: Math.round(estimatedTimeRemaining),
+          companiesFound: companiesFound.slice(-5) // Last 5 companies
+        });
         
         try {
           // Extract companies from email content
@@ -308,6 +357,14 @@ export async function POST(request: NextRequest) {
                   last_updated_at: new Date().toISOString()
                 })
                 .eq('id', existingCompany.id);
+              
+              // Track for live updates
+              companiesFound.push({
+                name: company.name,
+                description: company.description,
+                isNew: false,
+                source: email.newsletter_name || email.subject
+              });
               
               // Create mention record
               await supabase
@@ -354,6 +411,34 @@ export async function POST(request: NextRequest) {
                     confidence: company.confidence || 0.8,
                     extracted_at: new Date().toISOString()
                   });
+                
+                // Track for live updates
+                companiesFound.push({
+                  name: company.name,
+                  description: company.description,
+                  isNew: true,
+                  source: email.newsletter_name || email.subject
+                });
+                
+                // Only push discovery update if this is the FIRST time we've seen this company in this run
+                if (!newlyDiscoveredCompanies.has(company.name)) {
+                  newlyDiscoveredCompanies.add(company.name);
+                  
+                  pushPipelineUpdate(userId, {
+                    type: 'company_discovered',
+                    company: {
+                      name: company.name,
+                      description: company.description,
+                      isNew: true
+                    },
+                    stats: {
+                      ...pipelineStatus.stats,
+                      companiesExtracted: totalCompaniesExtracted + 1,
+                      newCompanies: newCompaniesCount,
+                      totalMentions: totalMentions  // Include current totalMentions
+                    }
+                  });
+                }
               }
             }
             
@@ -388,6 +473,7 @@ export async function POST(request: NextRequest) {
     // Complete pipeline
     monitor.startStep('pipeline_completion');
     
+    // Update the final stats first
     pipelineStatus = {
       status: 'complete',
       progress: 100,
@@ -400,6 +486,15 @@ export async function POST(request: NextRequest) {
         totalMentions: totalMentions
       }
     };
+    
+    // Now push completion update with the updated stats
+    pushPipelineUpdate(userId, {
+      type: 'complete',
+      status: 'complete',
+      progress: 100,
+      message: `Discovered ${totalCompaniesExtracted} companies (${newCompaniesCount} new) from ${pipelineStatus.stats.emailsFetched} newsletters`,
+      stats: pipelineStatus.stats  // Now this has the correct totalMentions
+    });
     
     // Update final metrics
     monitor.setMetric('companiesExtracted', totalCompaniesExtracted);

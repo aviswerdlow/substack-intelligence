@@ -27,13 +27,14 @@ export function SystemStatus() {
 
   if (error || !systemStatus) {
     return (
-      <div className="grid md:grid-cols-3 gap-4">
-        <div className="flex items-center justify-between p-4 border rounded-lg">
-          <div className="flex items-center gap-3">
-            <Zap className="h-5 w-5 text-red-600" />
+      <div className="space-y-3">
+        <h3 className="font-semibold mb-3">System Status</h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-red-600" />
             <div>
-              <p className="font-medium">System Status</p>
-              <p className="text-sm text-muted-foreground">Error loading status</p>
+              <p className="text-sm font-medium">Error</p>
+              <p className="text-xs text-muted-foreground">Unable to load status</p>
             </div>
           </div>
           <div className="h-2 w-2 bg-red-600 rounded-full" />
@@ -43,23 +44,26 @@ export function SystemStatus() {
   }
 
   return (
-    <div className="grid md:grid-cols-3 gap-4">
+    <div className="space-y-3">
+      <h3 className="font-semibold mb-3">System Status</h3>
       {systemStatus.services.map((service: any) => {
         const IconComponent = iconMap[service.name as keyof typeof iconMap] || Zap;
         const isHealthy = service.healthy;
         
         return (
-          <div key={service.name} className="flex items-center justify-between p-4 border rounded-lg">
-            <div className="flex items-center gap-3">
-              <IconComponent className={`h-5 w-5 ${isHealthy ? 'text-green-600' : 'text-red-600'}`} />
-              <div>
-                <p className="font-medium">{service.name}</p>
-                <p className="text-sm text-muted-foreground" title={service.details}>
+          <div key={service.name} className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <IconComponent className={`h-4 w-4 ${isHealthy ? 'text-green-600' : 'text-red-600'}`} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{service.name}</p>
+                <p className="text-xs text-muted-foreground truncate" title={service.details}>
                   {service.status}
                 </p>
               </div>
             </div>
-            <div className={`h-2 w-2 rounded-full ${isHealthy ? 'bg-green-600' : 'bg-red-600'}`} />
+            <div className="flex items-center gap-1.5 ml-2">
+              <div className={`h-2 w-2 rounded-full flex-shrink-0 ${isHealthy ? 'bg-green-600 animate-pulse' : 'bg-red-600'}`} />
+            </div>
           </div>
         );
       })}
@@ -69,14 +73,15 @@ export function SystemStatus() {
 
 export function SystemStatusLoading() {
   return (
-    <div className="grid md:grid-cols-3 gap-4">
+    <div className="space-y-3">
+      <h3 className="font-semibold mb-3">System Status</h3>
       {[1, 2, 3].map((i) => (
-        <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
-          <div className="flex items-center gap-3">
-            <div className="animate-pulse bg-muted h-5 w-5 rounded" />
+        <div key={i} className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="animate-pulse bg-muted h-4 w-4 rounded" />
             <div>
-              <div className="animate-pulse bg-muted h-4 w-20 rounded mb-1" />
-              <div className="animate-pulse bg-muted h-3 w-16 rounded" />
+              <div className="animate-pulse bg-muted h-3 w-20 rounded mb-1" />
+              <div className="animate-pulse bg-muted h-2 w-16 rounded" />
             </div>
           </div>
           <div className="animate-pulse bg-muted h-2 w-2 rounded-full" />

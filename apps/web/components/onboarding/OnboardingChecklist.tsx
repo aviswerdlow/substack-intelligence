@@ -35,6 +35,7 @@ export function OnboardingChecklist() {
   const { startOnboarding } = useOnboarding();
   const [isVisible, setIsVisible] = useState(true);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(false);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([
     {
       id: 'tour',
@@ -99,6 +100,25 @@ export function OnboardingChecklist() {
   ]);
 
   useEffect(() => {
+    // Check Gmail connection status
+    const checkGmailStatus = async () => {
+      try {
+        const response = await fetch('/api/auth/gmail/status');
+        const data = await response.json();
+        const isConnected = data.connected || false;
+        setGmailConnected(isConnected);
+        
+        // Auto-complete Gmail step if already connected
+        if (isConnected) {
+          updateChecklistItem('gmail', true);
+        }
+      } catch (error) {
+        console.error('Failed to check Gmail status:', error);
+      }
+    };
+
+    checkGmailStatus();
+
     // Load saved progress from localStorage
     const savedProgress = localStorage.getItem('onboardingChecklist');
     if (savedProgress) {
@@ -261,15 +281,15 @@ export function OnboardingChecklist() {
                             variant="ghost"
                             onClick={() => {
                               item.action();
-                              if (item.id !== 'tour') {
-                                // Mark as completed for non-tour items
-                                // Tour completion is handled by the tour itself
+                              if (item.id !== 'tour' && item.id !== 'gmail') {
+                                // Mark as completed for non-tour/non-gmail items
+                                // Tour and Gmail completion are handled separately
                                 setTimeout(() => updateChecklistItem(item.id, true), 1000);
                               }
                             }}
                             className="text-xs"
                           >
-                            {item.actionLabel}
+                            {item.id === 'gmail' && gmailConnected ? 'Connected' : item.actionLabel}
                           </Button>
                         )}
                       </motion.div>

@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { useIntelligence } from '@/contexts/IntelligenceContext';
 import { 
   Play, 
   RefreshCw, 
@@ -19,10 +18,38 @@ import {
 export function QuickActions() {
   const router = useRouter();
   const { toast } = useToast();
-  const { syncPipeline, isSyncing, pipelineStatus } = useIntelligence();
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Use direct API call instead of context to avoid provider dependency
+  const startPipeline = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/pipeline/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ forceRefresh: true })
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to start pipeline');
+      }
+      toast({
+        title: 'Pipeline Started',
+        description: 'Refreshing intelligence data...'
+      });
+    } catch (error) {
+      toast({
+        title: 'Pipeline Error',
+        description: error instanceof Error ? error.message : 'Failed to start pipeline',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const refreshIntelligence = async () => {
-    await syncPipeline(true); // Force refresh
+    await startPipeline();
     router.refresh();
     setTimeout(() => router.refresh(), 1500);
   };
@@ -85,15 +112,15 @@ export function QuickActions() {
       description: 'Sync emails and extract companies',
       icon: Sparkles,
       action: refreshIntelligence,
-      loading: isSyncing,
-      variant: 'default' as const
+      loading: isLoading,
+      variant: 'outline' as const
     },
     {
       title: 'View Intelligence',
       description: 'See latest company mentions',
       icon: Brain,
       action: viewIntelligence,
-      variant: 'default' as const
+      variant: 'outline' as const
     },
     {
       title: 'System Health',

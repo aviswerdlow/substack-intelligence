@@ -26,7 +26,7 @@ interface OnboardingContextType {
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
 
-const ONBOARDING_STEPS: OnboardingStep[] = [
+const getOnboardingSteps = (gmailConnected: boolean): OnboardingStep[] => [
   {
     id: 'welcome',
     title: 'Welcome to Substack Intelligence! 🎉',
@@ -71,7 +71,9 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'complete',
     title: 'You\'re All Set! 🚀',
-    description: 'Start by connecting your Gmail account in Settings, then trigger your first pipeline run.',
+    description: gmailConnected 
+      ? 'Your Gmail is already connected! You can now run your first pipeline to start extracting intelligence from your newsletters.'
+      : 'Start by connecting your Gmail account in Settings, then trigger your first pipeline run.',
     placement: 'bottom'
   }
 ];
@@ -81,8 +83,23 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const [isOnboarding, setIsOnboarding] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(false);
 
   useEffect(() => {
+    // Check Gmail connection status
+    const checkGmailStatus = async () => {
+      try {
+        const response = await fetch('/api/auth/gmail/status');
+        const data = await response.json();
+        setGmailConnected(data.connected || false);
+      } catch (error) {
+        console.error('Failed to check Gmail status:', error);
+        setGmailConnected(false);
+      }
+    };
+
+    checkGmailStatus();
+
     // Check if user has seen onboarding
     const seen = localStorage.getItem('hasSeenOnboarding');
     if (!seen && pathname === '/dashboard') {
@@ -100,11 +117,12 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   };
 
   const nextStep = () => {
-    if (currentStep < ONBOARDING_STEPS.length - 1) {
+    const steps = getOnboardingSteps(gmailConnected);
+    if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
       
       // Navigate to relevant page for certain steps
-      const nextStepId = ONBOARDING_STEPS[currentStep + 1].id;
+      const nextStepId = steps[currentStep + 1].id;
       if (nextStepId === 'intelligence' && pathname !== '/intelligence') {
         window.location.href = '/intelligence';
       } else if (nextStepId === 'emails' && pathname !== '/emails') {
@@ -144,7 +162,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       value={{
         isOnboarding,
         currentStep,
-        steps: ONBOARDING_STEPS,
+        steps: getOnboardingSteps(gmailConnected),
         startOnboarding,
         nextStep,
         previousStep,

@@ -1,0 +1,21 @@
+{
+  "framework": "nextjs",
+  "installCommand": "pnpm install",
+  "buildCommand": "cd ../.. && pnpm run build --filter=web",
+  "outputDirectory": ".next",
+  "devCommand": "pnpm run dev",
+  "env": {
+    "NEXT_PUBLIC_APP_URL": "@app_url",
+    "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key",
+    "SUPABASE_SERVICE_KEY": "@supabase_service_key",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key",
+    "NEXT_PUBLIC_SUPABASE_PROJECT_ID": "@supabase_project_id",
+    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "@clerk_publishable_key",
+    "CLERK_SECRET_KEY": "@clerk_secret_key",
+    "ANTHROPIC_API_KEY": "@anthropic_api_key",
+    "GOOGLE_CLIENT_ID": "@google_client_id",
+    "GOOGLE_CLIENT_SECRET": "@google_client_secret",
+    "GOOGLE_REFRESH_TOKEN": "@google_refresh_token"
+  }
+}

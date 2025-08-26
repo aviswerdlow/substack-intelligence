@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScheduleConfigModal } from '@/components/reports/ScheduleConfigModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -65,6 +66,10 @@ export default function ReportsPage() {
   const [generateType, setGenerateType] = useState('daily');
   const [generateDateRange, setGenerateDateRange] = useState('1');
   const [generateRecipients, setGenerateRecipients] = useState('');
+  
+  // Schedule configuration modal
+  const [selectedSchedule, setSelectedSchedule] = useState<ReportSchedule | null>(null);
+  const [showConfigModal, setShowConfigModal] = useState(false);
 
   useEffect(() => {
     fetchReports();
@@ -133,26 +138,57 @@ export default function ReportsPage() {
 
   const handleDownloadReport = async (reportId: string) => {
     try {
-      const response = await fetch(`/api/reports/${reportId}/download`);
+      const response = await fetch(`/api/reports/${reportId}/pdf`);
       const blob = await response.blob();
       
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `report-${reportId}.pdf`;
-      a.click();
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `report-${reportId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to download report:', error);
+      alert('Failed to download report. Please try again.');
     }
   };
 
   const handleResendReport = async (reportId: string) => {
     try {
       await fetch(`/api/reports/${reportId}/resend`, { method: 'POST' });
-      // Show success message
+      alert('Report has been queued for resending.');
       fetchReports();
     } catch (error) {
       console.error('Failed to resend report:', error);
+      alert('Failed to resend report. Please try again.');
+    }
+  };
+  
+  const handleConfigureSchedule = (schedule: ReportSchedule) => {
+    setSelectedSchedule(schedule);
+    setShowConfigModal(true);
+  };
+  
+  const handleSaveSchedule = async (updatedSchedule: ReportSchedule) => {
+    try {
+      const response = await fetch(`/api/reports/schedules/${updatedSchedule.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedSchedule),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update schedule');
+      }
+      
+      // Refresh schedules
+      await fetchSchedules();
+      setShowConfigModal(false);
+    } catch (error) {
+      console.error('Failed to save schedule:', error);
+      throw error; // Let the modal handle the error
     }
   };
 
@@ -263,7 +299,7 @@ export default function ReportsPage() {
                 size="sm" 
                 variant="ghost" 
                 className="w-full mt-3"
-                onClick={() => {/* Open schedule settings */}}
+                onClick={() => handleConfigureSchedule(schedule)}
               >
                 <Settings className="h-3 w-3 mr-1" />
                 Configure
@@ -425,6 +461,14 @@ export default function ReportsPage() {
         </CardContent>
       </Card>
 
+      {/* Schedule Configuration Modal */}
+      <ScheduleConfigModal
+        schedule={selectedSchedule}
+        isOpen={showConfigModal}
+        onClose={() => setShowConfigModal(false)}
+        onSave={handleSaveSchedule}
+      />
+      
       {/* Generate Report Modal */}
       {showGenerateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

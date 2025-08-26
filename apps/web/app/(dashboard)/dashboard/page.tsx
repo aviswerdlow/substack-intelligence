@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useIntelligence } from '@/contexts/IntelligenceContext';
+import { PipelineStateProvider, usePipelineState } from '@/contexts/PipelineStateContext';
+import { ActiveOperationsBar } from '@/components/dashboard/ActiveOperationsBarWrapper';
 import {
   Dialog,
   DialogContent,
@@ -30,41 +31,68 @@ import { QuickActions } from '@/components/dashboard/quick-actions';
 import { SystemStatus } from '@/components/dashboard/system-status';
 import { ActivityFeedWidget } from '@/components/dashboard/widgets/ActivityFeedWidget';
 import { EmailStatsWidget } from '@/components/dashboard/widgets/EmailStatsWidget';
-import { PipelineStatusWidget } from '@/components/dashboard/widgets/PipelineStatusWidget';
 import { TodoWidget } from '@/components/dashboard/widgets/TodoWidget';
 import { Breadcrumbs } from '@/components/navigation/Breadcrumbs';
 import { DataFreshness } from '@/components/dashboard/DataFreshness';
+import { QuickStartCard } from '@/components/dashboard/QuickStartCard';
 import { cn } from '@/lib/utils';
 
 function DashboardContent() {
   const { widgets, isEditing, toggleEditMode, resetLayout, saveLayout, addWidget } = useDashboard();
-  const { syncPipeline, pipelineStatus, isSyncing } = useIntelligence();
+  const { state: pipelineState, isRunning, checkDataFreshness } = usePipelineState();
   const [showAddWidget, setShowAddWidget] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
+  // Initialize to false to prevent hydration mismatch
+  const [gmailConnected, setGmailConnected] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState(true);
   
-  // Auto-refresh on dashboard load
+  // Check Gmail connection status
   useEffect(() => {
-    const checkAndSync = async () => {
-      // Only sync if data is stale (not fresh)
-      if (!pipelineStatus || !pipelineStatus.dataIsFresh) {
-        console.log('Dashboard loaded - syncing intelligence data...');
-        await syncPipeline();
-      } else {
-        console.log('Dashboard loaded - data is fresh, skipping sync');
+    const checkGmailStatus = async () => {
+      try {
+        const response = await fetch('/api/auth/gmail/status');
+        const data = await response.json();
+        setGmailConnected(data.connected || false);
+      } catch (error) {
+        console.error('Failed to check Gmail status:', error);
+        setGmailConnected(false);
+      } finally {
+        setIsLoading(false);
       }
     };
     
-    // Small delay to let the page render first
-    const timer = setTimeout(checkAndSync, 500);
+    checkGmailStatus();
+  }, []);
+  
+  // Check data freshness on dashboard load (but don't auto-sync)
+  useEffect(() => {
+    const checkFreshness = async () => {
+      // Skip if loading or Gmail not connected
+      if (isLoading || !gmailConnected) {
+        return;
+      }
+      
+      // Just check freshness, don't auto-sync
+      await checkDataFreshness();
+      
+      if (pipelineState.dataFreshness === 'stale' || pipelineState.dataFreshness === 'outdated') {
+        console.log('Dashboard: Data is stale, user can manually sync');
+      } else if (isRunning) {
+        console.log('Dashboard: Pipeline already running');
+      } else {
+        console.log('Dashboard: Data is fresh');
+      }
+    };
+    
+    // Small delay to let the page render and state settle
+    const timer = setTimeout(checkFreshness, 1000);
     return () => clearTimeout(timer);
-  }, []); // Only run once on mount
+  }, [gmailConnected, isLoading, checkDataFreshness, pipelineState.dataFreshness, isRunning]);
 
   const renderWidgetContent = (widget: WidgetConfig) => {
     switch (widget.type) {
       case 'stats':
         return <DashboardStats />;
-      case 'recent-companies':
-        return <RecentCompanies />;
       case 'quick-actions':
         return <QuickActions />;
       case 'system-status':
@@ -73,8 +101,6 @@ function DashboardContent() {
         return <ActivityFeedWidget />;
       case 'email-stats':
         return <EmailStatsWidget />;
-      case 'pipeline-status':
-        return <PipelineStatusWidget />;
       case 'todos':
         return <TodoWidget size={widget.size} />;
       default:
@@ -204,6 +230,38 @@ function DashboardContent() {
         </div>
       </div>
 
+      {/* ActiveOperationsBar - unified pipeline status (show after loading) */}
+      {!isLoading && gmailConnected && (
+        <ActiveOperationsBar />
+      )}
+      
+      {/* Show QuickStartCard ONLY for initial onboarding */}
+      {!isLoading && !gmailConnected && (
+        <QuickStartCard 
+          gmailConnected={gmailConnected} 
+          onGmailConnect={async () => {
+            // Refresh Gmail status after connection
+            // Wait a bit longer for the database to be updated
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            try {
+              const response = await fetch('/api/auth/gmail/status');
+              const data = await response.json();
+              setGmailConnected(data.connected || false);
+              
+              // Force a re-render by also checking pipeline status
+              if (data.connected) {
+                const pipelineResponse = await fetch('/api/pipeline/status');
+                const pipelineData = await pipelineResponse.json();
+                // This will trigger the IntelligenceContext to update
+              }
+            } catch (error) {
+              console.error('Failed to refresh Gmail status:', error);
+            }
+          }}
+        />
+      )}
+
       {/* Edit Mode Banner */}
       {isEditing && (
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
@@ -229,39 +287,59 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* Dashboard Grid */}
-      <div 
-        className={cn(
-          'grid grid-cols-4 gap-6 relative',
-          showGrid && 'dashboard-grid-overlay',
-          isEditing && 'min-h-[600px]'
-        )}
-        style={{
-          backgroundImage: showGrid ? 
-            'repeating-linear-gradient(0deg, transparent, transparent 249px, rgba(0,0,0,0.05) 249px, rgba(0,0,0,0.05) 250px), repeating-linear-gradient(90deg, transparent, transparent 249px, rgba(0,0,0,0.05) 249px, rgba(0,0,0,0.05) 250px)' 
-            : undefined
-        }}
-      >
-        {widgets.map((widget) => (
-          <DashboardWidget key={widget.id} widget={widget}>
-            {renderWidgetContent(widget)}
-          </DashboardWidget>
-        ))}
-        
-        {/* Empty State */}
-        {widgets.length === 0 && (
-          <div className="col-span-4 flex flex-col items-center justify-center py-16">
-            <Sparkles className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No widgets added</h3>
-            <p className="text-muted-foreground mb-4">
-              Start building your dashboard by adding widgets
-            </p>
-            <Button onClick={() => setShowAddWidget(true)} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add Your First Widget
-            </Button>
+      {/* Main Dashboard Content - 2 Column Layout */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Main Content Area */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Key Metrics */}
+          <DashboardStats />
+          
+          {/* Dashboard Grid for other widgets */}
+          <div 
+            className={cn(
+              'grid grid-cols-2 gap-6 relative',
+              showGrid && 'dashboard-grid-overlay',
+              isEditing && 'min-h-[600px]'
+            )}
+            style={{
+              backgroundImage: showGrid ? 
+                'repeating-linear-gradient(0deg, transparent, transparent 249px, rgba(0,0,0,0.05) 249px, rgba(0,0,0,0.05) 250px), repeating-linear-gradient(90deg, transparent, transparent 249px, rgba(0,0,0,0.05) 249px, rgba(0,0,0,0.05) 250px)' 
+                : undefined
+            }}
+          >
+            {widgets.filter(w => w.type !== 'stats' && w.type !== 'system-status').map((widget) => (
+              <DashboardWidget key={widget.id} widget={widget}>
+                {renderWidgetContent(widget)}
+              </DashboardWidget>
+            ))}
+            
+            {/* Empty State */}
+            {widgets.filter(w => w.type !== 'stats' && w.type !== 'system-status').length === 0 && !isEditing && (
+              <div className="col-span-2 flex flex-col items-center justify-center py-8">
+                <p className="text-muted-foreground text-sm">
+                  Customize your dashboard by adding widgets
+                </p>
+              </div>
+            )}
           </div>
-        )}
+        </div>
+        
+        {/* Sidebar - Recent Companies and other info */}
+        <div className="space-y-6">
+          {/* Recent Companies Card */}
+          <div className="rounded-lg border bg-card p-6">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              Recent Companies
+            </h3>
+            <RecentCompanies />
+          </div>
+          
+          {/* System Status Card */}
+          <div className="rounded-lg border bg-card p-6">
+            <SystemStatus />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -269,8 +347,10 @@ function DashboardContent() {
 
 export default function CustomizableDashboardPage() {
   return (
-    <DashboardWidgetProvider>
-      <DashboardContent />
-    </DashboardWidgetProvider>
+    <PipelineStateProvider>
+      <DashboardWidgetProvider>
+        <DashboardContent />
+      </DashboardWidgetProvider>
+    </PipelineStateProvider>
   );
 }

@@ -244,13 +244,6 @@ export default function EmailsPage() {
             <Download className="h-4 w-4" />
             Export CSV
           </Button>
-          <Button 
-            className="gap-2"
-            onClick={() => fetchEmails()}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
         </div>
       </div>
 

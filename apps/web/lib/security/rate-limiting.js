@@ -41,6 +41,11 @@ const getProductionLimits = () => {
         'api/companies': { requests: Math.floor(100 * multiplier), window: '1h' },
         'api/emails/extract': { requests: Math.floor(10 * multiplier), window: '1m' },
         'api/reports/generate': { requests: Math.floor(5 * multiplier), window: '1h' },
+        // Todo API endpoints
+        'api/todos': { requests: Math.floor(200 * multiplier), window: '1h' },
+        'api/todos/stats': { requests: Math.floor(50 * multiplier), window: '1h' },
+        'api/todos/batch': { requests: Math.floor(20 * multiplier), window: '1h' }, // More restrictive for batch operations
+        'api/todos/reorder': { requests: Math.floor(30 * multiplier), window: '1h' },
         // AI endpoints (more restrictive due to cost)
         'api/test/anthropic': { requests: Math.floor(5 * multiplier), window: '1h' },
         'api/test/extract': { requests: Math.floor(10 * multiplier), window: '1h' },

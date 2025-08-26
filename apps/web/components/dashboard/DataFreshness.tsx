@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useIntelligence } from '@/contexts/IntelligenceContext';
+import { useEffect, useState, useContext } from 'react';
+import { PipelineStateContext } from '@/contexts/PipelineStateContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,24 +26,28 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 export function DataFreshness() {
+  // Try to use context, but provide fallback
+  const context = useContext(PipelineStateContext);
+  
+  // If no context, return null (component won't be visible)
+  if (!context) {
+    return null;
+  }
+  
   const { 
-    pipelineStatus, 
-    metrics, 
-    isSyncing, 
-    syncPipeline,
-    autoSyncEnabled,
-    setAutoSyncEnabled 
-  } = useIntelligence();
+    state,
+    startPipeline,
+    isRunning,
+    checkDataFreshness
+  } = context;
   
   const [timeAgo, setTimeAgo] = useState<string>('');
   
   // Update time ago every minute
   useEffect(() => {
     const updateTimeAgo = () => {
-      if (pipelineStatus?.lastSync) {
-        setTimeAgo(formatDistanceToNow(new Date(pipelineStatus.lastSync), { addSuffix: true }));
-      } else if (metrics?.lastSyncTime) {
-        setTimeAgo(formatDistanceToNow(new Date(metrics.lastSyncTime), { addSuffix: true }));
+      if (state.lastSyncTime) {
+        setTimeAgo(formatDistanceToNow(state.lastSyncTime, { addSuffix: true }));
       } else {
         setTimeAgo('Never');
       }
@@ -53,11 +57,11 @@ export function DataFreshness() {
     const interval = setInterval(updateTimeAgo, 60000); // Update every minute
     
     return () => clearInterval(interval);
-  }, [pipelineStatus, metrics]);
+  }, [state.lastSyncTime]);
   
   // Determine freshness status
   const getFreshnessStatus = () => {
-    if (isSyncing) {
+    if (isRunning) {
       return {
         status: 'syncing',
         color: 'text-blue-500',
@@ -69,38 +73,47 @@ export function DataFreshness() {
       };
     }
     
-    const dataAge = metrics?.dataAge || Infinity;
-    
-    if (dataAge < 30) {
-      return {
-        status: 'fresh',
-        color: 'text-green-500',
-        bgColor: 'bg-green-50',
-        borderColor: 'border-green-200',
-        icon: CheckCircle,
-        label: 'Fresh',
-        message: 'Data is up-to-date'
-      };
-    } else if (dataAge < 120) {
-      return {
-        status: 'stale',
-        color: 'text-yellow-500',
-        bgColor: 'bg-yellow-50',
-        borderColor: 'border-yellow-200',
-        icon: AlertCircle,
-        label: 'Getting Stale',
-        message: 'Consider refreshing soon'
-      };
-    } else {
-      return {
-        status: 'outdated',
-        color: 'text-red-500',
-        bgColor: 'bg-red-50',
-        borderColor: 'border-red-200',
-        icon: XCircle,
-        label: 'Outdated',
-        message: 'Refresh recommended'
-      };
+    switch (state.dataFreshness) {
+      case 'fresh':
+        return {
+          status: 'fresh',
+          color: 'text-green-500',
+          bgColor: 'bg-green-50',
+          borderColor: 'border-green-200',
+          icon: CheckCircle,
+          label: 'Fresh',
+          message: 'Data is up-to-date'
+        };
+      case 'stale':
+        return {
+          status: 'stale',
+          color: 'text-yellow-500',
+          bgColor: 'bg-yellow-50',
+          borderColor: 'border-yellow-200',
+          icon: AlertCircle,
+          label: 'Getting Stale',
+          message: 'Consider refreshing soon'
+        };
+      case 'outdated':
+        return {
+          status: 'outdated',
+          color: 'text-red-500',
+          bgColor: 'bg-red-50',
+          borderColor: 'border-red-200',
+          icon: XCircle,
+          label: 'Outdated',
+          message: 'Refresh recommended'
+        };
+      default:
+        return {
+          status: 'unknown',
+          color: 'text-gray-500',
+          bgColor: 'bg-gray-50',
+          borderColor: 'border-gray-200',
+          icon: Activity,
+          label: 'Unknown',
+          message: 'Check connection status'
+        };
     }
   };
   
@@ -108,8 +121,14 @@ export function DataFreshness() {
   const Icon = freshnessStatus.icon;
   
   const handleManualSync = async () => {
-    await syncPipeline(true); // Force refresh
+    await startPipeline(); // Start pipeline
   };
+  
+  // Check freshness on mount only once
+  useEffect(() => {
+    checkDataFreshness();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array - only run once on mount
   
   return (
     <div className="flex items-center gap-2">
@@ -122,7 +141,7 @@ export function DataFreshness() {
           freshnessStatus.borderColor
         )}
       >
-        <Icon className={cn('h-3 w-3', freshnessStatus.color, isSyncing && 'animate-spin')} />
+        <Icon className={cn('h-3 w-3', freshnessStatus.color, isRunning && 'animate-spin')} />
         <span className={cn('text-xs font-medium', freshnessStatus.color)}>
           {freshnessStatus.label}
         </span>
@@ -140,9 +159,9 @@ export function DataFreshness() {
             variant="ghost" 
             size="sm"
             className="h-8 w-8 p-0"
-            disabled={isSyncing}
+            disabled={isRunning}
           >
-            <RefreshCw className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
+            <RefreshCw className={cn('h-4 w-4', isRunning && 'animate-spin')} />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
@@ -161,30 +180,30 @@ export function DataFreshness() {
               </span>
             </div>
             
-            {metrics && (
+            {state.metrics && (
               <>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Total Emails:</span>
-                  <span className="font-medium">{metrics.totalEmails}</span>
+                  <span className="font-medium">{state.metrics.emailsFetched}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Companies:</span>
-                  <span className="font-medium">{metrics.totalCompanies}</span>
+                  <span className="font-medium">{state.metrics.companiesExtracted}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Recent (24h):</span>
+                  <span className="text-muted-foreground">New Companies:</span>
                   <span className="font-medium">
-                    {metrics.recentCompanies} new companies
+                    {state.metrics.newCompanies}
                   </span>
                 </div>
               </>
             )}
             
-            {pipelineStatus?.stats && pipelineStatus.stats.newCompanies > 0 && (
+            {state.metrics.newCompanies > 0 && (
               <div className="flex items-center gap-2 text-green-600 bg-green-50 rounded p-2">
                 <TrendingUp className="h-3 w-3" />
                 <span className="text-xs">
-                  {pipelineStatus.stats.newCompanies} new companies found in last sync
+                  {state.metrics.newCompanies} new companies found in last sync
                 </span>
               </div>
             )}
@@ -193,14 +212,9 @@ export function DataFreshness() {
           <DropdownMenuSeparator />
           
           {/* Actions */}
-          <DropdownMenuItem onClick={handleManualSync} disabled={isSyncing}>
+          <DropdownMenuItem onClick={handleManualSync} disabled={isRunning}>
             <Sparkles className="mr-2 h-4 w-4" />
-            {isSyncing ? 'Syncing...' : 'Sync Now'}
-          </DropdownMenuItem>
-          
-          <DropdownMenuItem onClick={() => setAutoSyncEnabled(!autoSyncEnabled)}>
-            <Clock className="mr-2 h-4 w-4" />
-            {autoSyncEnabled ? 'Disable' : 'Enable'} Auto-Sync
+            {isRunning ? 'Syncing...' : 'Sync Now'}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
