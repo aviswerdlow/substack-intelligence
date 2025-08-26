@@ -53,7 +53,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check authentication
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({
         success: false,
@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check authentication
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({
         success: false,
@@ -179,7 +179,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check authentication
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({
         success: false,

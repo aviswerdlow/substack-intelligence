@@ -31,7 +31,7 @@ export class PerformanceTracker extends EventEmitter {
     this.windowMs = windowMs;
   }
 
-  startOperation(operation: string): () => void {
+  startOperation(operation: string): (success?: boolean, metadata?: Record<string, any>) => void {
     const startTime = performance.now();
     
     return (success: boolean = true, metadata?: Record<string, any>) => {

@@ -15,7 +15,7 @@ export async function GET(
 ) {
   try {
     // Check authentication
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({
         success: false,
