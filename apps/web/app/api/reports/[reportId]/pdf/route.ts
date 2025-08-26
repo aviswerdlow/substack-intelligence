@@ -20,10 +20,10 @@ export async function GET(
       // Generate mock report for demo purposes
       const mockReport = {
         id: reportId,
-        report_type: 'weekly' as const,
+        report_type: 'weekly' as 'weekly' | 'daily',
         report_date: new Date().toISOString(),
         generated_at: new Date().toISOString(),
-        status: 'completed' as const,
+        status: 'completed',
       };
       
       // Fetch real intelligence data for the report
@@ -166,9 +166,9 @@ export async function GET(
         companies: companies.slice(0, 10), // Limit to top 10 for PDF size
       };
 
-      // Generate PDF
+      // Generate PDF (cast to any to avoid React/ReactPDF type conflicts)
       const pdfBuffer = await renderToBuffer(
-        React.createElement(ReportPDFTemplate, { data: reportData })
+        React.createElement(ReportPDFTemplate, { data: reportData }) as any
       );
 
       // Return PDF as response
