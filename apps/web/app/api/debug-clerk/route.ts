@@ -66,21 +66,37 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // Try to search for a user by email
+    // Try to search for a user by email or domain
     const body = await request.json();
-    const searchTerm = body.email || body.search;
+    const searchTerm = body.email || body.search || body.domain;
     
     if (!searchTerm) {
       return NextResponse.json({
-        error: 'Please provide an email or search term in the request body'
+        error: 'Please provide an email, domain, or search term in the request body'
       }, { status: 400 });
     }
     
-    // Search for users
-    const users = await clerkClient.users.getUserList({
-      emailAddress: [searchTerm],
-      limit: 10
-    });
+    // Search for users - if it's a domain search (starts with @), get all users and filter
+    let users;
+    if (searchTerm.startsWith('@')) {
+      // Domain search - get all users and filter
+      const allUsers = await clerkClient.users.getUserList({
+        limit: 100,
+        orderBy: '-created_at'
+      });
+      const domain = searchTerm.substring(1).toLowerCase();
+      users = allUsers.filter(u => 
+        u.emailAddresses?.some(email => 
+          email.emailAddress?.toLowerCase().endsWith(`@${domain}`)
+        )
+      );
+    } else {
+      // Direct email search
+      users = await clerkClient.users.getUserList({
+        emailAddress: [searchTerm],
+        limit: 10
+      });
+    }
     
     const results = users.map(u => ({
       id: u.id,
@@ -88,11 +104,13 @@ export async function POST(request: NextRequest) {
       createdAt: u.createdAt,
       firstName: u.firstName,
       lastName: u.lastName,
-      lastSignInAt: u.lastSignInAt
+      lastSignInAt: u.lastSignInAt,
+      allEmails: u.emailAddresses?.map(e => e.emailAddress) || []
     }));
     
     return NextResponse.json({
       searchTerm,
+      searchType: searchTerm.startsWith('@') ? 'domain' : 'email',
       found: results.length,
       users: results
     });
