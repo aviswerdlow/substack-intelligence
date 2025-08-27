@@ -147,8 +147,8 @@ async function checkAIStatus(supabase: any, userId: string): Promise<{operationa
 
 async function getProcessingStats(supabase: any, userId: string): Promise<any> {
   try {
-    // Get analytics for last 7 days - Pass userId to getAnalytics
-    const analytics = await getAnalytics(supabase, 7, userId);
+    // Get analytics for last 7 days
+    const analytics = await getAnalytics(supabase, 7);
     
     // Calculate processing rate based on emails vs successful extractions - FILTER BY USER_ID
     const { data: processedEmails, count: processedCount } = await supabase
