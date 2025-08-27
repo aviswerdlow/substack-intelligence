@@ -91,7 +91,6 @@ export function GmailConnectionModal({
           title: 'Google Sign-in Required',
           description: 'You need to use Google sign-in to connect Gmail. Please sign out and sign back in with Google.',
           variant: 'destructive',
-          duration: 5000,
         });
         setIsConnecting(false);
         
