@@ -804,6 +804,14 @@ export async function POST(request: NextRequest) {
     // Release sync lock on error
     pipelineCacheManager.clearSyncLock();
     
+    // Push error update to client through SSE
+    pushPipelineUpdate(userId, {
+      type: 'error',
+      status: 'error',
+      message: errorMessage,
+      stats: pipelineStatus.stats
+    });
+    
     // Create critical alert for pipeline failure
     createPipelineAlert('error', 'Pipeline Failed', 
       `Pipeline execution failed: ${errorMessage}`,

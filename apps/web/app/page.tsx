@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowRight, Zap, TrendingUp, Clock, Target } from 'lucide-react'
 import Link from 'next/link'
-import { SignInButton, SignUpButton, SignedIn, SignedOut } from '@clerk/nextjs'
+import { AuthButtons, AuthCTA } from '@/components/auth-buttons'
 
 export default function HomePage() {
   return (
@@ -16,30 +16,7 @@ export default function HomePage() {
           Transform cultural commentary into actionable investment intelligence. 
           Automated daily insights from 26+ tastemakers.
         </p>
-        <SignedOut>
-          <div className="flex gap-4 justify-center">
-            <SignInButton mode="modal">
-              <Button size="lg" className="gap-2">
-                Sign In
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </SignInButton>
-            <SignUpButton mode="modal">
-              <Button size="lg" variant="outline" className="gap-2">
-                Sign Up
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </SignUpButton>
-          </div>
-        </SignedOut>
-        <SignedIn>
-          <Link href="/dashboard">
-            <Button size="lg" className="gap-2">
-              View Intelligence Dashboard
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-        </SignedIn>
+        <AuthButtons />
       </div>
 
       <div className="grid md:grid-cols-3 gap-8 mb-16">
@@ -98,30 +75,7 @@ export default function HomePage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <SignedOut>
-              <div className="space-y-2">
-                <SignInButton mode="modal">
-                  <Button size="lg" className="w-full">
-                    Sign In to Dashboard
-                  </Button>
-                </SignInButton>
-                <p className="text-sm text-muted-foreground">
-                  Don't have an account?{' '}
-                  <SignUpButton mode="modal">
-                    <Button variant="link" className="p-0 h-auto">
-                      Sign up
-                    </Button>
-                  </SignUpButton>
-                </p>
-              </div>
-            </SignedOut>
-            <SignedIn>
-              <Link href="/dashboard">
-                <Button size="lg" className="w-full">
-                  Go to Dashboard
-                </Button>
-              </Link>
-            </SignedIn>
+            <AuthCTA />
           </CardContent>
         </Card>
       </div>
