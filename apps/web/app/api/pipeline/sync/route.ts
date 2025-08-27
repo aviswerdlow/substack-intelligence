@@ -296,7 +296,7 @@ export async function POST(request: NextRequest) {
       try {
         extractor = new ClaudeExtractor();
       } catch (extractorError) {
-        monitor.setHealthStatus('ai', false, 'Claude extractor initialization failed');
+        monitor.setHealthStatus('configuration', false, 'Claude extractor initialization failed');
         monitor.failStep('company_extraction', extractorError as Error);
         
         const errorMessage = extractorError instanceof Error ? extractorError.message : 'Unknown error';
