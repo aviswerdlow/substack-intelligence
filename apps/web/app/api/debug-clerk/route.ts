@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser, auth } from '@clerk/nextjs/server';
-import { clerkClient } from '@clerk/nextjs/server';
+import { currentUser, auth, clerkClient } from '@clerk/nextjs/server';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -14,7 +13,8 @@ export async function GET(request: NextRequest) {
     // Try to list recent users
     let recentUsers;
     try {
-      const users = await clerkClient.users.getUserList({
+      const clerk = await clerkClient();
+      const users = await clerk.users.getUserList({
         limit: 10,
         orderBy: '-created_at'
       });
@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
     let users;
     if (searchTerm.startsWith('@')) {
       // Domain search - get all users and filter
-      const allUsers = await clerkClient.users.getUserList({
+      const clerk = await clerkClient();
+      const allUsers = await clerk.users.getUserList({
         limit: 100,
         orderBy: '-created_at'
       });
@@ -92,7 +93,8 @@ export async function POST(request: NextRequest) {
       );
     } else {
       // Direct email search
-      users = await clerkClient.users.getUserList({
+      const clerk = await clerkClient();
+      users = await clerk.users.getUserList({
         emailAddress: [searchTerm],
         limit: 10
       });
