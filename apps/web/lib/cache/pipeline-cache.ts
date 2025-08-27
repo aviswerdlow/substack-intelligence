@@ -141,7 +141,7 @@ export const pipelineCacheManager = {
     
     // Check if lock exists and is still valid
     if (lockData && typeof lockData === 'object' && 'timestamp' in lockData) {
-      const lockAge = Date.now() - lockData.timestamp;
+      const lockAge = Date.now() - (lockData as { timestamp: number }).timestamp;
       // If lock is older than 10 minutes, consider it stale
       if (lockAge > 10 * 60 * 1000) {
         console.log('[Pipeline Cache] Stale lock detected, clearing it');
