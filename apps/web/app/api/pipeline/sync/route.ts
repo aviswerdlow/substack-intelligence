@@ -290,7 +290,34 @@ export async function POST(request: NextRequest) {
     
     try {
       const supabase = createServiceRoleClient();
-      const extractor = new ClaudeExtractor();
+      
+      // Initialize Claude extractor with error handling
+      let extractor;
+      try {
+        extractor = new ClaudeExtractor();
+      } catch (extractorError) {
+        monitor.setHealthStatus('ai', false, 'Claude extractor initialization failed');
+        monitor.failStep('company_extraction', extractorError as Error);
+        
+        const errorMessage = extractorError instanceof Error ? extractorError.message : 'Unknown error';
+        pushPipelineUpdate(userId, {
+          type: 'error',
+          status: 'error',
+          message: `AI service initialization failed: ${errorMessage}. Please check your Anthropic API key configuration.`,
+        });
+        
+        pipelineStatus.status = 'error';
+        pipelineStatus.message = 'AI service unavailable';
+        
+        return NextResponse.json({
+          success: false,
+          error: 'AI service initialization failed. Please ensure your Anthropic API key is properly configured in environment variables.',
+          details: {
+            error: errorMessage,
+            service: 'anthropic'
+          }
+        }, { status: 500 });
+      }
       
       // Get the latest emails from database (just inserted by fetchDailySubstacks)
       const dbQueryStartTime = Date.now();
@@ -349,10 +376,24 @@ export async function POST(request: NextRequest) {
         
         try {
           // Extract companies from email content
-          const extractionResult = await extractor.extractCompanies(
-            email.clean_text || email.raw_html || '',
-            email.newsletter_name || 'Unknown Newsletter'
-          );
+          let extractionResult;
+          try {
+            extractionResult = await extractor.extractCompanies(
+              email.clean_text || email.raw_html || '',
+              email.newsletter_name || 'Unknown Newsletter'
+            );
+          } catch (aiError) {
+            console.error(`Failed to extract from email ${email.id}:`, aiError);
+            // Skip this email and continue with others
+            pushPipelineUpdate(userId, {
+              type: 'processing_email',
+              status: 'extracting',
+              progress: Math.round(extractionProgress),
+              message: `Skipping "${email.newsletter_name || email.subject}" due to AI error`,
+              stats: pipelineStatus.stats
+            });
+            continue;
+          }
           
           console.log(`Extracted ${extractionResult.companies.length} companies from: ${email.subject}`);
           
