@@ -15,7 +15,8 @@ const isPublicRoute = createRouteMatcher([
   '/api/admin/(.*)',
   '/api/setup/(.*)',
   '/api/auth/gmail',
-  '/api/auth/gmail/(.*)'
+  '/api/auth/gmail/(.*)',
+  '/api/debug-clerk'  // Add debug endpoint as public for testing
 ]);
 
 /**
