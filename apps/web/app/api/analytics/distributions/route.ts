@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 
 export async function GET(request: NextRequest) {
   try {
+    // Get current user for filtering
+    const user = await currentUser();
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
+    if (!user && !isDevelopment) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized'
+      }, { status: 401 });
+    }
+    
+    const userId = user?.id || 'development-user';
+    
     const searchParams = request.nextUrl.searchParams;
     const days = searchParams.get('days') || '7';
     
@@ -14,10 +28,11 @@ export async function GET(request: NextRequest) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - parseInt(days));
     
-    // Fetch companies data
+    // Fetch companies data - FILTER BY USER_ID
     const { data: companies, error } = await supabase
       .from('companies')
       .select('id, name, industry, funding_status, created_at')
+      .eq('user_id', userId)  // CRITICAL: Filter by user_id
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString());
     
@@ -41,73 +56,31 @@ export async function GET(request: NextRequest) {
       fundingMap.set(fundingStage, (fundingMap.get(fundingStage) || 0) + 1);
     });
     
-    const totalCompanies = companies?.length || 0;
+    // Convert to arrays for response
+    const industryDistribution = Array.from(industryMap.entries())
+      .map(([industry, count]) => ({ industry, count }))
+      .sort((a, b) => b.count - a.count);
     
-    // Convert maps to arrays with percentages
-    const industries = Array.from(industryMap.entries())
-      .map(([industry, count]) => ({
-        industry,
-        count,
-        percentage: totalCompanies > 0 ? Math.round((count / totalCompanies) * 1000) / 10 : 0
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5); // Top 5 industries
-    
-    const funding = Array.from(fundingMap.entries())
-      .map(([stage, count]) => ({
-        stage: stage.toLowerCase().replace(/\s+/g, '-'),
-        count,
-        percentage: totalCompanies > 0 ? Math.round((count / totalCompanies) * 1000) / 10 : 0
-      }))
-      .sort((a, b) => {
-        // Sort funding stages in logical order
-        const order = ['seed', 'series-a', 'series-b', 'series-c', 'public', 'unknown'];
-        return order.indexOf(a.stage) - order.indexOf(b.stage);
-      });
-    
-    // If no real data, provide default structure
-    if (industries.length === 0) {
-      industries.push(
-        { industry: 'Technology', count: 0, percentage: 0 },
-        { industry: 'Finance', count: 0, percentage: 0 },
-        { industry: 'Healthcare', count: 0, percentage: 0 }
-      );
-    }
-    
-    if (funding.length === 0) {
-      funding.push(
-        { stage: 'seed', count: 0, percentage: 0 },
-        { stage: 'series-a', count: 0, percentage: 0 },
-        { stage: 'series-b', count: 0, percentage: 0 }
-      );
-    }
+    const fundingDistribution = Array.from(fundingMap.entries())
+      .map(([stage, count]) => ({ stage, count }))
+      .sort((a, b) => b.count - a.count);
     
     return NextResponse.json({
       success: true,
-      industries,
-      funding
+      distributions: {
+        industry: industryDistribution,
+        funding: fundingDistribution
+      }
     });
     
   } catch (error) {
-    console.error('Failed to fetch distributions:', error);
-    
-    // Return mock data even on error
-    return NextResponse.json({
-      success: true,
-      industries: [
-        { industry: 'Technology', count: 20, percentage: 45 },
-        { industry: 'Finance', count: 10, percentage: 25 },
-        { industry: 'Healthcare', count: 8, percentage: 20 },
-        { industry: 'Retail', count: 3, percentage: 7.5 },
-        { industry: 'Media', count: 1, percentage: 2.5 }
-      ],
-      funding: [
-        { stage: 'seed', count: 18, percentage: 40 },
-        { stage: 'series-a', count: 10, percentage: 25 },
-        { stage: 'series-b', count: 8, percentage: 20 },
-        { stage: 'series-c', count: 4, percentage: 10 },
-        { stage: 'public', count: 2, percentage: 5 }
-      ]
-    });
+    console.error('Distributions API error:', error);
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Failed to fetch distributions' 
+      },
+      { status: 500 }
+    );
   }
 }

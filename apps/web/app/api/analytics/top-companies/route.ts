@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 
 export async function GET(request: NextRequest) {
   try {
+    // Get current user for filtering
+    const user = await currentUser();
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
+    if (!user && !isDevelopment) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized'
+      }, { status: 401 });
+    }
+    
+    const userId = user?.id || 'development-user';
+    
     const searchParams = request.nextUrl.searchParams;
     const days = searchParams.get('days') || '7';
     
@@ -14,10 +28,11 @@ export async function GET(request: NextRequest) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - parseInt(days));
     
-    // First fetch mentions
+    // Fetch mentions - FILTER BY USER_ID
     const { data: mentions, error: mentionsError } = await supabase
       .from('company_mentions')
       .select('*')
+      .eq('user_id', userId)  // CRITICAL: Filter by user_id
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString());
     
@@ -26,10 +41,11 @@ export async function GET(request: NextRequest) {
       throw mentionsError;
     }
     
-    // Then fetch companies separately
+    // Fetch companies - FILTER BY USER_ID
     const { data: companies, error: companiesError } = await supabase
       .from('companies')
-      .select('id, name, industry, funding_status');
+      .select('id, name, industry, funding_status')
+      .eq('user_id', userId);  // CRITICAL: Filter by user_id
     
     if (companiesError) {
       console.error('Error fetching companies:', companiesError);
@@ -42,76 +58,51 @@ export async function GET(request: NextRequest) {
       companiesMap.set(company.id, company);
     });
     
-    // Process mentions to aggregate by company
-    const companyMap = new Map<string, any>();
+    // Count mentions per company
+    const mentionCounts = new Map();
+    const sentimentCounts = new Map();
     
     mentions?.forEach(mention => {
-      const company = companiesMap.get(mention.company_id);
-      if (!company) return;
-      
-      const companyId = company.id;
-      const existing = companyMap.get(companyId) || {
-        name: company.name,
-        mentions: 0,
-        totalSentiment: 0,
-        newsletters: new Set(),
-        lastSeen: mention.created_at,
-        industry: company.industry,
-        fundingStage: company.funding_status
-      };
-      
-      existing.mentions++;
-      // Convert sentiment to numeric score if needed
-      const sentimentValue = mention.confidence || 0.5; // Use confidence as sentiment score
-      existing.totalSentiment += sentimentValue;
-      
-      // Note: We'd need to fetch emails separately to get newsletter names
-      // For now, we'll skip the newsletter aggregation
-      
-      // Update last seen if this mention is more recent
-      if (new Date(mention.created_at) > new Date(existing.lastSeen)) {
-        existing.lastSeen = mention.created_at;
+      if (!mentionCounts.has(mention.company_id)) {
+        mentionCounts.set(mention.company_id, 0);
+        sentimentCounts.set(mention.company_id, {
+          positive: 0,
+          neutral: 0,
+          negative: 0
+        });
       }
       
-      companyMap.set(companyId, existing);
+      mentionCounts.set(mention.company_id, mentionCounts.get(mention.company_id) + 1);
+      
+      const sentiments = sentimentCounts.get(mention.company_id);
+      const sentiment = mention.sentiment || 'neutral';
+      sentiments[sentiment] = (sentiments[sentiment] || 0) + 1;
     });
     
-    // Convert to array and calculate average sentiment
-    const companiesList = Array.from(companyMap.values()).map(company => {
-      const avgSentiment = company.mentions > 0 ? company.totalSentiment / company.mentions : 0;
-      let sentiment: 'positive' | 'neutral' | 'negative';
-      
-      if (avgSentiment > 0.3) {
-        sentiment = 'positive';
-      } else if (avgSentiment < -0.3) {
-        sentiment = 'negative';
-      } else {
-        sentiment = 'neutral';
-      }
-      
-      return {
-        name: company.name,
-        mentions: company.mentions,
-        sentiment,
-        lastSeen: company.lastSeen,
-        newsletters: [], // Empty for now since we're not fetching email data
-        industry: company.industry,
-        fundingStage: company.fundingStage
-      };
-    });
-    
-    // Sort by mention count and take top 10
-    companiesList.sort((a, b) => b.mentions - a.mentions);
-    const topCompanies = companiesList.slice(0, 10);
-    
-    // If no data, return empty array instead of mock data
-    if (topCompanies.length === 0) {
-      return NextResponse.json({
-        success: true,
-        companies: [],
-        message: 'No company data available for the selected period'
-      });
-    }
+    // Build top companies list
+    const topCompanies = Array.from(mentionCounts.entries())
+      .map(([companyId, count]) => {
+        const company = companiesMap.get(companyId);
+        const sentiments = sentimentCounts.get(companyId);
+        
+        if (!company) return null;
+        
+        return {
+          id: companyId,
+          name: company.name,
+          industry: company.industry,
+          fundingStatus: company.funding_status,
+          mentionCount: count,
+          sentiment: {
+            positive: sentiments.positive,
+            neutral: sentiments.neutral,
+            negative: sentiments.negative
+          }
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.mentionCount - a.mentionCount)
+      .slice(0, 10);
     
     return NextResponse.json({
       success: true,
@@ -119,13 +110,13 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Failed to fetch top companies:', error);
-    
-    // Return empty data on error instead of mock
-    return NextResponse.json({
-      success: false,
-      companies: [],
-      error: 'Failed to fetch company data'
-    });
+    console.error('Top companies API error:', error);
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Failed to fetch top companies' 
+      },
+      { status: 500 }
+    );
   }
 }

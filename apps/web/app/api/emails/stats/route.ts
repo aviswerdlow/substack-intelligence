@@ -1,14 +1,28 @@
 import { NextResponse } from 'next/server';
+import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 
 export async function GET() {
   try {
+    // Get current user for filtering
+    const user = await currentUser();
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
+    if (!user && !isDevelopment) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized'
+      }, { status: 401 });
+    }
+    
+    const userId = user?.id || 'development-user';
     const supabase = createServiceRoleClient();
     
-    // Get counts for each status
+    // Get counts for each status - FILTER BY USER_ID
     const { data: statusCounts } = await supabase
       .from('emails')
-      .select('processing_status');
+      .select('processing_status')
+      .eq('user_id', userId);  // CRITICAL: Filter by user_id
 
     const stats = {
       total: 0,
@@ -38,19 +52,19 @@ export async function GET() {
     });
 
     // Calculate success rate
-    if (stats.completed + stats.failed > 0) {
-      stats.success_rate = stats.completed / (stats.completed + stats.failed);
+    if (stats.total > 0) {
+      stats.success_rate = (stats.completed / stats.total) * 100;
     }
 
     return NextResponse.json({
       success: true,
       stats
     });
-
+    
   } catch (error) {
     console.error('Failed to fetch email stats:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch email stats' },
+      { success: false, error: 'Failed to fetch stats' },
       { status: 500 }
     );
   }

@@ -7,6 +7,20 @@ export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
   try {
+    // Get current user for filtering
+    const { currentUser } = await import('@clerk/nextjs/server');
+    const user = await currentUser();
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
+    if (!user && !isDevelopment) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized'
+      }, { status: 401 });
+    }
+    
+    const userId = user?.id || 'development-user';
+    
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
@@ -17,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServiceRoleClient();
     
-    // Build query
+    // Build query - FILTER BY USER_ID
     let query = supabase
       .from('emails')
       .select(`
@@ -30,7 +44,8 @@ export async function GET(request: NextRequest) {
         processed_at,
         processing_status,
         error_message
-      `, { count: 'exact' });
+      `, { count: 'exact' })
+      .eq('user_id', userId);  // CRITICAL: Filter by user_id
 
     // Apply filters
     if (status !== 'all') {
@@ -63,11 +78,12 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
-    // Get company counts for each email
+    // Get company counts for each email - FILTER BY USER_ID
     const emailIds = emails?.map(e => e.id) || [];
     const { data: companyCounts } = await supabase
       .from('company_mentions')
       .select('email_id, confidence')
+      .eq('user_id', userId)  // CRITICAL: Filter by user_id
       .in('email_id', emailIds);
 
     // Aggregate company data
@@ -86,10 +102,11 @@ export async function GET(request: NextRequest) {
       confidence_avg: emailCompanyMap.get(email.id)?.avgConfidence || 0
     }));
 
-    // Get unique newsletters for filter
+    // Get unique newsletters for filter - FILTER BY USER_ID
     const { data: newsletters } = await supabase
       .from('emails')
       .select('newsletter_name')
+      .eq('user_id', userId)  // CRITICAL: Filter by user_id
       .limit(100);
     
     const uniqueNewsletters = Array.from(new Set(newsletters?.map(n => n.newsletter_name) || []));

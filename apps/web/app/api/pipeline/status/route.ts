@@ -29,9 +29,11 @@ export async function GET(request: NextRequest) {
         error: 'Unauthorized'
       }, { status: 401 });
     }
+    
+    const userId = user?.id || 'development-user';
 
     // Check cache first
-    const cacheKey = `metrics:${user?.id || 'dev'}`;
+    const cacheKey = `metrics:${userId}`;
     const cachedMetrics = pipelineCacheManager.getPipelineMetrics();
     
     if (cachedMetrics) {
@@ -50,10 +52,11 @@ export async function GET(request: NextRequest) {
       const { result: responseData, duration } = await performanceUtils.measureTime(async () => {
         const supabase = createServiceRoleClient();
     
-        // Get the most recent email to determine last sync time
+        // Get the most recent email to determine last sync time - FILTER BY USER_ID
         const { data: latestEmail } = await supabase
           .from('emails')
           .select('received_at')
+          .eq('user_id', userId)  // CRITICAL: Filter by user_id
           .order('received_at', { ascending: false })
           .limit(1)
           .single();
@@ -69,7 +72,7 @@ export async function GET(request: NextRequest) {
         // Get counts for the last 24 hours
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
         
-        // Parallel queries for better performance
+        // Parallel queries for better performance - ALL FILTER BY USER_ID
         const [
           emailsResult,
           companiesResult,
@@ -77,16 +80,24 @@ export async function GET(request: NextRequest) {
           recentEmailsResult,
           recentCompaniesResult
         ] = await Promise.all([
-          supabase.from('emails').select('*', { count: 'exact', head: true }),
-          supabase.from('companies').select('*', { count: 'exact', head: true }),
-          supabase.from('company_mentions').select('*', { count: 'exact', head: true }),
+          supabase.from('emails')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId),  // CRITICAL: Filter by user_id
+          supabase.from('companies')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId),  // CRITICAL: Filter by user_id
+          supabase.from('company_mentions')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId),  // CRITICAL: Filter by user_id
           supabase
             .from('emails')
             .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId)  // CRITICAL: Filter by user_id
             .gte('received_at', twentyFourHoursAgo),
           supabase
             .from('companies')
             .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId)  // CRITICAL: Filter by user_id
             .gte('first_seen_at', twentyFourHoursAgo)
         ]);
         
@@ -101,7 +112,7 @@ export async function GET(request: NextRequest) {
           isFresh
         };
         
-        // Get trending companies (most mentioned in last 24 hours)
+        // Get trending companies (most mentioned in last 24 hours) - FILTER BY USER_ID
         const { data: trendingCompanies } = await supabase
           .from('companies')
           .select(`
@@ -113,51 +124,28 @@ export async function GET(request: NextRequest) {
               extracted_at
             )
           `)
+          .eq('user_id', userId)  // CRITICAL: Filter by user_id
           .gte('company_mentions.extracted_at', twentyFourHoursAgo)
           .order('mention_count', { ascending: false })
           .limit(5);
         
-        // Calculate suggested next sync time
-        let suggestedNextSync: Date;
-        if (dataAge < 15) {
-          // If very fresh, wait at least 15 minutes
-          suggestedNextSync = new Date(Date.now() + (15 - dataAge) * 60 * 1000);
-        } else if (dataAge < 60) {
-          // If somewhat fresh, sync soon
-          suggestedNextSync = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-        } else {
-          // If stale, sync immediately
-          suggestedNextSync = new Date();
-        }
-        
-        return {
+        const responseData = {
           success: true,
-          data: {
-            metrics,
-            trending: trendingCompanies || [],
-            health: {
-              status: isFresh ? 'healthy' : dataAge < 60 ? 'warning' : 'stale',
-              message: isFresh 
-                ? 'Data is fresh and up-to-date' 
-                : dataAge < 60 
-                  ? 'Data is getting stale, consider refreshing'
-                  : 'Data is stale, refresh recommended',
-              suggestedNextSync: suggestedNextSync.toISOString(),
-              autoSyncEnabled: true, // This could be pulled from user settings
-              syncInterval: 30 // minutes
-            }
-          },
-          meta: {
-            timestamp: new Date().toISOString(),
-            version: '1.0.0'
+          metrics,
+          trending: trendingCompanies || [],
+          _performanceMetrics: {
+            queryDuration: 0 // Will be set below
           }
         };
+        
+        // Cache the successful response
+        pipelineCacheManager.setPipelineMetrics(responseData, 5 * 60 * 1000); // Cache for 5 minutes
+        
+        return responseData;
       });
-
-      // Cache the results
-      pipelineCacheManager.setPipelineMetrics(responseData);
       
-      console.log(`[PERFORMANCE] Pipeline metrics fetched in ${duration}ms`);
+      // Add performance metrics
+      responseData._performanceMetrics.queryDuration = duration;
       
       return NextResponse.json(
         performanceUtils.addCacheStatus(responseData, false, cacheKey),
@@ -168,11 +156,21 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Failed to get pipeline status:', error);
-    
+    console.error('Pipeline status error:', error);
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Failed to fetch pipeline status',
+      metrics: {
+        totalEmails: 0,
+        totalCompanies: 0,
+        totalMentions: 0,
+        recentEmails: 0,
+        recentCompanies: 0,
+        lastSyncTime: null,
+        dataAge: Infinity,
+        isFresh: false
+      },
+      trending: []
     }, { status: 500 });
   }
 }

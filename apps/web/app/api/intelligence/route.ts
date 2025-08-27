@@ -25,6 +25,9 @@ export async function GET(request: NextRequest) {
       }, { status: 401 });
     }
 
+    // Get the user ID to filter data
+    const userId = user?.id || 'development-user';
+
     // Parse and validate query parameters
     const { searchParams } = new URL(request.url);
     const params = GetIntelligenceSchema.parse({
@@ -38,7 +41,7 @@ export async function GET(request: NextRequest) {
     // Calculate date range
     const dateThreshold = new Date(Date.now() - params.days * 24 * 60 * 60 * 1000).toISOString();
     
-    // Query companies with recent mentions
+    // Query companies with recent mentions - FILTER BY USER_ID
     const { data: companies, error } = await supabase
       .from('companies')
       .select(`
@@ -55,6 +58,7 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
+      .eq('user_id', userId)  // CRITICAL: Filter by user_id
       .order('mention_count', { ascending: false })
       .limit(params.limit);
     

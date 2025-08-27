@@ -22,10 +22,10 @@ export async function GET() {
     const gmailStatus = await checkGmailStatus(supabase, userId);
     
     // Check AI service (by trying to get analytics which uses the system)
-    const aiStatus = await checkAIStatus(supabase);
+    const aiStatus = await checkAIStatus(supabase, userId);
     
     // Calculate processing statistics
-    const processingStats = await getProcessingStats(supabase);
+    const processingStats = await getProcessingStats(supabase, userId);
 
     const systemStatus = {
       services: [
@@ -58,19 +58,20 @@ export async function GET() {
     });
   } catch (error) {
     console.error('System status check error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to check system status' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to check system status'
+    }, { status: 500 });
   }
 }
 
+// Helper functions
 async function checkDatabaseHealth(supabase: any): Promise<boolean> {
   try {
-    // Simple query to test database connection
-    const { error } = await supabase
+    // Simple health check query
+    const { data, error } = await supabase
       .from('emails')
-      .select('count')
+      .select('id')
       .limit(1);
     
     return !error;
@@ -82,19 +83,16 @@ async function checkDatabaseHealth(supabase: any): Promise<boolean> {
 
 async function checkGmailStatus(supabase: any, userId: string): Promise<{connected: boolean, details: string}> {
   try {
+    // Check if Gmail settings exist and are recent - FILTER BY USER_ID
     const { data: settings, error } = await supabase
-      .from('user_settings')
+      .from('settings')
       .select('gmail_connected, gmail_email, updated_at')
-      .eq('user_id', userId)
+      .eq('user_id', userId)  // CRITICAL: Filter by user_id
       .single();
     
-    if (error || !settings) {
-      return { connected: false, details: 'No Gmail configuration found' };
-    }
-    
-    if (settings.gmail_connected) {
-      const lastUpdate = new Date(settings.updated_at);
-      const daysSinceUpdate = Math.floor((Date.now() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
+    if (!error && settings?.gmail_connected) {
+      const updatedAt = new Date(settings.updated_at);
+      const daysSinceUpdate = Math.floor((Date.now() - updatedAt.getTime()) / (1000 * 60 * 60 * 24));
       
       return {
         connected: true,
@@ -109,12 +107,13 @@ async function checkGmailStatus(supabase: any, userId: string): Promise<{connect
   }
 }
 
-async function checkAIStatus(supabase: any): Promise<{operational: boolean, details: string}> {
+async function checkAIStatus(supabase: any, userId: string): Promise<{operational: boolean, details: string}> {
   try {
-    // Check if we have recent successful AI extractions
+    // Check if we have recent successful AI extractions - FILTER BY USER_ID
     const { data, error } = await supabase
       .from('company_mentions')
       .select('extracted_at')
+      .eq('user_id', userId)  // CRITICAL: Filter by user_id
       .gte('extracted_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
       .limit(1);
     
@@ -126,10 +125,11 @@ async function checkAIStatus(supabase: any): Promise<{operational: boolean, deta
       return { operational: true, details: 'AI extractions running successfully' };
     }
     
-    // Check if there are any emails processed recently but no extractions
+    // Check if there are any emails processed recently but no extractions - FILTER BY USER_ID
     const { data: recentEmails } = await supabase
       .from('emails')
       .select('processed_at')
+      .eq('user_id', userId)  // CRITICAL: Filter by user_id
       .gte('received_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
       .eq('processing_status', 'completed')
       .limit(1);
@@ -145,63 +145,42 @@ async function checkAIStatus(supabase: any): Promise<{operational: boolean, deta
   }
 }
 
-async function getProcessingStats(supabase: any): Promise<any> {
+async function getProcessingStats(supabase: any, userId: string): Promise<any> {
   try {
-    // Get analytics for last 7 days
-    const analytics = await getAnalytics(supabase, 7);
+    // Get analytics for last 7 days - Pass userId to getAnalytics
+    const analytics = await getAnalytics(supabase, 7, userId);
     
-    // Calculate processing rate based on emails vs successful extractions
-    const { data: processedEmails } = await supabase
+    // Calculate processing rate based on emails vs successful extractions - FILTER BY USER_ID
+    const { data: processedEmails, count: processedCount } = await supabase
       .from('emails')
       .select('id', { count: 'exact' })
+      .eq('user_id', userId)  // CRITICAL: Filter by user_id
       .gte('received_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
       .eq('processing_status', 'completed');
     
-    const { data: totalEmails } = await supabase
-      .from('emails')
-      .select('id', { count: 'exact' })
-      .gte('received_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+    const { count: companiesCount } = await supabase
+      .from('company_mentions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)  // CRITICAL: Filter by user_id
+      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
     
-    const processingRate = totalEmails && totalEmails.length > 0 
-      ? ((processedEmails?.length || 0) / totalEmails.length * 100).toFixed(1)
-      : '0.0';
-    
-    // Calculate trends by comparing to previous period
-    const prevAnalytics = await getAnalytics(supabase, 14);
-    const currentPeriod = analytics;
-    const previousPeriod = {
-      totalEmails: prevAnalytics.totalEmails - currentPeriod.totalEmails,
-      totalCompanies: prevAnalytics.totalCompanies - currentPeriod.totalCompanies,
-      totalMentions: prevAnalytics.totalMentions - currentPeriod.totalMentions
-    };
-    
-    const calculateTrend = (current: number, previous: number) => {
-      if (previous === 0) return '+0%';
-      const change = ((current - previous) / previous * 100);
-      return `${change >= 0 ? '+' : ''}${change.toFixed(0)}%`;
-    };
+    const processingRate = processedCount && processedCount > 0 
+      ? ((companiesCount || 0) / processedCount * 100).toFixed(1)
+      : 0;
     
     return {
-      emailsProcessed: currentPeriod.totalEmails,
-      emailsTrend: calculateTrend(currentPeriod.totalEmails, previousPeriod.totalEmails),
-      companiesFound: currentPeriod.totalCompanies,
-      companiesTrend: calculateTrend(currentPeriod.totalCompanies, previousPeriod.totalCompanies),
-      totalMentions: currentPeriod.totalMentions,
-      mentionsTrend: calculateTrend(currentPeriod.totalMentions, previousPeriod.totalMentions),
-      processingRate: processingRate + '%',
-      processingTrend: '+0.1%' // Would need historical processing rates to calculate properly
+      emailsProcessed: processedCount || 0,
+      companiesExtracted: companiesCount || 0,
+      processingRate: `${processingRate}%`,
+      period: '7 days'
     };
   } catch (error) {
-    console.error('Processing stats calculation failed:', error);
+    console.error('Failed to calculate processing stats:', error);
     return {
       emailsProcessed: 0,
-      emailsTrend: '+0%',
-      companiesFound: 0,
-      companiesTrend: '+0%',
-      totalMentions: 0,
-      mentionsTrend: '+0%',
-      processingRate: '0.0%',
-      processingTrend: '+0%'
+      companiesExtracted: 0,
+      processingRate: '0%',
+      period: '7 days'
     };
   }
 }
