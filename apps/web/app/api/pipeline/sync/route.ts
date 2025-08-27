@@ -325,7 +325,7 @@ export async function POST(request: NextRequest) {
         .from('emails')
         .select('*')
         .order('received_at', { ascending: false })
-        .limit(Math.min(pipelineStatus.stats.emailsFetched || 10, 50)); // Process up to 50 emails
+        .limit(Math.min(pipelineStatus.stats.emailsFetched || 10, 20)); // Process up to 20 emails to avoid timeouts
       
       monitor.trackDatabaseOperation('select', 'emails', dbEmails?.length, !fetchError, fetchError || undefined);
       
@@ -342,8 +342,21 @@ export async function POST(request: NextRequest) {
       const companiesFound: any[] = [];
       const newlyDiscoveredCompanies = new Set<string>(); // Track companies discovered in this run
       const processingStartTime = Date.now();
+      const maxProcessingTime = 25000; // 25 seconds max (Vercel has 30s limit for API routes)
       
       for (let i = 0; i < dbEmails.length; i++) {
+        // Check if we're approaching timeout limit
+        if (Date.now() - processingStartTime > maxProcessingTime) {
+          console.log(`Approaching timeout limit, stopping after processing ${i} emails`);
+          pushPipelineUpdate(userId, {
+            type: 'processing_email',
+            status: 'extracting',
+            message: `Processed ${i} of ${dbEmails.length} emails (timeout protection)`,
+            stats: pipelineStatus.stats
+          });
+          break;
+        }
+        
         const email = dbEmails[i];
         
         // Update progress
@@ -378,12 +391,22 @@ export async function POST(request: NextRequest) {
           // Extract companies from email content
           let extractionResult;
           try {
+            console.log(`Processing email ${i + 1}/${dbEmails.length}: ${email.subject || email.newsletter_name}`);
+            
+            // Skip if no content
+            const content = email.clean_text || email.raw_html || '';
+            if (!content || content.trim().length < 100) {
+              console.log(`Skipping email ${email.id} - insufficient content`);
+              continue;
+            }
+            
             extractionResult = await extractor.extractCompanies(
-              email.clean_text || email.raw_html || '',
+              content,
               email.newsletter_name || 'Unknown Newsletter'
             );
           } catch (aiError) {
             console.error(`Failed to extract from email ${email.id}:`, aiError);
+            console.error(`Email subject: ${email.subject}, Newsletter: ${email.newsletter_name}`);
             // Skip this email and continue with others
             pushPipelineUpdate(userId, {
               type: 'processing_email',
