@@ -61,7 +61,7 @@ export class GmailConnector {
     this.gmail = await clerkOAuth.createClerkGmailClient(this.clerkUserId);
   }
 
-  async fetchDailySubstacks(daysBack: number = 30): Promise<ProcessedEmail[]> {
+  async fetchDailySubstacks(daysBack: number = 30, userId?: string): Promise<ProcessedEmail[]> {
     const startTime = Date.now();
     
     // Ensure Gmail client is initialized (for Clerk OAuth)
@@ -141,7 +141,7 @@ export class GmailConnector {
       
       // Store in Supabase with conflict handling
       if (successful.length > 0) {
-        await this.storeEmails(successful);
+        await this.storeEmails(successful, userId || this.clerkUserId);
       }
       
       await axiomLogger.logEmailEvent('fetch_completed', {
@@ -357,7 +357,7 @@ export class GmailConnector {
     }
   }
 
-  private async storeEmails(emails: ProcessedEmail[]): Promise<void> {
+  private async storeEmails(emails: ProcessedEmail[], userId?: string): Promise<void> {
     const storeStart = Date.now();
     
     try {
@@ -365,6 +365,7 @@ export class GmailConnector {
       
       // Convert to database format with data sanitization
       const dbEmails = emails.map(email => ({
+        user_id: userId, // Associate with the user
         message_id: email.messageId,
         subject: redactSensitiveData(email.subject),
         sender: redactSensitiveData(email.sender),

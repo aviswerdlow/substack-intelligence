@@ -24,8 +24,8 @@ type UserTodo = Tables['user_todos']['Row'];
 type DailyIntelligence = Database['public']['Views']['daily_intelligence']['Row'];
 
 // Cached queries for React Server Components
-export const getCompanyById = cache(async (supabase: SupabaseClient, id: string) => {
-  const { data, error } = await supabase
+export const getCompanyById = cache(async (supabase: SupabaseClient, id: string, userId?: string) => {
+  let query = supabase
     .from('companies')
     .select(`
       *,
@@ -38,8 +38,14 @@ export const getCompanyById = cache(async (supabase: SupabaseClient, id: string)
         )
       )
     `)
-    .eq('id', id)
-    .single();
+    .eq('id', id);
+  
+  // Filter by user_id if provided
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+  
+  const { data, error } = await query.single();
 
   if (error) throw error;
   return data;
@@ -54,6 +60,7 @@ export const getCompanies = cache(async (
     fundingStatus?: string;
     orderBy?: 'mention_count' | 'created_at' | 'name';
     orderDirection?: 'asc' | 'desc';
+    userId?: string;
   } = {}
 ) => {
   const {
@@ -62,7 +69,8 @@ export const getCompanies = cache(async (
     search,
     fundingStatus,
     orderBy = 'mention_count',
-    orderDirection = 'desc'
+    orderDirection = 'desc',
+    userId
   } = options;
 
   let query = supabase
@@ -70,6 +78,11 @@ export const getCompanies = cache(async (
     .select('*', { count: 'exact' })
     .range(offset, offset + limit - 1)
     .order(orderBy, { ascending: orderDirection === 'asc' });
+  
+  // Filter by user_id if provided
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
 
   if (search) {
     query = query.ilike('name', `%${search}%`);
@@ -134,15 +147,21 @@ export const getRecentEmails = cache(async (
     limit?: number;
     newsletterName?: string;
     status?: string;
+    userId?: string;
   } = {}
 ) => {
-  const { limit = 20, newsletterName, status } = options;
+  const { limit = 20, newsletterName, status, userId } = options;
 
   let query = supabase
     .from('emails')
     .select('*')
     .order('received_at', { ascending: false })
     .limit(limit);
+  
+  // Filter by user_id if provided
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
 
   if (newsletterName) {
     query = query.eq('newsletter_name', newsletterName);

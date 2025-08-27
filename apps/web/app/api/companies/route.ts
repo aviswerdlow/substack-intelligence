@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
     // Get companies from database
     const supabase = createServerComponentClient();
-    const result = await getCompanies(supabase, params);
+    const result = await getCompanies(supabase, { ...params, userId });
 
     return NextResponse.json({
       success: true,

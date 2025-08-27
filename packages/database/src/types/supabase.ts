@@ -15,6 +15,7 @@ export interface Database {
       emails: {
         Row: {
           id: string
+          user_id: string | null
           message_id: string
           subject: string
           sender: string
@@ -31,6 +32,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          user_id?: string | null
           message_id: string
           subject: string
           sender: string
@@ -63,6 +65,7 @@ export interface Database {
       companies: {
         Row: {
           id: string
+          user_id: string | null
           name: string
           normalized_name: string
           description: string | null
@@ -80,6 +83,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          user_id?: string | null
           name: string
           normalized_name: string
           description?: string | null
@@ -116,6 +120,7 @@ export interface Database {
       company_mentions: {
         Row: {
           id: string
+          user_id: string | null
           company_id: string
           email_id: string
           context: string
@@ -126,6 +131,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          user_id?: string | null
           company_id: string
           email_id: string
           context: string

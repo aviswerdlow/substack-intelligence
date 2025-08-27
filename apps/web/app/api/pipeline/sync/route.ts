@@ -276,7 +276,7 @@ export async function POST(request: NextRequest) {
       }
       const fetchStartTime = Date.now();
       
-      const emails = await connector.fetchDailySubstacks(options.daysBack);
+      const emails = await connector.fetchDailySubstacks(options.daysBack, userId);
       const fetchDuration = Date.now() - fetchStartTime;
       
       monitor.setMetric('emailsFetched', emails.length);
@@ -352,11 +352,12 @@ export async function POST(request: NextRequest) {
         }, { status: 500 });
       }
       
-      // Get the latest emails from database (just inserted by fetchDailySubstacks)
+      // Get the latest emails from database for this specific user
       const dbQueryStartTime = Date.now();
       const { data: dbEmails, error: fetchError } = await supabase
         .from('emails')
         .select('*')
+        .eq('user_id', userId) // CRITICAL: Filter by user_id for data isolation
         .order('received_at', { ascending: false })
         .limit(Math.min(pipelineStatus.stats.emailsFetched || 10, 20)); // Process up to 20 emails to avoid timeouts
       
@@ -455,10 +456,11 @@ export async function POST(request: NextRequest) {
           
           // Store extracted companies
           for (const company of extractionResult.companies) {
-            // Check if company already exists
+            // Check if company already exists for this user
             const { data: existingCompany } = await supabase
               .from('companies')
               .select('id, mention_count')
+              .eq('user_id', userId) // Filter by user_id
               .eq('name', company.name)
               .single();
             
@@ -484,6 +486,7 @@ export async function POST(request: NextRequest) {
               await supabase
                 .from('company_mentions')
                 .insert({
+                  user_id: userId, // Associate with current user
                   company_id: existingCompany.id,
                   email_id: email.id,
                   context: company.context || 'Mentioned in newsletter',
@@ -502,6 +505,7 @@ export async function POST(request: NextRequest) {
               const { data: newCompany } = await supabase
                 .from('companies')
                 .insert({
+                  user_id: userId, // Associate with current user
                   name: company.name,
                   normalized_name: normalizedName,
                   description: company.description,
@@ -518,6 +522,7 @@ export async function POST(request: NextRequest) {
                 await supabase
                   .from('company_mentions')
                   .insert({
+                    user_id: userId, // Associate with current user
                     company_id: newCompany.id,
                     email_id: email.id,
                     context: company.context || 'Mentioned in newsletter',
