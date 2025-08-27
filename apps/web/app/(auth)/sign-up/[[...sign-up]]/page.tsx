@@ -7,7 +7,10 @@ export default function Page() {
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold">Get Started</h1>
           <p className="text-muted-foreground mt-2">
-            Create your Substack Intelligence account
+            Sign up with Google to automatically connect your Gmail for newsletter analysis
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            We only read your newsletters - your personal emails remain private
           </p>
         </div>
         <SignUp 

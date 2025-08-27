@@ -46,13 +46,29 @@ function DashboardContent() {
   const [gmailConnected, setGmailConnected] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Check Gmail connection status
+  // Check Gmail connection status and auto-connect if signed in with Google
   useEffect(() => {
     const checkGmailStatus = async () => {
       try {
-        const response = await fetch('/api/auth/gmail/status');
-        const data = await response.json();
-        setGmailConnected(data.connected || false);
+        // First check if user signed in with Google through Clerk
+        const clerkResponse = await fetch('/api/auth/gmail/clerk-status');
+        const clerkData = await clerkResponse.json();
+        
+        if (clerkData.hasGoogleOAuth && !gmailConnected) {
+          // User has Google OAuth through Clerk but Gmail not marked as connected
+          // Auto-mark as connected
+          await fetch('/api/auth/gmail/mark-connected', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: clerkData.googleEmail })
+          });
+          setGmailConnected(true);
+        } else {
+          // Check normal Gmail connection status
+          const response = await fetch('/api/auth/gmail/status');
+          const data = await response.json();
+          setGmailConnected(data.connected || false);
+        }
       } catch (error) {
         console.error('Failed to check Gmail status:', error);
         setGmailConnected(false);

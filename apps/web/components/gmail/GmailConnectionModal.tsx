@@ -41,6 +41,17 @@ export function GmailConnectionModal({
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [authWindow, setAuthWindow] = useState<Window | null>(null);
+  const [hasGoogleOAuth, setHasGoogleOAuth] = useState(false);
+  
+  // Check Google OAuth status when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetch('/api/auth/gmail/clerk-status')
+        .then(res => res.json())
+        .then(data => setHasGoogleOAuth(data.hasGoogleOAuth || false))
+        .catch(() => setHasGoogleOAuth(false));
+    }
+  }, [isOpen]);
 
   const handleGmailConnect = useCallback(async () => {
     setIsConnecting(true);
@@ -206,7 +217,10 @@ export function GmailConnectionModal({
             Connect Your Gmail Account
           </DialogTitle>
           <DialogDescription>
-            Enable automatic newsletter processing by connecting your Gmail account
+            {hasGoogleOAuth 
+              ? "Your Gmail is already connected through Google sign-in!"
+              : "For the best experience, sign out and sign back in with Google to connect Gmail automatically"
+            }
           </DialogDescription>
         </DialogHeader>
 
