@@ -109,7 +109,7 @@ export default function AnalyticsPage() {
     try {
       const response = await fetch(`/api/analytics/metrics?days=${timeRange}`);
       const data = await response.json();
-      if (data.success) {
+      if (data.success && data.metrics) {
         setMetrics(data.metrics);
       }
     } catch (error) {
@@ -122,7 +122,7 @@ export default function AnalyticsPage() {
       const response = await fetch(`/api/analytics/trends?days=${timeRange}`);
       const data = await response.json();
       if (data.success) {
-        setTrendData(data.trends);
+        setTrendData(data.trends || []);
       }
     } catch (error) {
       console.error('Failed to fetch trend data:', error);
@@ -134,7 +134,7 @@ export default function AnalyticsPage() {
       const response = await fetch(`/api/analytics/newsletters?days=${timeRange}`);
       const data = await response.json();
       if (data.success) {
-        setNewsletterPerformance(data.newsletters);
+        setNewsletterPerformance(data.newsletters || []);
       }
     } catch (error) {
       console.error('Failed to fetch newsletter performance:', error);
@@ -146,8 +146,8 @@ export default function AnalyticsPage() {
       const response = await fetch(`/api/analytics/distributions?days=${timeRange}`);
       const data = await response.json();
       if (data.success) {
-        setIndustryDistribution(data.industries);
-        setFundingDistribution(data.funding);
+        setIndustryDistribution(data.industries || []);
+        setFundingDistribution(data.funding || []);
       }
     } catch (error) {
       console.error('Failed to fetch distributions:', error);
@@ -159,7 +159,7 @@ export default function AnalyticsPage() {
       const response = await fetch(`/api/analytics/top-companies?days=${timeRange}`);
       const data = await response.json();
       if (data.success) {
-        setTopCompanies(data.companies);
+        setTopCompanies(data.companies || []);
       }
     } catch (error) {
       console.error('Failed to fetch top companies:', error);
@@ -372,7 +372,7 @@ export default function AnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {industryDistribution.slice(0, 5).map((industry) => (
+                {(industryDistribution || []).slice(0, 5).map((industry) => (
                   <div key={industry.industry} className="flex items-center justify-between">
                     <div className="flex items-center gap-3 flex-1">
                       <span className="text-sm font-medium capitalize">
@@ -404,7 +404,7 @@ export default function AnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {fundingDistribution.map((stage) => (
+                {(fundingDistribution || []).map((stage) => (
                   <div key={stage.stage} className="flex items-center justify-between">
                     <div className="flex items-center gap-3 flex-1">
                       <Badge variant="outline" className="capitalize">
@@ -492,7 +492,7 @@ export default function AnalyticsPage() {
                       </span>
                     </div>
                     <div className="flex gap-2 mt-2">
-                      {company.newsletters.slice(0, 3).map(nl => (
+                      {(company.newsletters || []).slice(0, 3).map(nl => (
                         <Badge key={nl} variant="secondary" className="text-xs">
                           {nl}
                         </Badge>
