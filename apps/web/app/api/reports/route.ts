@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('reports')
       .select('*')
-      .eq('user_id', userId);  // CRITICAL: Filter by user_id
+      .eq('user_id', userId) as any;  // CRITICAL: Filter by user_id - Type assertion to avoid deep type instantiation
 
     // Apply filters
     if (type !== 'all') {
