@@ -24,7 +24,7 @@ export class GmailConnector {
   private gmail: gmail_v1.Gmail;
   private supabase;
   
-  constructor() {
+  constructor(refreshToken?: string) {
     // Set up OAuth2 client
     const auth = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID!,
@@ -32,8 +32,9 @@ export class GmailConnector {
     );
     
     // Set refresh token for persistent access
+    // Use provided token or fall back to environment variable for backwards compatibility
     auth.setCredentials({
-      refresh_token: process.env.GOOGLE_REFRESH_TOKEN!
+      refresh_token: refreshToken || process.env.GOOGLE_REFRESH_TOKEN!
     });
     
     this.gmail = google.gmail({ version: 'v1', auth });

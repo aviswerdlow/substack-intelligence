@@ -80,8 +80,7 @@ export async function GET(request: NextRequest) {
 function validateGmailOAuthConfig(): { isValid: boolean; missingVars: string[] } {
   const requiredEnvVars = [
     'GOOGLE_CLIENT_ID',
-    'GOOGLE_CLIENT_SECRET', 
-    'GOOGLE_REFRESH_TOKEN'
+    'GOOGLE_CLIENT_SECRET'
   ];
   
   const missingVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
@@ -137,7 +136,27 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
     
-    monitor.completeStep('configuration_validation', { configurationValid: true });
+    // Get user's Gmail tokens from database
+    const userId = user?.id || 'dev';
+    const { UserSettingsService } = await import('@/lib/user-settings');
+    const userSettingsService = new UserSettingsService();
+    const gmailTokens = await userSettingsService.getGmailTokens(userId);
+    
+    if (!gmailTokens || !gmailTokens.refreshToken) {
+      monitor.setHealthStatus('configuration', false, 'User has not connected Gmail');
+      monitor.failStep('configuration_validation', new Error('Gmail not connected'));
+      
+      return NextResponse.json({
+        success: false,
+        error: 'Gmail account not connected. Please connect your Gmail account in Settings first.',
+        details: {
+          gmailConnected: false,
+          setupRequired: true
+        }
+      }, { status: 400 });
+    }
+    
+    monitor.completeStep('configuration_validation', { configurationValid: true, gmailConnected: true });
     monitor.setHealthStatus('configuration', true);
 
     // Check for concurrent pipeline runs
@@ -197,8 +216,6 @@ export async function POST(request: NextRequest) {
     // Start pipeline
     monitor.startStep('gmail_fetch', { daysBack: options.daysBack, forceRefresh: options.forceRefresh });
     
-    const userId = user?.id || 'dev';
-    
     pipelineStatus = {
       status: 'fetching',
       progress: 10,
@@ -223,7 +240,7 @@ export async function POST(request: NextRequest) {
 
     // Step 1: Fetch emails from Gmail
     try {
-      const connector = new GmailConnector();
+      const connector = new GmailConnector(gmailTokens.refreshToken);
       const fetchStartTime = Date.now();
       
       const emails = await connector.fetchDailySubstacks(options.daysBack);
