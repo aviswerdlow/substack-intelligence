@@ -137,11 +137,28 @@ export const pipelineCacheManager = {
   
   // Sync lock to prevent concurrent pipeline runs
   getSyncLock(): boolean {
-    return pipelineCache.get(CACHE_KEYS.PIPELINE_SYNC_LOCK) === true;
+    const lockData = pipelineCache.get(CACHE_KEYS.PIPELINE_SYNC_LOCK);
+    
+    // Check if lock exists and is still valid
+    if (lockData && typeof lockData === 'object' && 'timestamp' in lockData) {
+      const lockAge = Date.now() - lockData.timestamp;
+      // If lock is older than 10 minutes, consider it stale
+      if (lockAge > 10 * 60 * 1000) {
+        console.log('[Pipeline Cache] Stale lock detected, clearing it');
+        this.clearSyncLock();
+        return false;
+      }
+      return true;
+    }
+    
+    return lockData === true;
   },
   
   setSyncLock(ttl: number = CACHE_TTL.SYNC_LOCK) {
-    pipelineCache.set(CACHE_KEYS.PIPELINE_SYNC_LOCK, true, ttl);
+    pipelineCache.set(CACHE_KEYS.PIPELINE_SYNC_LOCK, {
+      locked: true,
+      timestamp: Date.now()
+    }, ttl);
   },
   
   clearSyncLock() {

@@ -15,6 +15,7 @@ import {
   Activity,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   XCircle,
   Loader2,
   Mail,
@@ -267,6 +268,34 @@ export function ActiveOperationsBar() {
                 >
                   <Square className="h-3 w-3" />
                   Stop
+                </Button>
+              )}
+              
+              {/* Force Unlock button if stuck at 0% for more than 30 seconds */}
+              {state.status === 'running' && state.progress === 0 && (
+                <Button
+                  onClick={async () => {
+                    try {
+                      const response = await fetch('/api/pipeline/unlock', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                      });
+                      
+                      if (response.ok) {
+                        // Reset state and reload
+                        window.location.reload();
+                      }
+                    } catch (error) {
+                      console.error('Failed to unlock pipeline:', error);
+                    }
+                  }}
+                  size="sm"
+                  variant="ghost"
+                  className="gap-2 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                  title="Force unlock if pipeline is stuck"
+                >
+                  <AlertTriangle className="h-3 w-3" />
+                  Unlock
                 </Button>
               )}
               
