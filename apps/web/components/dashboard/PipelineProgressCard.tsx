@@ -49,6 +49,7 @@ interface PipelineUpdate {
   timestamp?: string;
   remainingCount?: number;
   processedCount?: number;
+  totalCount?: number;
 }
 
 export function PipelineProgressCard() {
@@ -155,9 +156,11 @@ export function PipelineProgressCard() {
         break;
         
       case 'background_progress':
-        setProgress(Math.round((update.processedCount / update.totalCount) * 100));
-        setStatusMessage(`Background: Processing ${update.processedCount} of ${update.totalCount} emails...`);
-        addActivityLog(`⚡ Background: Processed ${update.processedCount} emails`);
+        if (update.processedCount && update.totalCount) {
+          setProgress(Math.round((update.processedCount / update.totalCount) * 100));
+          setStatusMessage(`Background: Processing ${update.processedCount} of ${update.totalCount} emails...`);
+        }
+        addActivityLog(`⚡ Background: Processed ${update.processedCount || 0} emails`);
         break;
         
       case 'background_complete':
