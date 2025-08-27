@@ -15,8 +15,16 @@ export default function Page() {
             elements: {
               formButtonPrimary: 'bg-primary hover:bg-primary/90',
               card: 'shadow-lg',
+              socialButtonsBlockButton: 'bg-blue-600 hover:bg-blue-700 text-white',
+              socialButtonsBlockButtonText: 'font-medium',
+            },
+            layout: {
+              socialButtonsPlacement: 'top',
+              socialButtonsVariant: 'blockButton',
             }
           }}
+          routing="hash"
+          redirectUrl="/dashboard"
         />
       </div>
     </div>
