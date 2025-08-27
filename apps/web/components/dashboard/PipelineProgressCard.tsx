@@ -141,6 +141,33 @@ export function PipelineProgressCard() {
         }
         if (update.stats) setStats(update.stats);
         break;
+      
+      case 'continuing_background':
+        setStatusMessage(update.message || 'Continuing processing in background...');
+        addActivityLog(`🔄 ${update.message}`);
+        if (update.stats) setStats(update.stats);
+        toast({
+          title: 'Processing Continues',
+          description: `Processing ${update.remainingCount} emails in background. No action needed.`,
+        });
+        break;
+        
+      case 'background_progress':
+        setProgress(Math.round((update.processedCount / update.totalCount) * 100));
+        setStatusMessage(`Background: Processing ${update.processedCount} of ${update.totalCount} emails...`);
+        addActivityLog(`⚡ Background: Processed ${update.processedCount} emails`);
+        break;
+        
+      case 'background_complete':
+        setIsRunning(false);
+        setProgress(100);
+        setStatusMessage('All emails processed successfully!');
+        addActivityLog(`✅ Background processing complete: ${update.companiesExtracted} companies extracted`);
+        toast({
+          title: 'Processing Complete!',
+          description: `Successfully processed all emails and extracted ${update.companiesExtracted} companies.`,
+        });
+        break;
         
       case 'complete':
         setIsRunning(false);

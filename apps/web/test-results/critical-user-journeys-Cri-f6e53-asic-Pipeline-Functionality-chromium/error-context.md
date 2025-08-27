@@ -6,44 +6,45 @@
     - generic [ref=e4]:
       - generic [ref=e5]:
         - heading "Get Started" [level=1] [ref=e6]
-        - paragraph [ref=e7]: Create your Substack Intelligence account
-      - generic [ref=e9]:
-        - generic [ref=e10]:
-          - generic [ref=e12]:
-            - heading "Create your account" [level=1] [ref=e13]
-            - paragraph [ref=e14]: Welcome! Please fill in the details to get started.
-          - generic [ref=e15]:
-            - button "Sign in with Google Continue with Google" [ref=e18] [cursor=pointer]:
-              - generic [ref=e19] [cursor=pointer]:
-                - img "Sign in with Google" [ref=e21] [cursor=pointer]
-                - generic [ref=e22] [cursor=pointer]: Continue with Google
-            - paragraph [ref=e25]: or
-            - generic [ref=e27]:
-              - generic [ref=e28]:
-                - generic [ref=e31]:
-                  - generic [ref=e33]: Email address
-                  - textbox "Email address" [ref=e34]
-                - generic [ref=e37]:
-                  - generic [ref=e39]: Password
-                  - generic [ref=e40]:
-                    - textbox "Password" [ref=e41]
-                    - button "Show password" [ref=e42] [cursor=pointer]:
-                      - img [ref=e43] [cursor=pointer]
-              - button "Continue" [ref=e48] [cursor=pointer]:
-                - generic [ref=e49] [cursor=pointer]:
+        - paragraph [ref=e7]: Sign up with Google to automatically connect your Gmail for newsletter analysis
+        - paragraph [ref=e8]: We only read your newsletters - your personal emails remain private
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - generic [ref=e13]:
+            - heading "Create your account" [level=1] [ref=e14]
+            - paragraph [ref=e15]: Welcome! Please fill in the details to get started.
+          - generic [ref=e16]:
+            - button "Sign in with Google Continue with Google" [ref=e19] [cursor=pointer]:
+              - generic [ref=e20] [cursor=pointer]:
+                - img "Sign in with Google" [ref=e22] [cursor=pointer]
+                - generic [ref=e23] [cursor=pointer]: Continue with Google
+            - paragraph [ref=e26]: or
+            - generic [ref=e28]:
+              - generic [ref=e29]:
+                - generic [ref=e32]:
+                  - generic [ref=e34]: Email address
+                  - textbox "Email address" [ref=e35]
+                - generic [ref=e38]:
+                  - generic [ref=e40]: Password
+                  - generic [ref=e41]:
+                    - textbox "Password" [ref=e42]
+                    - button "Show password" [ref=e43] [cursor=pointer]:
+                      - img [ref=e44] [cursor=pointer]
+              - button "Continue" [ref=e49] [cursor=pointer]:
+                - generic [ref=e50] [cursor=pointer]:
                   - text: Continue
-                  - img [ref=e50] [cursor=pointer]
-        - generic [ref=e52]:
-          - generic [ref=e53]:
-            - generic [ref=e54]: Already have an account?
-            - link "Sign in" [ref=e55] [cursor=pointer]:
+                  - img [ref=e51] [cursor=pointer]
+        - generic [ref=e53]:
+          - generic [ref=e54]:
+            - generic [ref=e55]: Already have an account?
+            - link "Sign in" [ref=e56] [cursor=pointer]:
               - /url: http://localhost:3000/sign-in
-          - generic [ref=e57]:
-            - generic [ref=e59]:
-              - paragraph [ref=e60]: Secured by
-              - link "Clerk logo" [ref=e61] [cursor=pointer]:
+          - generic [ref=e58]:
+            - generic [ref=e60]:
+              - paragraph [ref=e61]: Secured by
+              - link "Clerk logo" [ref=e62] [cursor=pointer]:
                 - /url: https://go.clerk.com/components
-                - img [ref=e62] [cursor=pointer]
-            - paragraph [ref=e67]: Development mode
-  - alert [ref=e69]
+                - img [ref=e63] [cursor=pointer]
+            - paragraph [ref=e68]: Development mode
+  - alert [ref=e70]
 ```

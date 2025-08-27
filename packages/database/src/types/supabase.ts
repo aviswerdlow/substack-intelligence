@@ -26,6 +26,11 @@ export interface Database {
           clean_text: string | null
           processing_status: string
           error_message: string | null
+          extraction_status: 'pending' | 'processing' | 'completed' | 'failed'
+          extraction_started_at: string | null
+          extraction_completed_at: string | null
+          extraction_error: string | null
+          companies_extracted: number
           search_vector: unknown | null
           created_at: string
           updated_at: string
@@ -43,6 +48,11 @@ export interface Database {
           clean_text?: string | null
           processing_status?: string
           error_message?: string | null
+          extraction_status?: 'pending' | 'processing' | 'completed' | 'failed'
+          extraction_started_at?: string | null
+          extraction_completed_at?: string | null
+          extraction_error?: string | null
+          companies_extracted?: number
           created_at?: string
           updated_at?: string
         }

@@ -374,7 +374,7 @@ export function ActiveOperationsBar() {
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <div className="flex items-center gap-4">
                     <span>
-                      📧 {state.metrics.emailsFetched} emails processed
+                      📧 {state.metrics.emailsFetched} emails fetched
                     </span>
                     <span>
                       🏢 {state.metrics.companiesExtracted} companies found

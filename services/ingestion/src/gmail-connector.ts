@@ -483,26 +483,41 @@ export class GmailConnector {
   }
 
   // Get processing statistics
-  async getStats(): Promise<{
+  async getStats(userId?: string): Promise<{
     totalEmails: number;
     recentEmails: number;
     topNewsletters: Array<{ name: string; count: number }>;
   }> {
     try {
+      // Use userId from parameter or instance
+      const userIdToUse = userId || this.clerkUserId;
+      
+      // Build queries with optional user filtering
+      let totalQuery = this.supabase
+        .from('emails')
+        .select('*', { count: 'exact', head: true });
+      
+      let recentQuery = this.supabase
+        .from('emails')
+        .select('*', { count: 'exact', head: true })
+        .gte('received_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+      
+      let topQuery = this.supabase
+        .from('emails')
+        .select('newsletter_name')
+        .gte('received_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+      
+      // Add user filtering if userId is available
+      if (userIdToUse) {
+        totalQuery = totalQuery.eq('user_id', userIdToUse);
+        recentQuery = recentQuery.eq('user_id', userIdToUse);
+        topQuery = topQuery.eq('user_id', userIdToUse);
+      }
+      
       const [totalResult, recentResult, topNewsletters] = await Promise.all([
-        this.supabase
-          .from('emails')
-          .select('*', { count: 'exact', head: true }),
-        
-        this.supabase
-          .from('emails')
-          .select('*', { count: 'exact', head: true })
-          .gte('received_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
-        
-        this.supabase
-          .from('emails')
-          .select('newsletter_name')
-          .gte('received_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+        totalQuery,
+        recentQuery,
+        topQuery
       ]);
       
       // Count newsletters

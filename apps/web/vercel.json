@@ -3,5 +3,11 @@
   "installCommand": "pnpm install",
   "buildCommand": "cd ../.. && pnpm run build --filter=web",
   "outputDirectory": ".next",
-  "devCommand": "pnpm run dev"
+  "devCommand": "pnpm run dev",
+  "crons": [
+    {
+      "path": "/api/cron/process-emails",
+      "schedule": "* * * * *"
+    }
+  ]
 }

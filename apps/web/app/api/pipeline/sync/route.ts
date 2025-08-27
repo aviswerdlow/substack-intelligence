@@ -11,6 +11,7 @@ import { pushPipelineUpdate } from '@/lib/pipeline-updates';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const maxDuration = 60; // Allow up to 60 seconds for processing
 
 // Pipeline status tracking
 let pipelineStatus = {
@@ -272,7 +273,7 @@ export async function POST(request: NextRequest) {
         connector = new GmailConnector(undefined, userId);
       } else {
         // Legacy OAuth flow with refresh token
-        connector = new GmailConnector(gmailTokens.refreshToken);
+        connector = new GmailConnector(gmailTokens.refreshToken, userId);
       }
       const fetchStartTime = Date.now();
       
@@ -352,14 +353,15 @@ export async function POST(request: NextRequest) {
         }, { status: 500 });
       }
       
-      // Get the latest emails from database for this specific user
+      // Get the latest emails from database for this specific user that haven't been processed
       const dbQueryStartTime = Date.now();
       const { data: dbEmails, error: fetchError } = await supabase
         .from('emails')
         .select('*')
         .eq('user_id', userId) // CRITICAL: Filter by user_id for data isolation
+        .in('extraction_status', ['pending', null]) // Only get unprocessed emails
         .order('received_at', { ascending: false })
-        .limit(Math.min(pipelineStatus.stats.emailsFetched || 10, 20)); // Process up to 20 emails to avoid timeouts
+        .limit(100); // Process up to 100 emails per run
       
       monitor.trackDatabaseOperation('select', 'emails', dbEmails?.length, !fetchError, fetchError || undefined);
       
@@ -372,26 +374,47 @@ export async function POST(request: NextRequest) {
         monitor.setMetric('emailsProcessed', dbEmails.length);
         monitor.completeStep('database_fetch', { emailsRetrieved: dbEmails.length, duration: Date.now() - dbQueryStartTime });
       
-      // Process each email
+      // Process emails with smart timing to avoid timeouts
       const companiesFound: any[] = [];
       const newlyDiscoveredCompanies = new Set<string>(); // Track companies discovered in this run
       const processingStartTime = Date.now();
-      const maxProcessingTime = 25000; // 25 seconds max (Vercel has 30s limit for API routes)
+      const maxProcessingTime = 45000; // 45 seconds (with 60s maxDuration)
+      let processedInThisRun = 0;
+      const emailsToProcess = [...dbEmails]; // Copy array to track remaining
       
-      for (let i = 0; i < dbEmails.length; i++) {
+      for (let i = 0; i < emailsToProcess.length; i++) {
         // Check if we're approaching timeout limit
-        if (Date.now() - processingStartTime > maxProcessingTime) {
-          console.log(`Approaching timeout limit, stopping after processing ${i} emails`);
-          pushPipelineUpdate(userId, {
-            type: 'processing_email',
-            status: 'extracting',
-            message: `Processed ${i} of ${dbEmails.length} emails (timeout protection)`,
-            stats: pipelineStatus.stats
-          });
+        const elapsedTime = Date.now() - processingStartTime;
+        if (elapsedTime > maxProcessingTime) {
+          console.log(`Approaching timeout limit, processed ${processedInThisRun} emails, ${emailsToProcess.length - i} remaining`);
+          
+          // Mark remaining emails for background processing
+          const remainingEmails = emailsToProcess.slice(i);
+          if (remainingEmails.length > 0) {
+            pushPipelineUpdate(userId, {
+              type: 'continuing_background',
+              status: 'extracting',
+              message: `Processed ${processedInThisRun} emails, continuing ${remainingEmails.length} in background...`,
+              stats: pipelineStatus.stats,
+              remainingCount: remainingEmails.length
+            });
+            
+            // Schedule background processing (we'll implement this next)
+            console.log(`Scheduling background processing for ${remainingEmails.length} remaining emails`);
+          }
           break;
         }
         
-        const email = dbEmails[i];
+        const email = emailsToProcess[i];
+        
+        // Mark email as processing
+        await supabase
+          .from('emails')
+          .update({ 
+            extraction_status: 'processing',
+            extraction_started_at: new Date().toISOString()
+          })
+          .eq('id', email.id);
         
         // Update progress
         const extractionProgress = 40 + (40 * (i + 1) / dbEmails.length);
@@ -564,13 +587,37 @@ export async function POST(request: NextRequest) {
             totalCompaniesExtracted++;
             totalMentions++;
           }
+          
+          // Mark email as successfully processed
+          await supabase
+            .from('emails')
+            .update({
+              extraction_status: 'completed',
+              extraction_completed_at: new Date().toISOString(),
+              companies_extracted: extractionResult.companies.length
+            })
+            .eq('id', email.id);
+          
+          processedInThisRun++;
         } catch (emailError) {
           monitor.trackExtractionOperation(email.id, 0, false, emailError instanceof Error ? emailError : new Error('Email processing failed'));
+          
+          // Mark email as failed
+          await supabase
+            .from('emails')
+            .update({
+              extraction_status: 'failed',
+              extraction_error: emailError instanceof Error ? emailError.message : 'Unknown error',
+              extraction_completed_at: new Date().toISOString()
+            })
+            .eq('id', email.id);
           
           createPipelineAlert('warning', 'Email Processing Failed', 
             `Failed to process email: ${email.subject}`,
             { emailId: email.id, error: emailError instanceof Error ? emailError.message : 'Unknown error' }
           );
+          
+          processedInThisRun++; // Count as processed even if failed
         }
       }
       
