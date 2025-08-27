@@ -96,6 +96,7 @@ function validateGmailOAuthConfig(): { isValid: boolean; missingVars: string[] }
 export async function POST(request: NextRequest) {
   const requestStartTime = Date.now(); // Track overall request start time
   const monitor = new PipelineMonitor();
+  let userId = 'dev'; // Define userId outside try block for error handler access
   
   try {
     monitor.startStep('authentication', { userAgent: request.headers.get('user-agent') });
@@ -139,7 +140,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Get user's Gmail tokens from database or Clerk
-    const userId = user?.id || 'dev';
+    userId = user?.id || 'dev';
     console.log('[Pipeline Sync] Starting Gmail configuration check for user:', userId);
     
     // First check if user has Google OAuth through Clerk directly
