@@ -205,7 +205,18 @@ export class GmailConnector {
           totalMessages: messages.length
         });
         
-      } catch (error) {
+      } catch (error: any) {
+        // Check for specific Gmail API errors
+        if (error?.message?.includes('Mail service not enabled')) {
+          console.error('[GmailConnector] Gmail is not enabled for this Google account');
+          throw new Error('Gmail is not enabled for this Google account. Please sign in with a Google account that has Gmail access.');
+        }
+        
+        if (error?.code === 403 || error?.message?.includes('Forbidden')) {
+          console.error('[GmailConnector] Gmail access forbidden for this account');
+          throw new Error('This Google account does not have permission to access Gmail. Please use a different Google account with Gmail enabled.');
+        }
+        
         await axiomLogger.logError(error as Error, {
           operation: 'fetchAllMessages',
           page: pageCount,

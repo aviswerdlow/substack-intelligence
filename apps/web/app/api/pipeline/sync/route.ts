@@ -368,7 +368,29 @@ export async function POST(request: NextRequest) {
         );
       }
     } catch (gmailError) {
-      monitor.setHealthStatus('gmail', false, gmailError instanceof Error ? gmailError.message : 'Gmail fetch failed');
+      const errorMessage = gmailError instanceof Error ? gmailError.message : 'Gmail fetch failed';
+      console.error('[Pipeline Sync] Gmail fetch error:', errorMessage);
+      
+      // Check for Gmail access errors
+      if (errorMessage.includes('Gmail is not enabled') || errorMessage.includes('Mail service not enabled')) {
+        pushPipelineUpdate(userId, {
+          type: 'error',
+          status: 'error',
+          message: 'This Google account does not have Gmail enabled. Please sign out and sign in with a different Google account that has Gmail access.',
+        });
+        
+        return NextResponse.json({
+          success: false,
+          error: 'Gmail not available on this Google account',
+          details: {
+            message: 'The Google account you signed in with does not have Gmail enabled. Please sign out and use a Google account with Gmail access.',
+            accountEmail: user?.emailAddresses?.[0]?.emailAddress,
+            suggestion: 'Use a personal Gmail account (ending in @gmail.com) or a Google Workspace account with Gmail enabled.'
+          }
+        }, { status: 403 });
+      }
+      
+      monitor.setHealthStatus('gmail', false, errorMessage);
       monitor.trackGmailApiCall('fetchDailySubstacks', false, undefined, gmailError instanceof Error ? gmailError : new Error('Gmail fetch failed'));
       throw gmailError;
     }
