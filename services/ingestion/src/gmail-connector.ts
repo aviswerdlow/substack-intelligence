@@ -23,26 +23,49 @@ interface ProcessedEmail {
 export class GmailConnector {
   private gmail: gmail_v1.Gmail;
   private supabase;
+  private clerkUserId?: string;
   
-  constructor(refreshToken?: string) {
-    // Set up OAuth2 client
-    const auth = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID!,
-      process.env.GOOGLE_CLIENT_SECRET!
-    );
-    
-    // Set refresh token for persistent access
-    // Use provided token or fall back to environment variable for backwards compatibility
-    auth.setCredentials({
-      refresh_token: refreshToken || process.env.GOOGLE_REFRESH_TOKEN!
-    });
-    
-    this.gmail = google.gmail({ version: 'v1', auth });
+  constructor(refreshToken?: string, clerkUserId?: string) {
     this.supabase = createServiceRoleClient();
+    this.clerkUserId = clerkUserId;
+    
+    if (clerkUserId) {
+      // We'll initialize the Gmail client lazily when needed for Clerk OAuth
+      // This is because we need to fetch fresh tokens from Clerk
+      this.gmail = null as any; // Will be initialized in ensureGmailClient()
+    } else {
+      // Legacy OAuth flow with refresh token
+      const auth = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID!,
+        process.env.GOOGLE_CLIENT_SECRET!
+      );
+      
+      // Set refresh token for persistent access
+      auth.setCredentials({
+        refresh_token: refreshToken || process.env.GOOGLE_REFRESH_TOKEN!
+      });
+      
+      this.gmail = google.gmail({ version: 'v1', auth });
+    }
+  }
+  
+  private async ensureGmailClient() {
+    if (this.gmail) return;
+    
+    if (!this.clerkUserId) {
+      throw new Error('Gmail client not initialized and no Clerk user ID provided');
+    }
+    
+    // Dynamically import to avoid circular dependencies
+    const clerkOAuth = await import('../../../apps/web/lib/clerk-oauth');
+    this.gmail = await clerkOAuth.createClerkGmailClient(this.clerkUserId);
   }
 
   async fetchDailySubstacks(daysBack: number = 30): Promise<ProcessedEmail[]> {
     const startTime = Date.now();
+    
+    // Ensure Gmail client is initialized (for Clerk OAuth)
+    await this.ensureGmailClient();
     
     try {
       // Check burst protection for expensive Gmail API operations

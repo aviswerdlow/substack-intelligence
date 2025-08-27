@@ -47,7 +47,52 @@ export function GmailConnectionModal({
     setConnectionError(null);
 
     try {
-      // Initiate Gmail OAuth flow
+      // Check if user has Google OAuth through Clerk
+      const clerkResponse = await fetch('/api/auth/gmail/clerk-status');
+      const clerkData = await clerkResponse.json();
+
+      if (!clerkResponse.ok) {
+        throw new Error(clerkData.error || 'Failed to check Gmail connection');
+      }
+
+      if (clerkData.hasGoogleOAuth) {
+        // User already has Google OAuth through Clerk
+        toast({
+          title: 'Gmail Connected!',
+          description: `Connected as ${clerkData.googleEmail}`,
+        });
+        
+        // Mark as connected in the database
+        await fetch('/api/auth/gmail/mark-connected', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: clerkData.googleEmail })
+        });
+        
+        setIsConnecting(false);
+        onConnectionSuccess?.();
+        onOpenChange(false);
+        return;
+      } else {
+        // User needs to sign in with Google
+        setConnectionError('Please sign out and sign back in with Google to connect Gmail');
+        toast({
+          title: 'Google Sign-in Required',
+          description: 'Sign out and use "Sign in with Google" to connect Gmail.',
+          variant: 'destructive',
+        });
+        setIsConnecting(false);
+        
+        // Optionally redirect to sign-in after a delay
+        setTimeout(() => {
+          if (confirm('Would you like to sign out and sign in with Google?')) {
+            window.location.href = '/sign-in';
+          }
+        }, 2000);
+        return;
+      }
+
+      // Fallback to old OAuth flow (shouldn't reach here)
       const response = await fetch('/api/auth/gmail');
       const data = await response.json();
 

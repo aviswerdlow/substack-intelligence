@@ -136,13 +136,26 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
     
-    // Get user's Gmail tokens from database
+    // Get user's Gmail tokens from database or Clerk
     const userId = user?.id || 'dev';
     const { UserSettingsService } = await import('@/lib/user-settings');
     const userSettingsService = new UserSettingsService();
-    const gmailTokens = await userSettingsService.getGmailTokens(userId);
+    const settings = await userSettingsService.getUserSettings(userId);
     
-    if (!gmailTokens || !gmailTokens.refreshToken) {
+    // Check if user is using Clerk OAuth
+    const useClerkOAuth = settings?.gmail_tokens?.useClerkOAuth === true;
+    let gmailTokens = null;
+    
+    if (useClerkOAuth) {
+      // User signed in with Google through Clerk
+      // We'll get fresh tokens from Clerk when needed
+      gmailTokens = { useClerkOAuth: true };
+    } else {
+      // Legacy custom OAuth flow
+      gmailTokens = await userSettingsService.getGmailTokens(userId);
+    }
+    
+    if (!gmailTokens) {
       monitor.setHealthStatus('configuration', false, 'User has not connected Gmail');
       monitor.failStep('configuration_validation', new Error('Gmail not connected'));
       
@@ -240,7 +253,16 @@ export async function POST(request: NextRequest) {
 
     // Step 1: Fetch emails from Gmail
     try {
-      const connector = new GmailConnector(gmailTokens.refreshToken);
+      let connector;
+      if (useClerkOAuth) {
+        // Use Clerk OAuth - get fresh token from Clerk
+        const { createClerkGmailClient } = await import('@/lib/clerk-oauth');
+        // Pass userId to create Gmail client with Clerk tokens
+        connector = new GmailConnector(undefined, userId);
+      } else {
+        // Legacy OAuth flow with refresh token
+        connector = new GmailConnector(gmailTokens.refreshToken);
+      }
       const fetchStartTime = Date.now();
       
       const emails = await connector.fetchDailySubstacks(options.daysBack);
