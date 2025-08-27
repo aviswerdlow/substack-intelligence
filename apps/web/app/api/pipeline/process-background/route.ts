@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       .from('emails')
       .select('*')
       .eq('user_id', userId)
-      .eq('extraction_status', 'pending')
+      .eq('processing_status', 'pending')
       .order('received_at', { ascending: false })
       .limit(batchSize);
     
@@ -81,8 +81,8 @@ export async function POST(request: NextRequest) {
         await supabase
           .from('emails')
           .update({
-            extraction_status: 'processing',
-            extraction_started_at: new Date().toISOString()
+            processing_status: 'processing',
+            processed_at: new Date().toISOString()
           })
           .eq('id', email.id);
         
@@ -92,9 +92,9 @@ export async function POST(request: NextRequest) {
           await supabase
             .from('emails')
             .update({
-              extraction_status: 'completed',
-              extraction_completed_at: new Date().toISOString(),
-              companies_extracted: 0
+              processing_status: 'completed',
+              processed_at: new Date().toISOString(),
+              error_message: null
             })
             .eq('id', email.id);
           
@@ -187,9 +187,9 @@ export async function POST(request: NextRequest) {
         await supabase
           .from('emails')
           .update({
-            extraction_status: 'completed',
-            extraction_completed_at: new Date().toISOString(),
-            companies_extracted: extractionResult.companies.length
+            processing_status: 'completed',
+            processed_at: new Date().toISOString(),
+            error_message: null
           })
           .eq('id', email.id);
         
@@ -213,9 +213,9 @@ export async function POST(request: NextRequest) {
         await supabase
           .from('emails')
           .update({
-            extraction_status: 'failed',
-            extraction_error: error instanceof Error ? error.message : 'Unknown error',
-            extraction_completed_at: new Date().toISOString()
+            processing_status: 'failed',
+            error_message: error instanceof Error ? error.message : 'Unknown error',
+            processed_at: new Date().toISOString()
           })
           .eq('id', email.id);
         
@@ -228,7 +228,7 @@ export async function POST(request: NextRequest) {
       .from('emails')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .eq('extraction_status', 'pending');
+      .eq('processing_status', 'pending');
     
     const remaining = remainingCount || 0;
     
