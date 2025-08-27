@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const userSettingsService = new UserSettingsService();
     
     // Update settings to mark Gmail as connected via Clerk OAuth
-    const updated = await userSettingsService.updateSettings(user.id, {
+    const updated = await userSettingsService.createOrUpdateUserSettings(user.id, {
       gmail_connected: true,
       gmail_email: email,
       // Store tokens as a JSON string to indicate Clerk OAuth
