@@ -25,7 +25,10 @@ function validateEnvironment() {
 }
 
 function createOAuth2Client() {
-  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  const redirectUri = appUrl.startsWith('http') 
+    ? `${appUrl}/api/auth/gmail/callback`
+    : `https://${appUrl}/api/auth/gmail/callback`;
   
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -86,9 +89,14 @@ export async function GET(request: NextRequest) {
       include_granted_scopes: true
     });
 
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+    const finalRedirectUri = appUrl.startsWith('http') 
+      ? `${appUrl}/api/auth/gmail/callback`
+      : `https://${appUrl}/api/auth/gmail/callback`;
+      
     return NextResponse.json({ 
       authUrl,
-      redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`
+      redirectUri: finalRedirectUri
     });
   } catch (error) {
     console.error('Gmail OAuth initiation failed:', error);

@@ -5,10 +5,15 @@ import { UserSettingsService } from '@/lib/user-settings';
 import { logOAuthSuccess, logOAuthFailure } from '@/lib/oauth-monitoring';
 
 function createOAuth2Client() {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  const redirectUri = appUrl.startsWith('http') 
+    ? `${appUrl}/api/auth/gmail/callback`
+    : `https://${appUrl}/api/auth/gmail/callback`;
+    
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`
+    redirectUri
   );
 }
 
