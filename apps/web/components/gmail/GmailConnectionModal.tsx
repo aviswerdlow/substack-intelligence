@@ -86,24 +86,22 @@ export function GmailConnectionModal({
         return;
       } else {
         // User needs to sign in with Google
-        setConnectionError('Please sign out and sign back in with Google to connect Gmail');
+        setConnectionError('To connect Gmail, please sign out and sign back in using the "Sign in with Google" button.');
         toast({
           title: 'Google Sign-in Required',
-          description: 'Sign out and use "Sign in with Google" to connect Gmail.',
+          description: 'You need to use Google sign-in to connect Gmail. Please sign out and sign back in with Google.',
           variant: 'destructive',
+          duration: 5000,
         });
         setIsConnecting(false);
         
-        // Optionally redirect to sign-in after a delay
-        setTimeout(() => {
-          if (confirm('Would you like to sign out and sign in with Google?')) {
-            window.location.href = '/sign-in';
-          }
-        }, 2000);
+        // Don't proceed to legacy OAuth - just return
         return;
       }
 
-      // Fallback to old OAuth flow (shouldn't reach here)
+      // Legacy OAuth flow - this code should not be reached anymore
+      // Keeping it for backward compatibility only
+      console.warn('Legacy OAuth flow attempted - this should not happen');
       const response = await fetch('/api/auth/gmail');
       const data = await response.json();
 
@@ -218,8 +216,8 @@ export function GmailConnectionModal({
           </DialogTitle>
           <DialogDescription>
             {hasGoogleOAuth 
-              ? "Your Gmail is already connected through Google sign-in!"
-              : "For the best experience, sign out and sign back in with Google to connect Gmail automatically"
+              ? "Your Gmail is already connected through Google sign-in! Click the button below to activate it."
+              : "To connect Gmail, you need to sign in with Google. Please sign out and use the 'Sign in with Google' button when signing back in."
             }
           </DialogDescription>
         </DialogHeader>
@@ -269,9 +267,23 @@ export function GmailConnectionModal({
             <div className="rounded-lg border border-red-500/50 bg-red-50/10 p-3">
               <div className="flex items-start gap-2">
                 <AlertCircle className="h-4 w-4 flex-shrink-0 text-red-500" />
-                <p className="text-sm text-red-600 dark:text-red-400">
-                  {connectionError}
-                </p>
+                <div className="flex-1">
+                  <p className="text-sm text-red-600 dark:text-red-400">
+                    {connectionError}
+                  </p>
+                  {!hasGoogleOAuth && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="mt-2 h-auto p-0 text-xs text-red-600 dark:text-red-400"
+                      onClick={() => {
+                        window.location.href = '/sign-out';
+                      }}
+                    >
+                      Click here to sign out →
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -302,11 +314,16 @@ export function GmailConnectionModal({
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Connecting...
               </>
+            ) : hasGoogleOAuth ? (
+              <>
+                <Mail className="h-4 w-4" />
+                Activate Gmail
+                <ArrowRight className="h-3 w-3" />
+              </>
             ) : (
               <>
                 <Mail className="h-4 w-4" />
-                Connect Gmail
-                <ArrowRight className="h-3 w-3" />
+                Sign in with Google First
               </>
             )}
           </Button>
