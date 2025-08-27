@@ -30,7 +30,7 @@ interface CompanyDiscovery {
 }
 
 interface PipelineUpdate {
-  type: 'connected' | 'status' | 'emails_fetched' | 'processing_email' | 'company_discovered' | 'complete' | 'error' | 'heartbeat';
+  type: 'connected' | 'status' | 'emails_fetched' | 'processing_email' | 'company_discovered' | 'complete' | 'error' | 'heartbeat' | 'continuing_background' | 'background_progress';
   status?: string;
   progress?: number;
   message?: string;
@@ -47,6 +47,8 @@ interface PipelineUpdate {
   company?: CompanyDiscovery;
   emailCount?: number;
   timestamp?: string;
+  remainingCount?: number;
+  processedCount?: number;
 }
 
 export function PipelineProgressCard() {

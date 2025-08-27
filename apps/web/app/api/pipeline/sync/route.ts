@@ -359,7 +359,7 @@ export async function POST(request: NextRequest) {
         .from('emails')
         .select('*')
         .eq('user_id', userId) // CRITICAL: Filter by user_id for data isolation
-        .in('extraction_status', ['pending', null]) // Only get unprocessed emails
+        .in('processing_status', ['pending', null]) // Only get unprocessed emails
         .order('received_at', { ascending: false })
         .limit(100); // Process up to 100 emails per run
       
@@ -384,8 +384,8 @@ export async function POST(request: NextRequest) {
       
       for (let i = 0; i < emailsToProcess.length; i++) {
         // Check if we're approaching timeout limit
-        const elapsedTime = Date.now() - processingStartTime;
-        if (elapsedTime > maxProcessingTime) {
+        const timeElapsed = Date.now() - processingStartTime;
+        if (timeElapsed > maxProcessingTime) {
           console.log(`Approaching timeout limit, processed ${processedInThisRun} emails, ${emailsToProcess.length - i} remaining`);
           
           // Mark remaining emails for background processing
@@ -411,8 +411,8 @@ export async function POST(request: NextRequest) {
         await supabase
           .from('emails')
           .update({ 
-            extraction_status: 'processing',
-            extraction_started_at: new Date().toISOString()
+            processing_status: 'processing',
+            processed_at: new Date().toISOString()
           })
           .eq('id', email.id);
         
@@ -422,8 +422,8 @@ export async function POST(request: NextRequest) {
         pipelineStatus.message = `Extracting companies from email ${i + 1}/${dbEmails.length}...`;
         
         // Push granular progress update
-        const elapsedTime = (Date.now() - processingStartTime) / 1000;
-        const emailsPerSecond = (i + 1) / elapsedTime;
+        const elapsedSeconds = (Date.now() - processingStartTime) / 1000;
+        const emailsPerSecond = (i + 1) / elapsedSeconds;
         const remainingEmails = dbEmails.length - (i + 1);
         const estimatedTimeRemaining = remainingEmails / emailsPerSecond;
         
@@ -592,9 +592,9 @@ export async function POST(request: NextRequest) {
           await supabase
             .from('emails')
             .update({
-              extraction_status: 'completed',
-              extraction_completed_at: new Date().toISOString(),
-              companies_extracted: extractionResult.companies.length
+              processing_status: 'completed',
+              processed_at: new Date().toISOString(),
+              error_message: null
             })
             .eq('id', email.id);
           
@@ -606,9 +606,9 @@ export async function POST(request: NextRequest) {
           await supabase
             .from('emails')
             .update({
-              extraction_status: 'failed',
-              extraction_error: emailError instanceof Error ? emailError.message : 'Unknown error',
-              extraction_completed_at: new Date().toISOString()
+              processing_status: 'failed',
+              error_message: emailError instanceof Error ? emailError.message : 'Unknown error',
+              processed_at: new Date().toISOString()
             })
             .eq('id', email.id);
           
