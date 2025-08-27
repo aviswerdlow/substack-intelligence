@@ -139,15 +139,29 @@ export async function POST(request: NextRequest) {
     
     // Get user's Gmail tokens from database or Clerk
     const userId = user?.id || 'dev';
+    console.log('[Pipeline Sync] Starting Gmail configuration check for user:', userId);
     
     // First check if user has Google OAuth through Clerk directly
+    console.log('[Pipeline Sync] Checking Clerk external accounts:', user?.externalAccounts?.map(a => ({
+      provider: a.provider,
+      email: a.emailAddress
+    })));
+    
     const hasClerkGoogleOAuth = user?.externalAccounts?.some(
       account => account.provider === 'google' || account.provider === 'oauth_google'
     ) || false;
     
+    console.log('[Pipeline Sync] Has Clerk Google OAuth:', hasClerkGoogleOAuth);
+    
     const { UserSettingsService } = await import('@/lib/user-settings');
     const userSettingsService = new UserSettingsService();
     const settings = await userSettingsService.getUserSettings(userId);
+    
+    console.log('[Pipeline Sync] User settings from database:', {
+      gmail_connected: settings?.gmail_connected,
+      has_refresh_token: !!settings?.gmail_refresh_token,
+      gmail_email: settings?.gmail_email
+    });
     
     // Check if user is using Clerk OAuth
     let useClerkOAuth = false;
@@ -155,6 +169,7 @@ export async function POST(request: NextRequest) {
     
     // If user has Clerk Google OAuth, use that regardless of database settings
     if (hasClerkGoogleOAuth) {
+      console.log('[Pipeline Sync] Using Clerk OAuth - user signed in with Google');
       useClerkOAuth = true;
       gmailTokens = { useClerkOAuth: true };
       
@@ -163,6 +178,8 @@ export async function POST(request: NextRequest) {
         const googleEmail = user?.externalAccounts?.find(
           account => account.provider === 'google' || account.provider === 'oauth_google'
         )?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || '';
+        
+        console.log('[Pipeline Sync] Auto-marking Gmail as connected for email:', googleEmail);
         
         await userSettingsService.createOrUpdateUserSettings(userId, {
           gmail_connected: true,
@@ -174,22 +191,33 @@ export async function POST(request: NextRequest) {
         });
       }
     } else if (settings?.gmail_refresh_token) {
+      console.log('[Pipeline Sync] Checking database refresh token type');
       // Check if the refresh token is a JSON string indicating Clerk OAuth
       try {
         const tokenData = JSON.parse(settings.gmail_refresh_token);
         useClerkOAuth = tokenData.useClerkOAuth === true;
+        console.log('[Pipeline Sync] Parsed token data:', tokenData);
         if (useClerkOAuth) {
+          console.log('[Pipeline Sync] Using Clerk OAuth from database settings');
           gmailTokens = { useClerkOAuth: true };
         }
       } catch {
         // Not JSON, it's a regular refresh token
+        console.log('[Pipeline Sync] Using legacy OAuth - refresh token is not JSON');
         useClerkOAuth = false;
         gmailTokens = await userSettingsService.getGmailTokens(userId);
       }
     } else {
       // Legacy custom OAuth flow
+      console.log('[Pipeline Sync] No Gmail configuration found - checking legacy OAuth');
       gmailTokens = await userSettingsService.getGmailTokens(userId);
     }
+    
+    console.log('[Pipeline Sync] Final OAuth configuration:', {
+      useClerkOAuth,
+      hasGmailTokens: !!gmailTokens,
+      hasClerkGoogleOAuth
+    });
     
     if (!gmailTokens && !hasClerkGoogleOAuth) {
       monitor.setHealthStatus('configuration', false, 'User has not connected Gmail');
@@ -289,12 +317,20 @@ export async function POST(request: NextRequest) {
 
     // Step 1: Fetch emails from Gmail
     try {
+      console.log('[Pipeline Sync] Creating GmailConnector with:', {
+        useClerkOAuth,
+        userId,
+        hasRefreshToken: useClerkOAuth ? 'N/A' : !!gmailTokens?.refreshToken
+      });
+      
       let connector;
       if (useClerkOAuth) {
+        console.log('[Pipeline Sync] Initializing GmailConnector with Clerk OAuth for user:', userId);
         // Use Clerk OAuth - GmailConnector will fetch tokens from Clerk as needed
         // Pass undefined for refresh token and userId for Clerk OAuth
         connector = new GmailConnector(undefined, userId);
       } else {
+        console.log('[Pipeline Sync] Initializing GmailConnector with legacy OAuth');
         // Legacy OAuth flow with refresh token
         connector = new GmailConnector(gmailTokens.refreshToken, userId);
       }
@@ -724,6 +760,13 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
+    console.error('[Pipeline Sync] Pipeline failed with error:', error);
+    console.error('[Pipeline Sync] Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined
+    });
+    
     const errorMessage = error instanceof Error ? error.message : 'Unknown pipeline error';
     const monitoringResults = monitor.complete(false);
     
