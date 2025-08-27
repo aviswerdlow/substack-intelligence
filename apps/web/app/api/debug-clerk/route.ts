@@ -14,11 +14,11 @@ export async function GET(request: NextRequest) {
     let recentUsers;
     try {
       const clerk = await clerkClient();
-      const users = await clerk.users.getUserList({
+      const userList = await clerk.users.getUserList({
         limit: 10,
         orderBy: '-created_at'
       });
-      recentUsers = users.map(u => ({
+      recentUsers = userList.data.map(u => ({
         id: u.id,
         email: u.emailAddresses?.[0]?.emailAddress || 'No email',
         createdAt: u.createdAt,
@@ -81,12 +81,12 @@ export async function POST(request: NextRequest) {
     if (searchTerm.startsWith('@')) {
       // Domain search - get all users and filter
       const clerk = await clerkClient();
-      const allUsers = await clerk.users.getUserList({
+      const userList = await clerk.users.getUserList({
         limit: 100,
         orderBy: '-created_at'
       });
       const domain = searchTerm.substring(1).toLowerCase();
-      users = allUsers.filter(u => 
+      users = userList.data.filter(u => 
         u.emailAddresses?.some(email => 
           email.emailAddress?.toLowerCase().endsWith(`@${domain}`)
         )
@@ -94,10 +94,11 @@ export async function POST(request: NextRequest) {
     } else {
       // Direct email search
       const clerk = await clerkClient();
-      users = await clerk.users.getUserList({
+      const userList = await clerk.users.getUserList({
         emailAddress: [searchTerm],
         limit: 10
       });
+      users = userList.data;
     }
     
     const results = users.map(u => ({
