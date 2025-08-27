@@ -24,14 +24,14 @@ export async function GET(request: NextRequest) {
     const supabase = createServiceRoleClient();
     
     // Build query - FILTER BY USER_ID
-    let query = supabase
+    let query: any = supabase
       .from('reports')
       .select('*')
-      .eq('user_id', userId) as any;  // CRITICAL: Filter by user_id - Type assertion to avoid deep type instantiation
+      .eq('user_id', userId);  // CRITICAL: Filter by user_id
 
     // Apply filters
     if (type !== 'all') {
-      query = query.eq('report_type', type as 'daily' | 'weekly' | 'monthly');
+      query = query.eq('report_type', type);
     }
 
     if (days !== 'all') {
@@ -40,8 +40,7 @@ export async function GET(request: NextRequest) {
       query = query.gte('generated_at', daysAgo.toISOString());
     }
 
-    query = query.order('generated_at', { ascending: false })
-      .limit(50);
+    query = query.order('generated_at', { ascending: false }).limit(50);
 
     const { data: reports, error } = await query;
 
