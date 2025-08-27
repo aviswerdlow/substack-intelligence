@@ -50,6 +50,7 @@ interface PipelineUpdate {
   remainingCount?: number;
   processedCount?: number;
   totalCount?: number;
+  companiesExtracted?: number;
 }
 
 export function PipelineProgressCard() {
@@ -167,10 +168,10 @@ export function PipelineProgressCard() {
         setIsRunning(false);
         setProgress(100);
         setStatusMessage('All emails processed successfully!');
-        addActivityLog(`✅ Background processing complete: ${update.companiesExtracted} companies extracted`);
+        addActivityLog(`✅ Background processing complete: ${update.companiesExtracted || 0} companies extracted`);
         toast({
           title: 'Processing Complete!',
-          description: `Successfully processed all emails and extracted ${update.companiesExtracted} companies.`,
+          description: `Successfully processed all emails and extracted ${update.companiesExtracted || 0} companies.`,
         });
         break;
         
