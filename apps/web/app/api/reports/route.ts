@@ -21,10 +21,10 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type') || 'all';
     const days = searchParams.get('days') || '30';
 
-    const supabase = createServiceRoleClient();
+    const supabase = createServiceRoleClient() as any;
     
     // Build query - FILTER BY USER_ID
-    let query: any = supabase
+    let query = supabase
       .from('reports')
       .select('*')
       .eq('user_id', userId);  // CRITICAL: Filter by user_id
