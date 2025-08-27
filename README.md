@@ -236,4 +236,4 @@ For questions or support, please contact the development team or create an issue
 
 ---
 
-**Built with ❤️ for venture intelligence**
+**Built with ❤️ for venture intelligence**Deployment test 1756314988
