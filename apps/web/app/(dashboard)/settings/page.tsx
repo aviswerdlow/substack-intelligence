@@ -207,7 +207,61 @@ function SettingsPageContent() {
     setConnectingEmail(true);
     try {
       if (!settings?.email?.connected) {
-        // Initiate Gmail OAuth flow
+        // First check if user has Google OAuth through Clerk
+        const clerkResponse = await fetch('/api/auth/gmail/clerk-status');
+        const clerkData = await clerkResponse.json();
+
+        if (!clerkResponse.ok) {
+          throw new Error(clerkData.error || 'Failed to check Gmail connection');
+        }
+
+        if (clerkData.hasGoogleOAuth) {
+          // User already has Google OAuth through Clerk - just mark as connected
+          const markResponse = await fetch('/api/auth/gmail/mark-connected', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: clerkData.googleEmail })
+          });
+
+          if (markResponse.ok) {
+            safeUpdateSettings((prev: any) => ({
+              ...prev,
+              email: {
+                ...(prev?.email || {}),
+                connected: true,
+                lastSync: new Date().toISOString()
+              },
+              account: {
+                ...(prev?.account || {}),
+                email: clerkData.googleEmail
+              }
+            }));
+            
+            toast.success('Gmail Connected!', {
+              description: `Connected as ${clerkData.googleEmail}`,
+            });
+            setConnectingEmail(false);
+            telemetry.track('email_connected_clerk', { email: clerkData.googleEmail });
+            return;
+          }
+        } else {
+          // User needs to sign in with Google
+          toast.error('Google Sign-in Required', {
+            description: 'To connect Gmail, please sign out and sign back in using the "Sign in with Google" button.',
+            duration: 10000,
+            action: {
+              label: 'Sign Out',
+              onClick: () => {
+                window.location.href = '/sign-out';
+              }
+            }
+          });
+          setConnectingEmail(false);
+          return;
+        }
+
+        // Fallback to legacy OAuth flow (shouldn't reach here normally)
+        console.warn('Falling back to legacy OAuth flow');
         const response = await fetch('/api/auth/gmail');
         const data = await response.json();
         
