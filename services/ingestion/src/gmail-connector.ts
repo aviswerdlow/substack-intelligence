@@ -56,9 +56,14 @@ export class GmailConnector {
       throw new Error('Gmail client not initialized and no Clerk user ID provided');
     }
     
-    // Dynamically import to avoid circular dependencies
-    const clerkOAuth = await import('../../../apps/web/lib/clerk-oauth');
-    this.gmail = await clerkOAuth.createClerkGmailClient(this.clerkUserId);
+    try {
+      // Dynamically import to avoid circular dependencies
+      const clerkOAuth = await import('../../../apps/web/lib/clerk-oauth');
+      this.gmail = await clerkOAuth.createClerkGmailClient(this.clerkUserId);
+    } catch (error) {
+      console.error('Failed to create Clerk Gmail client:', error);
+      throw new Error(`Failed to initialize Gmail client with Clerk OAuth: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   async fetchDailySubstacks(daysBack: number = 30, userId?: string): Promise<ProcessedEmail[]> {

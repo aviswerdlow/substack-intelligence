@@ -139,6 +139,12 @@ export async function POST(request: NextRequest) {
     
     // Get user's Gmail tokens from database or Clerk
     const userId = user?.id || 'dev';
+    
+    // First check if user has Google OAuth through Clerk directly
+    const hasClerkGoogleOAuth = user?.externalAccounts?.some(
+      account => account.provider === 'google' || account.provider === 'oauth_google'
+    ) || false;
+    
     const { UserSettingsService } = await import('@/lib/user-settings');
     const userSettingsService = new UserSettingsService();
     const settings = await userSettingsService.getUserSettings(userId);
@@ -147,27 +153,45 @@ export async function POST(request: NextRequest) {
     let useClerkOAuth = false;
     let gmailTokens = null;
     
-    // Check if the refresh token is a JSON string indicating Clerk OAuth
-    if (settings?.gmail_refresh_token) {
+    // If user has Clerk Google OAuth, use that regardless of database settings
+    if (hasClerkGoogleOAuth) {
+      useClerkOAuth = true;
+      gmailTokens = { useClerkOAuth: true };
+      
+      // Auto-update database to mark Gmail as connected if not already
+      if (!settings?.gmail_connected) {
+        const googleEmail = user?.externalAccounts?.find(
+          account => account.provider === 'google' || account.provider === 'oauth_google'
+        )?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || '';
+        
+        await userSettingsService.createOrUpdateUserSettings(userId, {
+          gmail_connected: true,
+          gmail_email: googleEmail,
+          gmail_refresh_token: JSON.stringify({
+            useClerkOAuth: true,
+            connectedAt: new Date().toISOString()
+          })
+        });
+      }
+    } else if (settings?.gmail_refresh_token) {
+      // Check if the refresh token is a JSON string indicating Clerk OAuth
       try {
         const tokenData = JSON.parse(settings.gmail_refresh_token);
         useClerkOAuth = tokenData.useClerkOAuth === true;
+        if (useClerkOAuth) {
+          gmailTokens = { useClerkOAuth: true };
+        }
       } catch {
         // Not JSON, it's a regular refresh token
         useClerkOAuth = false;
+        gmailTokens = await userSettingsService.getGmailTokens(userId);
       }
-    }
-    
-    if (useClerkOAuth) {
-      // User signed in with Google through Clerk
-      // We'll get fresh tokens from Clerk when needed
-      gmailTokens = { useClerkOAuth: true };
     } else {
       // Legacy custom OAuth flow
       gmailTokens = await userSettingsService.getGmailTokens(userId);
     }
     
-    if (!gmailTokens) {
+    if (!gmailTokens && !hasClerkGoogleOAuth) {
       monitor.setHealthStatus('configuration', false, 'User has not connected Gmail');
       monitor.failStep('configuration_validation', new Error('Gmail not connected'));
       
