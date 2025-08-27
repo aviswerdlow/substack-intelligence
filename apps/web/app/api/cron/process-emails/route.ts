@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Get unique user IDs
-    const uniqueUserIds = [...new Set(usersWithPending.map(u => u.user_id))];
+    const uniqueUserIds = Array.from(new Set(usersWithPending.map(u => u.user_id)));
     console.log(`Found ${uniqueUserIds.length} users with pending emails`);
     
     const results = [];
