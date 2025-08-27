@@ -267,9 +267,8 @@ export async function POST(request: NextRequest) {
     try {
       let connector;
       if (useClerkOAuth) {
-        // Use Clerk OAuth - get fresh token from Clerk
-        const { createClerkGmailClient } = await import('@/lib/clerk-oauth');
-        // Pass userId to create Gmail client with Clerk tokens
+        // Use Clerk OAuth - GmailConnector will fetch tokens from Clerk as needed
+        // Pass undefined for refresh token and userId for Clerk OAuth
         connector = new GmailConnector(undefined, userId);
       } else {
         // Legacy OAuth flow with refresh token
