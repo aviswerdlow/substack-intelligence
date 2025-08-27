@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   try {
     // Get current auth status
-    const { userId, sessionId } = auth();
+    const { userId, sessionId } = await auth();
     const user = await currentUser();
     
     // Try to list recent users
