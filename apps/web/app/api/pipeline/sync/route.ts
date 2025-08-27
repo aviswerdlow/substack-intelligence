@@ -143,8 +143,19 @@ export async function POST(request: NextRequest) {
     const settings = await userSettingsService.getUserSettings(userId);
     
     // Check if user is using Clerk OAuth
-    const useClerkOAuth = settings?.gmail_tokens?.useClerkOAuth === true;
+    let useClerkOAuth = false;
     let gmailTokens = null;
+    
+    // Check if the refresh token is a JSON string indicating Clerk OAuth
+    if (settings?.gmail_refresh_token) {
+      try {
+        const tokenData = JSON.parse(settings.gmail_refresh_token);
+        useClerkOAuth = tokenData.useClerkOAuth === true;
+      } catch {
+        // Not JSON, it's a regular refresh token
+        useClerkOAuth = false;
+      }
+    }
     
     if (useClerkOAuth) {
       // User signed in with Google through Clerk

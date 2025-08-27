@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
-import { createServiceRoleClient } from '@substack-intelligence/database';
+import { UserSettingsService } from '@/lib/user-settings';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -17,28 +17,22 @@ export async function POST(request: NextRequest) {
 
     const { email } = await request.json();
 
-    // Mark user as having Gmail connected in the database
-    const supabase = createServiceRoleClient();
+    // Mark user as having Gmail connected using UserSettingsService
+    const userSettingsService = new UserSettingsService();
     
-    // Store a simple flag that Gmail is connected via Clerk OAuth
-    const { error } = await supabase
-      .from('user_settings')
-      .upsert({
-        user_id: user.id,
-        gmail_connected: true,
-        gmail_email: email,
-        gmail_tokens: {
-          // Store a marker that we're using Clerk OAuth
-          useClerkOAuth: true,
-          connectedAt: new Date().toISOString()
-        },
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'user_id'
-      });
+    // Update settings to mark Gmail as connected via Clerk OAuth
+    const updated = await userSettingsService.updateSettings(user.id, {
+      gmail_connected: true,
+      gmail_email: email,
+      // Store tokens as a JSON string to indicate Clerk OAuth
+      gmail_refresh_token: JSON.stringify({
+        useClerkOAuth: true,
+        connectedAt: new Date().toISOString()
+      })
+    });
 
-    if (error) {
-      console.error('Failed to mark Gmail as connected:', error);
+    if (!updated) {
+      console.error('Failed to mark Gmail as connected');
       return NextResponse.json({ 
         error: 'Failed to save connection status' 
       }, { status: 500 });
