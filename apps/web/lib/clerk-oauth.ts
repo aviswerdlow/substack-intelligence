@@ -25,11 +25,11 @@ export async function getClerkGmailTokens(userId: string) {
       'oauth_google'
     );
     
-    if (!tokenResponse || tokenResponse.length === 0) {
+    if (!tokenResponse || !tokenResponse.data || tokenResponse.data.length === 0) {
       throw new Error('No OAuth tokens available from Clerk');
     }
     
-    const token = tokenResponse[0];
+    const token = tokenResponse.data[0];
     
     return {
       accessToken: token.token,
