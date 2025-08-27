@@ -94,6 +94,7 @@ function validateGmailOAuthConfig(): { isValid: boolean; missingVars: string[] }
 
 // POST endpoint to trigger unified pipeline
 export async function POST(request: NextRequest) {
+  const requestStartTime = Date.now(); // Track overall request start time
   const monitor = new PipelineMonitor();
   
   try {
@@ -460,7 +461,6 @@ export async function POST(request: NextRequest) {
       const companiesFound: any[] = [];
       const newlyDiscoveredCompanies = new Set<string>(); // Track companies discovered in this run
       const processingStartTime = Date.now();
-      const pipelineStartTime = monitor.getSessionStartTime(); // Get overall pipeline start time
       const maxProcessingTime = 30000; // 30 seconds for processing (conservative with 60s total limit)
       let processedInThisRun = 0;
       const emailsToProcess = [...dbEmails]; // Copy array to track remaining
@@ -468,7 +468,7 @@ export async function POST(request: NextRequest) {
       for (let i = 0; i < emailsToProcess.length; i++) {
         // Check if we're approaching timeout limit (both processing time and total time)
         const processingTimeElapsed = Date.now() - processingStartTime;
-        const totalTimeElapsed = Date.now() - pipelineStartTime;
+        const totalTimeElapsed = Date.now() - requestStartTime;
         
         // Stop if we've used too much processing time OR total time is approaching 50s
         if (processingTimeElapsed > maxProcessingTime || totalTimeElapsed > 50000) {
