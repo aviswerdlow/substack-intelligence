@@ -388,4 +388,4 @@ For deployment issues or questions:
 - Technical Documentation: See `/docs` folder
 - System Status: Check `/api/monitoring/health`
 - Security Issues: Run security audit at `/api/security/audit`
-- Performance Issues: Monitor Axiom dashboard
+- Performance Issues: Monitor Axiom dashboard# Deployment trigger Wed Aug 27 12:38:04 EDT 2025
