@@ -436,13 +436,14 @@ export async function POST(request: NextRequest) {
       
       // Get the latest emails from database for this specific user that haven't been processed
       const dbQueryStartTime = Date.now();
+      // Reduce batch size to handle within timeout limits
       const { data: dbEmails, error: fetchError } = await supabase
         .from('emails')
         .select('*')
         .eq('user_id', userId) // CRITICAL: Filter by user_id for data isolation
         .in('processing_status', ['pending', null]) // Only get unprocessed emails
         .order('received_at', { ascending: false })
-        .limit(100); // Process up to 100 emails per run
+        .limit(10); // Process smaller batch to avoid timeouts
       
       monitor.trackDatabaseOperation('select', 'emails', dbEmails?.length, !fetchError, fetchError || undefined);
       
@@ -459,29 +460,37 @@ export async function POST(request: NextRequest) {
       const companiesFound: any[] = [];
       const newlyDiscoveredCompanies = new Set<string>(); // Track companies discovered in this run
       const processingStartTime = Date.now();
-      const maxProcessingTime = 45000; // 45 seconds (with 60s maxDuration)
+      const pipelineStartTime = monitor.getSessionStartTime(); // Get overall pipeline start time
+      const maxProcessingTime = 30000; // 30 seconds for processing (conservative with 60s total limit)
       let processedInThisRun = 0;
       const emailsToProcess = [...dbEmails]; // Copy array to track remaining
       
       for (let i = 0; i < emailsToProcess.length; i++) {
-        // Check if we're approaching timeout limit
-        const timeElapsed = Date.now() - processingStartTime;
-        if (timeElapsed > maxProcessingTime) {
+        // Check if we're approaching timeout limit (both processing time and total time)
+        const processingTimeElapsed = Date.now() - processingStartTime;
+        const totalTimeElapsed = Date.now() - pipelineStartTime;
+        
+        // Stop if we've used too much processing time OR total time is approaching 50s
+        if (processingTimeElapsed > maxProcessingTime || totalTimeElapsed > 50000) {
           console.log(`Approaching timeout limit, processed ${processedInThisRun} emails, ${emailsToProcess.length - i} remaining`);
+          console.log(`Processing time: ${processingTimeElapsed}ms, Total time: ${totalTimeElapsed}ms`);
           
           // Mark remaining emails for background processing
           const remainingEmails = emailsToProcess.slice(i);
           if (remainingEmails.length > 0) {
             pushPipelineUpdate(userId, {
-              type: 'continuing_background',
-              status: 'extracting',
-              message: `Processed ${processedInThisRun} emails, continuing ${remainingEmails.length} in background...`,
+              type: 'partial_completion',
+              status: 'complete',
+              message: `Processed ${processedInThisRun} of ${emailsToProcess.length} emails. Run pipeline again to process remaining ${remainingEmails.length} emails.`,
               stats: pipelineStatus.stats,
               remainingCount: remainingEmails.length
             });
             
-            // Schedule background processing (we'll implement this next)
-            console.log(`Scheduling background processing for ${remainingEmails.length} remaining emails`);
+            console.log(`Partial completion: ${processedInThisRun} emails processed, ${remainingEmails.length} remaining`);
+            
+            // Set partial success status
+            pipelineStatus.status = 'complete';
+            pipelineStatus.message = `Processed ${processedInThisRun} emails. ${remainingEmails.length} emails remaining - run pipeline again to continue.`;
           }
           break;
         }
