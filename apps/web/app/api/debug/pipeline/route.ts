@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const userId = user?.id || 'development-user';
     
     // Collect debug information
-    const debugInfo = {
+    const debugInfo: any = {
       user: {
         id: userId,
         email: user?.emailAddresses?.[0]?.emailAddress,

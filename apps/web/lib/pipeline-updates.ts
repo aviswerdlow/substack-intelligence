@@ -16,3 +16,8 @@ export function pushPipelineUpdate(userId: string, update: any) {
   // Store updated queue
   pipelineUpdates.set(userId, updateQueue);
 }
+
+// Helper function to clear updates for a user
+export function clearPipelineUpdates(userId: string) {
+  pipelineUpdates.delete(userId);
+}

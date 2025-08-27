@@ -272,7 +272,7 @@ export function ActiveOperationsBar() {
               )}
               
               {/* Force Unlock button if stuck at 0% for more than 30 seconds */}
-              {state.status === 'running' && state.progress === 0 && (
+              {(state.status === 'connecting' || state.status === 'fetching') && state.progress === 0 && (
                 <Button
                   onClick={async () => {
                     try {
