@@ -241,7 +241,7 @@ function SettingsPageContent() {
               description: `Connected as ${clerkData.googleEmail}`,
             });
             setConnectingEmail(false);
-            telemetry.track('email_connected_clerk', { email: clerkData.googleEmail });
+            telemetry.trackUserInteraction('email_connected_clerk', { email: clerkData.googleEmail });
             return;
           }
         } else {
