@@ -324,7 +324,7 @@ export async function POST(request: NextRequest) {
       stats: pipelineStatus.stats
     }));
 
-    pushPipelineUpdate(userId, {
+    await pushPipelineUpdate(userId, {
       type: 'status',
       status: 'fetching',
       progress: 10,
@@ -393,7 +393,7 @@ export async function POST(request: NextRequest) {
         emailCount: emails.length
       }));
 
-      pushPipelineUpdate(userId, {
+      await pushPipelineUpdate(userId, {
         type: 'emails_fetched',
         status: 'extracting',
         progress: 40,
@@ -416,12 +416,12 @@ export async function POST(request: NextRequest) {
       
       // Check for Gmail access errors
       if (errorMessage.includes('Gmail is not enabled') || errorMessage.includes('Mail service not enabled')) {
-        pushPipelineUpdate(userId, {
+        await pushPipelineUpdate(userId, {
           type: 'error',
           status: 'error',
           message: 'This Google account does not have Gmail enabled. Please sign out and sign in with a different Google account that has Gmail access.',
         });
-        
+
         return NextResponse.json({
           success: false,
           error: 'Gmail not available on this Google account',
@@ -458,12 +458,12 @@ export async function POST(request: NextRequest) {
         monitor.failStep('company_extraction', extractorError as Error);
         
         const errorMessage = extractorError instanceof Error ? extractorError.message : 'Unknown error';
-        pushPipelineUpdate(userId, {
+        await pushPipelineUpdate(userId, {
           type: 'error',
           status: 'error',
           message: `AI service initialization failed: ${errorMessage}. Please check your Anthropic API key configuration.`,
         });
-        
+
         pipelineStatus.status = 'error';
         pipelineStatus.message = 'AI service unavailable';
         
@@ -538,14 +538,14 @@ export async function POST(request: NextRequest) {
           // Mark remaining emails for background processing
           const remainingEmails = emailsToProcess.slice(i);
           if (remainingEmails.length > 0) {
-            pushPipelineUpdate(userId, {
+            await pushPipelineUpdate(userId, {
               type: 'partial_completion',
               status: 'complete',
               message: `Processed ${processedInThisRun} of ${emailsToProcess.length} emails. Run pipeline again to process remaining ${remainingEmails.length} emails.`,
               stats: pipelineStatus.stats,
               remainingCount: remainingEmails.length
             });
-            
+
             console.log(`Partial completion: ${processedInThisRun} emails processed, ${remainingEmails.length} remaining`);
             
             // Set partial success status
@@ -599,7 +599,7 @@ export async function POST(request: NextRequest) {
 
         console.log('[PIPELINE:DEBUG] Pushing processing_email update');
 
-        pushPipelineUpdate(userId, {
+        await pushPipelineUpdate(userId, {
           type: 'processing_email',
           status: 'extracting',
           progress: Math.round(extractionProgress),
@@ -639,7 +639,7 @@ export async function POST(request: NextRequest) {
             console.error(`Failed to extract from email ${email.id}:`, aiError);
             console.error(`Email subject: ${email.subject}, Newsletter: ${email.newsletter_name}`);
             // Skip this email and continue with others
-            pushPipelineUpdate(userId, {
+            await pushPipelineUpdate(userId, {
               type: 'processing_email',
               status: 'extracting',
               progress: Math.round(extractionProgress),
@@ -800,7 +800,7 @@ export async function POST(request: NextRequest) {
 
                   console.log('[PIPELINE:DEBUG] Pushing company_discovered update');
 
-                  pushPipelineUpdate(userId, {
+                  await pushPipelineUpdate(userId, {
                     type: 'company_discovered',
                     company: {
                       name: company.name,
@@ -928,7 +928,7 @@ export async function POST(request: NextRequest) {
       stats: pipelineStatus.stats
     }));
 
-    pushPipelineUpdate(userId, {
+    await pushPipelineUpdate(userId, {
       type: 'complete',
       status: 'complete',
       progress: 100,
@@ -1000,13 +1000,13 @@ export async function POST(request: NextRequest) {
     pipelineCacheManager.clearSyncLock();
     
     // Push error update to client through SSE
-    pushPipelineUpdate(userId, {
+    await pushPipelineUpdate(userId, {
       type: 'error',
       status: 'error',
       message: errorMessage,
       stats: pipelineStatus.stats
     });
-    
+
     // Create critical alert for pipeline failure
     createPipelineAlert('error', 'Pipeline Failed', 
       `Pipeline execution failed: ${errorMessage}`,

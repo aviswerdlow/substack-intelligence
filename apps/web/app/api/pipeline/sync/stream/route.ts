@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
-import { pipelineUpdates } from '@/lib/pipeline-updates';
+import { getPipelineUpdates, markUpdatesConsumed, clearPipelineUpdates } from '@/lib/pipeline-updates';
 
 // Store active connections for pushing updates
 export const runtime = 'nodejs';
@@ -48,45 +48,66 @@ export async function GET(request: NextRequest) {
           // Set up interval to check for updates
           console.log('[SSE-STREAM:DEBUG] Setting up polling interval (1000ms) for userId:', userId);
 
-          interval = setInterval(() => {
+          interval = setInterval(async () => {
             try {
-              console.log(`[SSE-STREAM:DEBUG] Polling for updates - userId: ${userId}, Map size: ${pipelineUpdates.size}`);
+              console.log(`[SSE-STREAM:DEBUG] Polling for updates - userId: ${userId}`);
 
-              const updateQueue = pipelineUpdates.get(userId);
+              // Fetch updates from Supabase (or memory in dev)
+              const updates = await getPipelineUpdates(userId);
 
-              if (updateQueue && updateQueue.length > 0) {
-                console.log(`[SSE-STREAM:DEBUG] Found ${updateQueue.length} updates in queue for user ${userId}`);
+              if (updates && updates.length > 0) {
+                console.log(`[SSE-STREAM:DEBUG] Found ${updates.length} updates for user ${userId}`);
 
-                // Send all queued updates
-                while (updateQueue.length > 0) {
-                  const update = updateQueue.shift();
-                  if (update) {
-                    console.log('[SSE-STREAM:DEBUG] Sending update to client:', {
-                      type: update.type,
-                      status: update.status,
-                      progress: update.progress,
-                      message: update.message?.substring(0, 100),
-                      timestamp: update.timestamp
-                    });
+                const consumedIds: string[] = [];
 
-                    const message = `data: ${JSON.stringify(update)}\n\n`;
-                    controller.enqueue(encoder.encode(message));
+                // Send all updates
+                for (const update of updates) {
+                  console.log('[SSE-STREAM:DEBUG] Sending update to client:', {
+                    type: update.type,
+                    status: update.status,
+                    progress: update.progress,
+                    message: update.message?.substring(0, 100),
+                    timestamp: update.timestamp
+                  });
 
-                    console.log('[SSE-STREAM:DEBUG] Update sent successfully, remaining in queue:', updateQueue.length);
+                  // Send update (remove _dbId from the data sent to client)
+                  const { _dbId, ...updateData } = update;
+                  const message = `data: ${JSON.stringify(updateData)}\n\n`;
+                  controller.enqueue(encoder.encode(message));
 
-                    // Check if this is a terminal update
-                    if (update.type === 'complete' || update.type === 'error') {
-                      console.log('[SSE-STREAM:DEBUG] Terminal update detected, closing stream in 100ms');
-                      pipelineUpdates.delete(userId);
-                      clearInterval(interval);
-                      // Send final message before closing
-                      setTimeout(() => {
-                        controller.close();
-                        console.log('[SSE-STREAM:DEBUG] Stream closed after terminal update');
-                      }, 100);
-                      return;
-                    }
+                  // Track DB ID for marking as consumed
+                  if (_dbId) {
+                    consumedIds.push(_dbId);
                   }
+
+                  console.log('[SSE-STREAM:DEBUG] Update sent successfully');
+
+                  // Check if this is a terminal update
+                  if (update.type === 'complete' || update.type === 'error') {
+                    console.log('[SSE-STREAM:DEBUG] Terminal update detected, closing stream in 100ms');
+
+                    // Mark updates as consumed
+                    if (consumedIds.length > 0) {
+                      await markUpdatesConsumed(consumedIds);
+                    }
+
+                    // Clear all remaining updates
+                    await clearPipelineUpdates(userId);
+
+                    clearInterval(interval);
+
+                    // Send final message before closing
+                    setTimeout(() => {
+                      controller.close();
+                      console.log('[SSE-STREAM:DEBUG] Stream closed after terminal update');
+                    }, 100);
+                    return;
+                  }
+                }
+
+                // Mark all sent updates as consumed
+                if (consumedIds.length > 0) {
+                  await markUpdatesConsumed(consumedIds);
                 }
               } else {
                 // Send heartbeat to keep connection alive
