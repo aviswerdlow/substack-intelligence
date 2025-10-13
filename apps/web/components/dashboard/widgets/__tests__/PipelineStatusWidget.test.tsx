@@ -116,20 +116,18 @@ describe('PipelineStatusWidget', () => {
 
     const mockStatusResponse = {
       success: true,
-      data: {
-        metrics: {
-          totalEmails: 100,
-          totalCompanies: 50,
-          totalMentions: 200,
-          recentEmails: 10,
-          recentCompanies: 5,
-          lastSyncTime: new Date().toISOString()
-        },
-        health: {
-          status: 'healthy',
-          suggestedNextSync: new Date(Date.now() + 3600000).toISOString()
-        }
-      }
+      metrics: {
+        totalEmails: 100,
+        totalCompanies: 50,
+        totalMentions: 200,
+        recentEmails: 10,
+        recentCompanies: 5,
+        lastSyncTime: new Date().toISOString(),
+        dataAge: 10,
+        isFresh: true
+      },
+      trending: [],
+      meta: { timestamp: new Date().toISOString(), cached: false }
     };
 
     it('displays pipeline status when healthy', async () => {
@@ -172,15 +170,13 @@ describe('PipelineStatusWidget', () => {
             ok: true,
             json: () => Promise.resolve({
               ...mockStatusResponse,
-              data: {
-                ...mockStatusResponse.data,
-                metrics: {
-                  ...mockStatusResponse.data.metrics,
-                  recentEmails: 0, // No recent emails
-                  recentCompanies: 0,
-                  totalMentions: 0,
-                  totalCompanies: 0
-                }
+              metrics: {
+                ...mockStatusResponse.metrics,
+                recentEmails: 0, // No recent emails
+                recentCompanies: 0,
+                totalMentions: 0,
+                totalCompanies: 0,
+                isFresh: false
               }
             })
           } as Response);
@@ -207,17 +203,18 @@ describe('PipelineStatusWidget', () => {
 
     const mockStatusResponse = {
       success: true,
-      data: {
-        metrics: {
-          totalEmails: 100,
-          recentEmails: 10,
-          recentCompanies: 5,
-          totalCompanies: 50,
-          totalMentions: 200,
-          lastSyncTime: new Date().toISOString()
-        },
-        health: { status: 'healthy' }
-      }
+      metrics: {
+        totalEmails: 100,
+        recentEmails: 10,
+        recentCompanies: 5,
+        totalCompanies: 50,
+        totalMentions: 200,
+        lastSyncTime: new Date().toISOString(),
+        dataAge: 20,
+        isFresh: true
+      },
+      trending: [],
+      meta: { timestamp: new Date().toISOString(), cached: false }
     };
 
     it('triggers pipeline sync when Run Now button is clicked', async () => {
@@ -419,7 +416,17 @@ describe('PipelineStatusWidget', () => {
             ok: true,
             json: () => Promise.resolve({
               success: true,
-              data: { metrics: {}, health: { status: 'healthy' } }
+              metrics: {
+                totalEmails: 0,
+                totalCompanies: 0,
+                totalMentions: 0,
+                recentEmails: 0,
+                recentCompanies: 0,
+                lastSyncTime: new Date().toISOString(),
+                dataAge: 0,
+                isFresh: true
+              },
+              trending: []
             })
           } as Response);
         }

@@ -34,14 +34,14 @@ export async function GET(request: NextRequest) {
 
     // Check cache first
     const cacheKey = `metrics:${userId}`;
-    const cachedMetrics = pipelineCacheManager.getPipelineMetrics();
-    
-    if (cachedMetrics) {
+    const cachedResponse = pipelineCacheManager.getPipelineMetrics();
+
+    if (cachedResponse) {
       console.log('[CACHE] Pipeline metrics served from cache');
-      
+
       return NextResponse.json(
-        performanceUtils.addCacheStatus(cachedMetrics, true, cacheKey),
-        { 
+        performanceUtils.addCacheStatus(cachedResponse, true, cacheKey),
+        {
           headers: performanceUtils.createCacheHeaders(30)
         }
       );

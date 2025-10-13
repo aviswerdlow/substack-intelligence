@@ -126,9 +126,8 @@ describe('Pipeline API Integration Tests', () => {
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
-      expect(data.data.metrics).toBeDefined();
-      expect(data.data.metrics.totalEmails).toBe(100);
-      expect(data.data.health).toBeDefined();
+      expect(data.metrics).toBeDefined();
+      expect(data.metrics.totalEmails).toBe(100);
       expect(data.meta.timestamp).toBeDefined();
     });
 
