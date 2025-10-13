@@ -1,9 +1,12 @@
 import { clerkClient } from '@clerk/nextjs/server';
 
-// Clerk's server SDK currently exports `clerkClient` as an async factory function.
-// When the runtime has already instantiated the singleton, the function is callable
-// but also behaves like the resolved client. We need the latter behavior, so we cast
-// it to the resolved client type without invoking it.
-type ServerClerkClient = Awaited<ReturnType<typeof clerkClient>>;
+// In Clerk v6+, clerkClient() returns a Promise that resolves to the client
+// We need to call it as a function to get the client instance
+export async function getServerClerkClient() {
+  // clerkClient() is callable and returns the client
+  return await clerkClient();
+}
 
-export const serverClerkClient = clerkClient as unknown as ServerClerkClient;
+// For synchronous contexts, we export the factory directly
+// Callers should await clerkClient() when they need the actual client
+export { clerkClient as serverClerkClient };
