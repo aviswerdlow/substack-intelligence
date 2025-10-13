@@ -25,7 +25,13 @@ For basic local development, you only need:
    pnpm install
    ```
 
-4. **Start Development Server**
+4. **Apply Supabase Migrations**
+   ```bash
+   pnpm run db:migrate
+   ```
+   > This pushes the latest schema (including the required `user_id` columns and RLS policies) to your linked Supabase project. If the CLI is unavailable, follow `manual-migration-instructions.md` to run the SQL files from the dashboard.
+
+5. **Start Development Server**
    ```bash
    pnpm dev
    ```
