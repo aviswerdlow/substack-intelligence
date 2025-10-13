@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { UserSettingsService } from '@/lib/user-settings';
+import { buildMissingUserIdColumnResponse, isMissingUserIdColumnError, MissingUserIdColumnError } from '@/lib/supabase-errors';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -33,8 +34,8 @@ export async function POST(request: NextRequest) {
 
     if (!updated) {
       console.error('Failed to mark Gmail as connected');
-      return NextResponse.json({ 
-        error: 'Failed to save connection status' 
+      return NextResponse.json({
+        error: 'Failed to save connection status'
       }, { status: 500 });
     }
 
@@ -44,8 +45,11 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error marking Gmail as connected:', error);
-    return NextResponse.json({ 
-      error: 'Failed to mark Gmail as connected' 
+    if (error instanceof MissingUserIdColumnError || isMissingUserIdColumnError(error)) {
+      return buildMissingUserIdColumnResponse('gmail_mark_connected', error instanceof MissingUserIdColumnError ? error.table : 'user_settings');
+    }
+    return NextResponse.json({
+      error: 'Failed to mark Gmail as connected'
     }, { status: 500 });
   }
 }

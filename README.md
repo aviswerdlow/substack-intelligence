@@ -106,6 +106,9 @@ npx supabase db push
 pnpm db:generate
 ```
 
+> **Using a hosted Supabase project?**
+> After logging in with the Supabase CLI (`supabase login`), run `pnpm run db:migrate` to push the latest schema (including the required `user_id` columns and RLS policies). If the CLI is unavailable, follow `manual-migration-instructions.md` to apply the SQL files from the dashboard. Pipeline endpoints will return a 503 with guidance until these migrations are applied.
+
 ### 4. Development
 
 Start the development server:
