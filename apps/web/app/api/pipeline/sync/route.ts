@@ -315,6 +315,15 @@ export async function POST(request: NextRequest) {
     };
     
     // Push initial status update
+    console.log('[PIPELINE:DEBUG] Pushing initial status update to userId:', userId);
+    console.log('[PIPELINE:DEBUG] Initial update data:', JSON.stringify({
+      type: 'status',
+      status: 'fetching',
+      progress: 10,
+      message: 'Connecting to Gmail...',
+      stats: pipelineStatus.stats
+    }));
+
     pushPipelineUpdate(userId, {
       type: 'status',
       status: 'fetching',
@@ -322,6 +331,8 @@ export async function POST(request: NextRequest) {
       message: 'Connecting to Gmail...',
       stats: pipelineStatus.stats
     });
+
+    console.log('[PIPELINE:DEBUG] Initial status update pushed successfully');
 
     // Step 1: Fetch emails from Gmail
     try {
@@ -352,20 +363,36 @@ export async function POST(request: NextRequest) {
 
       const emails = await Promise.race([fetchPromise, timeoutPromise]) as any[];
       const fetchDuration = Date.now() - fetchStartTime;
-      
+
+      console.log('[PIPELINE:DEBUG] Gmail fetch completed successfully');
+      console.log('[PIPELINE:DEBUG] Fetch results:', {
+        emailCount: emails.length,
+        fetchDuration: `${fetchDuration}ms`,
+        daysBack: options.daysBack
+      });
+
       monitor.setMetric('emailsFetched', emails.length);
       monitor.trackGmailApiCall('fetchDailySubstacks', true, fetchDuration);
-      monitor.completeStep('gmail_fetch', { 
-        emailsCount: emails.length, 
+      monitor.completeStep('gmail_fetch', {
+        emailsCount: emails.length,
         duration: fetchDuration,
-        daysBack: options.daysBack 
+        daysBack: options.daysBack
       });
-      
+
       pipelineStatus.stats.emailsFetched = emails.length;
       pipelineStatus.progress = 40;
       pipelineStatus.message = `Fetched ${emails.length} emails, extracting companies...`;
-      
+
       // Push update after fetching emails
+      console.log('[PIPELINE:DEBUG] Pushing emails_fetched update to userId:', userId);
+      console.log('[PIPELINE:DEBUG] Update data:', JSON.stringify({
+        type: 'emails_fetched',
+        status: 'extracting',
+        progress: 40,
+        message: `Found ${emails.length} newsletters to analyze`,
+        emailCount: emails.length
+      }));
+
       pushPipelineUpdate(userId, {
         type: 'emails_fetched',
         status: 'extracting',
@@ -374,6 +401,8 @@ export async function POST(request: NextRequest) {
         stats: pipelineStatus.stats,
         emailCount: emails.length
       });
+
+      console.log('[PIPELINE:DEBUG] emails_fetched update pushed successfully');
       
       if (emails.length === 0) {
         createPipelineAlert('warning', 'No Emails Found', 
@@ -471,9 +500,16 @@ export async function POST(request: NextRequest) {
       }
       
       if (dbEmails && dbEmails.length > 0) {
+        console.log('[PIPELINE:DEBUG] Retrieved emails from database');
+        console.log('[PIPELINE:DEBUG] Database query results:', {
+          emailCount: dbEmails.length,
+          queryDuration: `${Date.now() - dbQueryStartTime}ms`,
+          userId: userId
+        });
+
         monitor.setMetric('emailsProcessed', dbEmails.length);
         monitor.completeStep('database_fetch', { emailsRetrieved: dbEmails.length, duration: Date.now() - dbQueryStartTime });
-      
+
       // Process emails with smart timing to avoid timeouts
       const companiesFound: any[] = [];
       const newlyDiscoveredCompanies = new Set<string>(); // Track companies discovered in this run
@@ -481,6 +517,13 @@ export async function POST(request: NextRequest) {
       const maxProcessingTime = 240000; // 4 minutes for processing (conservative with 5min total limit)
       let processedInThisRun = 0;
       const emailsToProcess = [...dbEmails]; // Copy array to track remaining
+
+      console.log('[PIPELINE:DEBUG] Starting email processing loop');
+      console.log('[PIPELINE:DEBUG] Processing configuration:', {
+        emailsToProcess: emailsToProcess.length,
+        maxProcessingTime: `${maxProcessingTime}ms`,
+        startTime: new Date(processingStartTime).toISOString()
+      });
       
       for (let i = 0; i < emailsToProcess.length; i++) {
         // Check if we're approaching timeout limit (both processing time and total time)
@@ -543,7 +586,19 @@ export async function POST(request: NextRequest) {
         const emailsPerSecond = (i + 1) / elapsedSeconds;
         const remainingEmails = dbEmails.length - (i + 1);
         const estimatedTimeRemaining = remainingEmails / emailsPerSecond;
-        
+
+        console.log('[PIPELINE:DEBUG] Processing email', {
+          index: i + 1,
+          total: dbEmails.length,
+          emailId: email.id,
+          subject: email.subject || email.newsletter_name,
+          progress: Math.round(extractionProgress),
+          elapsedSeconds: Math.round(elapsedSeconds),
+          estimatedRemaining: Math.round(estimatedTimeRemaining)
+        });
+
+        console.log('[PIPELINE:DEBUG] Pushing processing_email update');
+
         pushPipelineUpdate(userId, {
           type: 'processing_email',
           status: 'extracting',
@@ -560,6 +615,8 @@ export async function POST(request: NextRequest) {
           estimatedTimeRemaining: Math.round(estimatedTimeRemaining),
           companiesFound: companiesFound.slice(-5) // Last 5 companies
         });
+
+        console.log('[PIPELINE:DEBUG] processing_email update pushed');
         
         try {
           // Extract companies from email content
@@ -734,7 +791,15 @@ export async function POST(request: NextRequest) {
                 // Only push discovery update if this is the FIRST time we've seen this company in this run
                 if (!newlyDiscoveredCompanies.has(company.name)) {
                   newlyDiscoveredCompanies.add(company.name);
-                  
+
+                  console.log('[PIPELINE:DEBUG] New company discovered:', {
+                    name: company.name,
+                    description: company.description?.substring(0, 100),
+                    totalNewCompanies: newCompaniesCount
+                  });
+
+                  console.log('[PIPELINE:DEBUG] Pushing company_discovered update');
+
                   pushPipelineUpdate(userId, {
                     type: 'company_discovered',
                     company: {
@@ -749,6 +814,8 @@ export async function POST(request: NextRequest) {
                       totalMentions: totalMentions  // Include current totalMentions
                     }
                   });
+
+                  console.log('[PIPELINE:DEBUG] company_discovered update pushed');
                 }
               }
             }
@@ -827,7 +894,16 @@ export async function POST(request: NextRequest) {
     
     // Complete pipeline
     monitor.startStep('pipeline_completion');
-    
+
+    console.log('[PIPELINE:DEBUG] Pipeline processing completed');
+    console.log('[PIPELINE:DEBUG] Final statistics:', {
+      emailsFetched: pipelineStatus.stats.emailsFetched,
+      companiesExtracted: totalCompaniesExtracted,
+      newCompanies: newCompaniesCount,
+      totalMentions: totalMentions,
+      executionTime: `${Date.now() - requestStartTime}ms`
+    });
+
     // Update the final stats first
     pipelineStatus = {
       status: 'complete',
@@ -841,8 +917,17 @@ export async function POST(request: NextRequest) {
         totalMentions: totalMentions
       }
     };
-    
+
     // Now push completion update with the updated stats
+    console.log('[PIPELINE:DEBUG] Pushing completion update to userId:', userId);
+    console.log('[PIPELINE:DEBUG] Completion data:', JSON.stringify({
+      type: 'complete',
+      status: 'complete',
+      progress: 100,
+      message: `Discovered ${totalCompaniesExtracted} companies (${newCompaniesCount} new) from ${pipelineStatus.stats.emailsFetched} newsletters`,
+      stats: pipelineStatus.stats
+    }));
+
     pushPipelineUpdate(userId, {
       type: 'complete',
       status: 'complete',
@@ -850,6 +935,8 @@ export async function POST(request: NextRequest) {
       message: `Discovered ${totalCompaniesExtracted} companies (${newCompaniesCount} new) from ${pipelineStatus.stats.emailsFetched} newsletters`,
       stats: pipelineStatus.stats  // Now this has the correct totalMentions
     });
+
+    console.log('[PIPELINE:DEBUG] Completion update pushed successfully');
     
     // Update final metrics
     monitor.setMetric('companiesExtracted', totalCompaniesExtracted);
