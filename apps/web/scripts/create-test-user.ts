@@ -7,7 +7,7 @@
  * with the code "424242" without actually sending emails.
  */
 
-import { clerkClient } from '@clerk/nextjs/server';
+import { serverClerkClient } from '../lib/clerk-client';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -26,7 +26,7 @@ async function createTestUser() {
     console.log('🔍 Checking if test user already exists...');
     
     // Check if user already exists
-    const client = clerkClient;
+    const client = serverClerkClient;
     const existingUsers = await client.users.getUserList({
       emailAddress: [TEST_USER.email],
     });

@@ -1,4 +1,5 @@
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
+import { serverClerkClient } from '../../../../lib/clerk-client';
 import { NextResponse } from 'next/server';
 
 // This endpoint retrieves Google OAuth tokens from Clerk
@@ -13,7 +14,7 @@ export async function GET() {
     }
 
     // Get user's OAuth access tokens from Clerk
-    const client = clerkClient;
+    const client = serverClerkClient;
     const oauthAccessTokens = await client.users.getUserOauthAccessToken(
       userId,
       'google'
