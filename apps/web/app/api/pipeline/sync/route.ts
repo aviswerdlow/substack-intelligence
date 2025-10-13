@@ -17,7 +17,7 @@ import {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-export const maxDuration = 60; // Allow up to 60 seconds for processing
+export const maxDuration = 300; // Allow up to 5 minutes for processing (Vercel Pro allows 300s)
 
 // Pipeline status tracking
 let pipelineStatus = {
@@ -343,8 +343,14 @@ export async function POST(request: NextRequest) {
         connector = new GmailConnector(gmailTokens.refreshToken, userId);
       }
       const fetchStartTime = Date.now();
-      
-      const emails = await connector.fetchDailySubstacks(options.daysBack, userId);
+
+      // Add timeout to Gmail fetch to prevent hanging (40 seconds max)
+      const fetchPromise = connector.fetchDailySubstacks(options.daysBack, userId);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Gmail fetch timed out after 40 seconds')), 40000)
+      );
+
+      const emails = await Promise.race([fetchPromise, timeoutPromise]) as any[];
       const fetchDuration = Date.now() - fetchStartTime;
       
       monitor.setMetric('emailsFetched', emails.length);
@@ -472,7 +478,7 @@ export async function POST(request: NextRequest) {
       const companiesFound: any[] = [];
       const newlyDiscoveredCompanies = new Set<string>(); // Track companies discovered in this run
       const processingStartTime = Date.now();
-      const maxProcessingTime = 30000; // 30 seconds for processing (conservative with 60s total limit)
+      const maxProcessingTime = 240000; // 4 minutes for processing (conservative with 5min total limit)
       let processedInThisRun = 0;
       const emailsToProcess = [...dbEmails]; // Copy array to track remaining
       
@@ -480,9 +486,9 @@ export async function POST(request: NextRequest) {
         // Check if we're approaching timeout limit (both processing time and total time)
         const processingTimeElapsed = Date.now() - processingStartTime;
         const totalTimeElapsed = Date.now() - requestStartTime;
-        
-        // Stop if we've used too much processing time OR total time is approaching 50s
-        if (processingTimeElapsed > maxProcessingTime || totalTimeElapsed > 50000) {
+
+        // Stop if we've used too much processing time OR total time is approaching 4.5min
+        if (processingTimeElapsed > maxProcessingTime || totalTimeElapsed > 270000) {
           console.log(`Approaching timeout limit, processed ${processedInThisRun} emails, ${emailsToProcess.length - i} remaining`);
           console.log(`Processing time: ${processingTimeElapsed}ms, Total time: ${totalTimeElapsed}ms`);
           
