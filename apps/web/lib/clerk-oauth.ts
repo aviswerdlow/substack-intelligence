@@ -1,4 +1,4 @@
-import { clerkClient } from '@clerk/nextjs/server';
+import { serverClerkClient } from './clerk-client';
 import { google } from 'googleapis';
 
 /**
@@ -8,7 +8,7 @@ export async function getClerkGmailTokens(userId: string) {
   console.log('[Clerk OAuth] Getting Gmail tokens for user:', userId);
   
   try {
-    const clerk = await clerkClient();
+    const clerk = serverClerkClient;
     const user = await clerk.users.getUser(userId);
     
     console.log('[Clerk OAuth] User external accounts:', user.externalAccounts?.map(a => ({
