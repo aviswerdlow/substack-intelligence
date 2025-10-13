@@ -8,7 +8,7 @@ export async function getClerkGmailTokens(userId: string) {
   console.log('[Clerk OAuth] Getting Gmail tokens for user:', userId);
   
   try {
-    const clerk = await clerkClient();
+    const clerk = clerkClient;
     const user = await clerk.users.getUser(userId);
     
     console.log('[Clerk OAuth] User external accounts:', user.externalAccounts?.map(a => ({

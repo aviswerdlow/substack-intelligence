@@ -13,7 +13,7 @@ export async function GET() {
     }
 
     // Get user's OAuth access tokens from Clerk
-    const client = await clerkClient();
+    const client = clerkClient;
     const oauthAccessTokens = await client.users.getUserOauthAccessToken(
       userId,
       'google'

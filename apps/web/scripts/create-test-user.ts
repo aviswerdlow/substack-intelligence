@@ -26,7 +26,7 @@ async function createTestUser() {
     console.log('🔍 Checking if test user already exists...');
     
     // Check if user already exists
-    const client = await clerkClient();
+    const client = clerkClient;
     const existingUsers = await client.users.getUserList({
       emailAddress: [TEST_USER.email],
     });

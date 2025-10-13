@@ -67,7 +67,7 @@ export async function getSecurityContext(request: NextRequest): Promise<Security
     }
 
     // Get user details from Clerk
-    const client = await clerkClient();
+    const client = clerkClient;
     const user = await client.users.getUser(userId);
     
     if (!user) {
@@ -105,7 +105,7 @@ export async function getUserRole(userId: string, orgId?: string): Promise<UserR
   try {
     if (orgId) {
       // Get role from organization membership
-      const client = await clerkClient();
+      const client = clerkClient;
       const orgMemberships = await client.organizations.getOrganizationMembershipList({
         organizationId: orgId,
         limit: 100
@@ -121,7 +121,7 @@ export async function getUserRole(userId: string, orgId?: string): Promise<UserR
     }
     
     // Get role from user metadata
-    const client = await clerkClient();
+    const client = clerkClient;
     const user = await client.users.getUser(userId);
     const role = user.publicMetadata?.role as UserRole;
     
