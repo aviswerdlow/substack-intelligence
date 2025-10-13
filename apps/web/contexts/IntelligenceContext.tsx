@@ -109,7 +109,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       const data = await response.json();
       
       if (data.success) {
-        setMetrics(data.data.metrics);
+        setMetrics(data.metrics);
       }
     } catch (error) {
       console.error('Failed to refresh metrics:', error);

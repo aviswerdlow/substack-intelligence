@@ -86,17 +86,22 @@ export function PipelineStatusWidget() {
       
       const data = await response.json();
       
-      if (data.success && data.data?.metrics) {
-        const metrics = data.data.metrics;
-        const health = data.data.health;
-        
+      if (data.success && data.metrics) {
+        const metrics = data.metrics;
+
+        const nextRunEstimate = metrics.lastSyncTime
+          ? new Date(new Date(metrics.lastSyncTime).getTime() + 30 * 60 * 1000).toISOString()
+          : new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+        const isDataFresh = metrics.isFresh ?? false;
+
         // Transform API response to PipelineStatus format
         const pipelineStatus: PipelineStatus = {
-          status: health?.status === 'healthy' ? 'idle' : health?.status === 'warning' ? 'idle' : 'failed',
+          status: isDataFresh ? 'idle' : 'running',
           currentStep: '',
           progress: 0,
           lastRun: metrics.lastSyncTime || new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-          nextRun: health?.suggestedNextSync || new Date(Date.now() + 1000 * 60 * 60).toISOString(),
+          nextRun: nextRunEstimate,
           steps: [
             { 
               name: 'Fetch Emails', 
