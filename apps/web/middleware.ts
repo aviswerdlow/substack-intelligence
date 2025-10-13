@@ -124,8 +124,9 @@ function applySecurityHeaders(response: NextResponse, request: NextRequest) {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: https: blob:",
-    "connect-src 'self' https://api.anthropic.com https://*.supabase.co https://*.clerk.accounts.dev https://*.inngest.net",
+    "connect-src 'self' https://api.anthropic.com https://*.supabase.co https://*.clerk.accounts.dev https://*.inngest.net https://clerk-telemetry.com",
     "frame-src 'self' https://*.clerk.accounts.dev",
+    "worker-src 'self' blob:",
     isProduction ? "upgrade-insecure-requests" : ""
   ].filter(Boolean).join('; ');
   

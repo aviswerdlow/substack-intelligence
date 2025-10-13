@@ -13,7 +13,7 @@ export default function Page() {
             We only read your newsletters - your personal emails remain private
           </p>
         </div>
-        <SignUp 
+        <SignUp
           appearance={{
             elements: {
               formButtonPrimary: 'bg-primary hover:bg-primary/90',
@@ -27,7 +27,7 @@ export default function Page() {
             }
           }}
           routing="hash"
-          redirectUrl="/dashboard"
+          fallbackRedirectUrl="/dashboard"
         />
       </div>
     </div>

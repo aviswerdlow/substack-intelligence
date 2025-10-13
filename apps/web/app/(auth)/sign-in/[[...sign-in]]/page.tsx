@@ -10,7 +10,7 @@ export default function Page() {
             Sign in with Google to automatically connect your Gmail for newsletter processing
           </p>
         </div>
-        <SignIn 
+        <SignIn
           appearance={{
             elements: {
               formButtonPrimary: 'bg-primary hover:bg-primary/90',
@@ -25,7 +25,7 @@ export default function Page() {
           }}
           // Force Google OAuth as preferred method
           routing="hash"
-          redirectUrl="/dashboard"
+          fallbackRedirectUrl="/dashboard"
         />
       </div>
     </div>
