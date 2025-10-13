@@ -1,5 +1,5 @@
 import { auth } from '@clerk/nextjs/server';
-import { serverClerkClient } from '../clerk-client';
+import { clerkClient } from '@clerk/nextjs/server';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -68,7 +68,7 @@ export async function getSecurityContext(request: NextRequest): Promise<Security
     }
 
     // Get user details from Clerk
-    const client = serverClerkClient;
+    const client = await clerkClient();
     const user = await client.users.getUser(userId);
     
     if (!user) {
@@ -106,7 +106,7 @@ export async function getUserRole(userId: string, orgId?: string): Promise<UserR
   try {
     if (orgId) {
       // Get role from organization membership
-      const client = serverClerkClient;
+      const client = await clerkClient();
       const orgMemberships = await client.organizations.getOrganizationMembershipList({
         organizationId: orgId,
         limit: 100
@@ -120,9 +120,9 @@ export async function getUserRole(userId: string, orgId?: string): Promise<UserR
         return 'analyst';
       }
     }
-    
+
     // Get role from user metadata
-    const client = serverClerkClient;
+    const client = await clerkClient();
     const user = await client.users.getUser(userId);
     const role = user.publicMetadata?.role as UserRole;
     

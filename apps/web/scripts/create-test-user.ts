@@ -1,13 +1,13 @@
 #!/usr/bin/env ts-node
 /**
  * Create Test User Script
- * 
+ *
  * This script creates a test user for E2E testing using Clerk's test mode.
  * In development/test mode, emails with +clerk_test suffix can be verified
  * with the code "424242" without actually sending emails.
  */
 
-import { serverClerkClient } from '../lib/clerk-client';
+import { clerkClient } from '@clerk/nextjs/server';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -24,9 +24,9 @@ const TEST_USER = {
 async function createTestUser() {
   try {
     console.log('🔍 Checking if test user already exists...');
-    
+
     // Check if user already exists
-    const client = serverClerkClient;
+    const client = await clerkClient();
     const existingUsers = await client.users.getUserList({
       emailAddress: [TEST_USER.email],
     });

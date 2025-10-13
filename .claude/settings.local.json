@@ -9,7 +9,9 @@
       "Bash(grep:*)",
       "Bash(curl:*)",
       "mcp__puppeteer__puppeteer_navigate",
-      "mcp__puppeteer__puppeteer_screenshot"
+      "mcp__puppeteer__puppeteer_screenshot",
+      "Bash(cat:*)",
+      "Bash(npm run build)"
     ],
     "deny": []
   }
