@@ -6,6 +6,12 @@ import { ClaudeExtractor } from '@substack-intelligence/ai';
 import { PipelineMonitor, createPipelineAlert, logPipelineHealthCheck } from '@/lib/monitoring/pipeline-metrics';
 import { pipelineCacheManager } from '@/lib/cache/pipeline-cache';
 import { pushPipelineUpdate } from '@/lib/pipeline-updates';
+import {
+  buildMissingUserIdColumnResponse,
+  isMissingUserIdColumnError,
+  mapToMissingUserIdColumnError,
+  MissingUserIdColumnError
+} from '@/lib/supabase-errors';
 
 // Force Node.js runtime for full compatibility
 export const runtime = 'nodejs';
@@ -446,11 +452,15 @@ export async function POST(request: NextRequest) {
         .in('processing_status', ['pending', null]) // Only get unprocessed emails
         .order('received_at', { ascending: false })
         .limit(10); // Process smaller batch to avoid timeouts
-      
+
       monitor.trackDatabaseOperation('select', 'emails', dbEmails?.length, !fetchError, fetchError || undefined);
-      
+
       if (fetchError) {
         monitor.setHealthStatus('database', false, fetchError.message);
+        const schemaError = mapToMissingUserIdColumnError('emails', fetchError);
+        if (schemaError) {
+          throw schemaError;
+        }
         throw new Error(`Failed to fetch emails from database: ${fetchError.message}`);
       }
       
@@ -499,13 +509,23 @@ export async function POST(request: NextRequest) {
         const email = emailsToProcess[i];
         
         // Mark email as processing
-        await supabase
+        const { error: markProcessingError } = await supabase
           .from('emails')
-          .update({ 
+          .update({
             processing_status: 'processing',
             processed_at: new Date().toISOString()
           })
           .eq('id', email.id);
+
+        if (markProcessingError) {
+          const schemaError = mapToMissingUserIdColumnError('emails', markProcessingError);
+          if (schemaError) {
+            throw schemaError;
+          }
+          throw new Error(
+            `Failed to mark email ${email.id} as processing: ${markProcessingError.message ?? 'Unknown error'}`
+          );
+        }
         
         // Update progress
         const extractionProgress = 40 + (40 * (i + 1) / dbEmails.length);
@@ -571,23 +591,45 @@ export async function POST(request: NextRequest) {
           // Store extracted companies
           for (const company of extractionResult.companies) {
             // Check if company already exists for this user
-            const { data: existingCompany } = await supabase
+            const { data: existingCompany, error: existingCompanyError } = await supabase
               .from('companies')
               .select('id, mention_count')
               .eq('user_id', userId) // Filter by user_id
               .eq('name', company.name)
-              .single();
-            
+              .maybeSingle();
+
+            if (existingCompanyError) {
+              if (existingCompanyError.code !== 'PGRST116') {
+                const schemaError = mapToMissingUserIdColumnError('companies', existingCompanyError);
+                if (schemaError) {
+                  throw schemaError;
+                }
+                throw new Error(
+                  `Failed to check existing company ${company.name}: ${existingCompanyError.message ?? 'Unknown error'}`
+                );
+              }
+            }
+
             if (existingCompany) {
               // Update existing company
-              await supabase
+              const { error: updateCompanyError } = await supabase
                 .from('companies')
                 .update({
                   mention_count: (existingCompany.mention_count || 0) + 1,
                   last_updated_at: new Date().toISOString()
                 })
                 .eq('id', existingCompany.id);
-              
+
+              if (updateCompanyError) {
+                const schemaError = mapToMissingUserIdColumnError('companies', updateCompanyError);
+                if (schemaError) {
+                  throw schemaError;
+                }
+                throw new Error(
+                  `Failed to update company ${company.name}: ${updateCompanyError.message ?? 'Unknown error'}`
+                );
+              }
+
               // Track for live updates
               companiesFound.push({
                 name: company.name,
@@ -595,9 +637,9 @@ export async function POST(request: NextRequest) {
                 isNew: false,
                 source: email.newsletter_name || email.subject
               });
-              
+
               // Create mention record
-              await supabase
+              const { error: mentionInsertError } = await supabase
                 .from('company_mentions')
                 .insert({
                   user_id: userId, // Associate with current user
@@ -608,6 +650,16 @@ export async function POST(request: NextRequest) {
                   confidence: company.confidence || 0.8,
                   extracted_at: new Date().toISOString()
                 });
+
+              if (mentionInsertError) {
+                const schemaError = mapToMissingUserIdColumnError('company_mentions', mentionInsertError);
+                if (schemaError) {
+                  throw schemaError;
+                }
+                throw new Error(
+                  `Failed to record mention for ${company.name}: ${mentionInsertError.message ?? 'Unknown error'}`
+                );
+              }
             } else {
               // Create new company
               newCompaniesCount++;
@@ -615,8 +667,8 @@ export async function POST(request: NextRequest) {
                 .replace(/[^a-z0-9]/g, '-')
                 .replace(/-+/g, '-')
                 .replace(/^-|-$/g, '') + '-' + Date.now();
-              
-              const { data: newCompany } = await supabase
+
+              const { data: newCompany, error: insertCompanyError } = await supabase
                 .from('companies')
                 .insert({
                   user_id: userId, // Associate with current user
@@ -630,10 +682,20 @@ export async function POST(request: NextRequest) {
                 })
                 .select()
                 .single();
-              
+
+              if (insertCompanyError) {
+                const schemaError = mapToMissingUserIdColumnError('companies', insertCompanyError);
+                if (schemaError) {
+                  throw schemaError;
+                }
+                throw new Error(
+                  `Failed to create company ${company.name}: ${insertCompanyError.message ?? 'Unknown error'}`
+                );
+              }
+
               if (newCompany) {
                 // Create mention record
-                await supabase
+                const { error: newMentionError } = await supabase
                   .from('company_mentions')
                   .insert({
                     user_id: userId, // Associate with current user
@@ -644,7 +706,17 @@ export async function POST(request: NextRequest) {
                     confidence: company.confidence || 0.8,
                     extracted_at: new Date().toISOString()
                   });
-                
+
+                if (newMentionError) {
+                  const schemaError = mapToMissingUserIdColumnError('company_mentions', newMentionError);
+                  if (schemaError) {
+                    throw schemaError;
+                  }
+                  throw new Error(
+                    `Failed to record mention for new company ${company.name}: ${newMentionError.message ?? 'Unknown error'}`
+                  );
+                }
+
                 // Track for live updates
                 companiesFound.push({
                   name: company.name,
@@ -680,7 +752,7 @@ export async function POST(request: NextRequest) {
           }
           
           // Mark email as successfully processed
-          await supabase
+          const { error: markCompletedError } = await supabase
             .from('emails')
             .update({
               processing_status: 'completed',
@@ -688,13 +760,23 @@ export async function POST(request: NextRequest) {
               error_message: null
             })
             .eq('id', email.id);
-          
+
+          if (markCompletedError) {
+            const schemaError = mapToMissingUserIdColumnError('emails', markCompletedError);
+            if (schemaError) {
+              throw schemaError;
+            }
+            throw new Error(
+              `Failed to mark email ${email.id} as completed: ${markCompletedError.message ?? 'Unknown error'}`
+            );
+          }
+
           processedInThisRun++;
         } catch (emailError) {
           monitor.trackExtractionOperation(email.id, 0, false, emailError instanceof Error ? emailError : new Error('Email processing failed'));
-          
+
           // Mark email as failed
-          await supabase
+          const { error: markFailedError } = await supabase
             .from('emails')
             .update({
               processing_status: 'failed',
@@ -702,8 +784,18 @@ export async function POST(request: NextRequest) {
               processed_at: new Date().toISOString()
             })
             .eq('id', email.id);
-          
-          createPipelineAlert('warning', 'Email Processing Failed', 
+
+          if (markFailedError) {
+            const schemaError = mapToMissingUserIdColumnError('emails', markFailedError);
+            if (schemaError) {
+              throw schemaError;
+            }
+            throw new Error(
+              `Failed to mark email ${email.id} as failed: ${markFailedError.message ?? 'Unknown error'}`
+            );
+          }
+
+          createPipelineAlert('warning', 'Email Processing Failed',
             `Failed to process email: ${email.subject}`,
             { emailId: email.id, error: emailError instanceof Error ? emailError.message : 'Unknown error' }
           );
@@ -799,7 +891,16 @@ export async function POST(request: NextRequest) {
       name: error instanceof Error ? error.name : undefined
     });
     
-    const errorMessage = error instanceof Error ? error.message : 'Unknown pipeline error';
+    let errorMessage = error instanceof Error ? error.message : 'Unknown pipeline error';
+    const schemaError =
+      error instanceof MissingUserIdColumnError || isMissingUserIdColumnError(error)
+        ? (error instanceof MissingUserIdColumnError ? error : new MissingUserIdColumnError(undefined, error))
+        : null;
+
+    if (schemaError) {
+      errorMessage =
+        'Database schema is missing the required user_id column. Please run the latest migrations to enable secure pipeline sync.';
+    }
     const monitoringResults = monitor.complete(false);
     
     // Release sync lock on error
@@ -833,6 +934,10 @@ export async function POST(request: NextRequest) {
       stats: pipelineStatus.stats
     };
     
+    if (schemaError) {
+      return buildMissingUserIdColumnResponse('pipeline_sync', schemaError.table);
+    }
+
     return NextResponse.json({
       success: false,
       error: errorMessage,

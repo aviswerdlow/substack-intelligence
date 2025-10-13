@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
+import { buildMissingUserIdColumnResponse, isMissingUserIdColumnError } from '@/lib/supabase-errors';
 
 export async function GET() {
   try {
@@ -24,9 +25,12 @@ export async function GET() {
       .eq('user_id', userId)  // CRITICAL: Filter by user_id
       .order('created_at', { ascending: false })
       .limit(10);
-    
+
     if (error) {
       console.error('Failed to fetch recent companies:', error);
+      if (isMissingUserIdColumnError(error)) {
+        return buildMissingUserIdColumnResponse('recent_companies', 'companies');
+      }
       throw error;
     }
     
@@ -36,6 +40,9 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Failed to fetch recent companies:', error);
+    if (isMissingUserIdColumnError(error)) {
+      return buildMissingUserIdColumnResponse('recent_companies', 'companies');
+    }
     return NextResponse.json(
       { error: 'Failed to fetch recent companies', companies: [] },
       { status: 500 }

@@ -1,4 +1,5 @@
 import { createServiceRoleClient } from '@substack-intelligence/database';
+import { mapToMissingUserIdColumnError, MissingUserIdColumnError } from './supabase-errors';
 
 export interface UserSettings {
   id?: string;
@@ -154,12 +155,23 @@ export class UserSettingsService {
             digest_frequency: 'daily'
           };
         }
+        const schemaError = mapToMissingUserIdColumnError('user_settings', error);
+        if (schemaError) {
+          throw schemaError;
+        }
         console.error('Error fetching user settings:', error);
         return null;
       }
 
       return data;
     } catch (error) {
+      const schemaError =
+        error instanceof MissingUserIdColumnError
+          ? error
+          : mapToMissingUserIdColumnError('user_settings', error);
+      if (schemaError) {
+        throw schemaError;
+      }
       console.error('Error in getUserSettings:', error);
       return null;
     }
@@ -404,11 +416,20 @@ export class UserSettingsService {
   async createOrUpdateUserSettings(userId: string, settings: Partial<UserSettings>): Promise<UserSettings | null> {
     try {
       // First check if settings exist
-      const { data: existing } = await this.supabase
+      const { data: existing, error: existingError } = await this.supabase
         .from('user_settings')
         .select('id')
         .eq('user_id', userId)
         .single();
+
+      if (existingError && existingError.code !== 'PGRST116') {
+        const schemaError = mapToMissingUserIdColumnError('user_settings', existingError);
+        if (schemaError) {
+          throw schemaError;
+        }
+        console.error('Error fetching user settings for update:', existingError);
+        return null;
+      }
 
       if (existing) {
         // Update existing settings
@@ -423,6 +444,10 @@ export class UserSettingsService {
           .single();
 
         if (error) {
+          const schemaError = mapToMissingUserIdColumnError('user_settings', error);
+          if (schemaError) {
+            throw schemaError;
+          }
           console.error('Error updating user settings:', error);
           return null;
         }
@@ -440,6 +465,10 @@ export class UserSettingsService {
           .single();
 
         if (error) {
+          const schemaError = mapToMissingUserIdColumnError('user_settings', error);
+          if (schemaError) {
+            throw schemaError;
+          }
           console.error('Error creating user settings:', error);
           return null;
         }
@@ -447,6 +476,13 @@ export class UserSettingsService {
         return data;
       }
     } catch (error) {
+      const schemaError =
+        error instanceof MissingUserIdColumnError
+          ? error
+          : mapToMissingUserIdColumnError('user_settings', error);
+      if (schemaError) {
+        throw schemaError;
+      }
       console.error('Error in createOrUpdateUserSettings:', error);
       return null;
     }
@@ -470,6 +506,13 @@ export class UserSettingsService {
 
       return settings !== null;
     } catch (error) {
+      const schemaError =
+        error instanceof MissingUserIdColumnError
+          ? error
+          : mapToMissingUserIdColumnError('user_settings', error);
+      if (schemaError) {
+        throw schemaError;
+      }
       console.error('Error connecting Gmail:', error);
       return false;
     }
@@ -487,6 +530,13 @@ export class UserSettingsService {
 
       return settings !== null;
     } catch (error) {
+      const schemaError =
+        error instanceof MissingUserIdColumnError
+          ? error
+          : mapToMissingUserIdColumnError('user_settings', error);
+      if (schemaError) {
+        throw schemaError;
+      }
       console.error('Error disconnecting Gmail:', error);
       return false;
     }
@@ -510,6 +560,13 @@ export class UserSettingsService {
         email: settings.gmail_email || null
       };
     } catch (error) {
+      const schemaError =
+        error instanceof MissingUserIdColumnError
+          ? error
+          : mapToMissingUserIdColumnError('user_settings', error);
+      if (schemaError) {
+        throw schemaError;
+      }
       console.error('Error getting Gmail tokens:', error);
       return null;
     }
