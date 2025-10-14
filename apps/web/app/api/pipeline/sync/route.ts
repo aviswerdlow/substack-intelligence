@@ -414,6 +414,34 @@ export async function POST(request: NextRequest) {
         daysBack: options.daysBack
       });
 
+      // Store fetched emails in the database if they don't already exist
+      console.log('[PIPELINE:DEBUG] Storing fetched emails in database...');
+      for (const email of emails) {
+        // Check if email already exists
+        const { data: existingEmail } = await supabase
+          .from('emails')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('gmail_id', email.id)
+          .maybeSingle();
+
+        if (!existingEmail) {
+          // Insert new email with pending status
+          await supabase
+            .from('emails')
+            .insert({
+              user_id: userId,
+              gmail_id: email.id,
+              subject: email.subject,
+              newsletter_name: email.from,
+              raw_html: email.html || email.text,
+              clean_text: email.text,
+              received_at: email.date,
+              processing_status: 'pending' // Mark as pending for processing
+            });
+        }
+      }
+
       monitor.setMetric('emailsFetched', emails.length);
       monitor.trackGmailApiCall('fetchDailySubstacks', true, fetchDuration);
       monitor.completeStep('gmail_fetch', {
@@ -536,14 +564,14 @@ export async function POST(request: NextRequest) {
       
       // Get the latest emails from database for this specific user that haven't been processed
       const dbQueryStartTime = Date.now();
-      // Reduce batch size to handle within timeout limits
+      // Process a reasonable batch size while respecting timeout limits
       const { data: dbEmails, error: fetchError } = await supabase
         .from('emails')
         .select('*')
         .eq('user_id', userId) // CRITICAL: Filter by user_id for data isolation
-        .in('processing_status', ['pending', null]) // Only get unprocessed emails
+        .or('processing_status.is.null,processing_status.eq.pending') // Get unprocessed emails (null or pending)
         .order('received_at', { ascending: false })
-        .limit(10); // Process smaller batch to avoid timeouts
+        .limit(30); // Increased batch size - can process ~30 in 4 minutes
 
       monitor.trackDatabaseOperation('select', 'emails', dbEmails?.length, !fetchError, fetchError || undefined);
 
@@ -556,12 +584,18 @@ export async function POST(request: NextRequest) {
         throw new Error(`Failed to fetch emails from database: ${fetchError.message}`);
       }
       
+      console.log('[PIPELINE:DEBUG] Database query completed:', {
+        emailsFound: dbEmails?.length || 0,
+        queryDuration: `${Date.now() - dbQueryStartTime}ms`,
+        userId: userId
+      });
+
       if (dbEmails && dbEmails.length > 0) {
-        console.log('[PIPELINE:DEBUG] Retrieved emails from database');
-        console.log('[PIPELINE:DEBUG] Database query results:', {
+        console.log('[PIPELINE:DEBUG] Retrieved emails from database for processing');
+        console.log('[PIPELINE:DEBUG] Processing batch:', {
           emailCount: dbEmails.length,
-          queryDuration: `${Date.now() - dbQueryStartTime}ms`,
-          userId: userId
+          firstEmail: dbEmails[0]?.subject || dbEmails[0]?.newsletter_name,
+          processingStatus: dbEmails.map(e => e.processing_status)
         });
 
         monitor.setMetric('emailsProcessed', dbEmails.length);
@@ -941,8 +975,23 @@ export async function POST(request: NextRequest) {
         totalMentions
       });
     } else {
+      console.log('[PIPELINE:DEBUG] No emails found for processing');
+      console.log('[PIPELINE:DEBUG] This could mean:', {
+        reason1: 'All emails already processed',
+        reason2: 'No emails match the pending/null status filter',
+        reason3: 'Emails were not properly stored after fetching',
+        totalFetched: pipelineStatus.stats.emailsFetched
+      });
+
       monitor.completeStep('company_extraction', { emailsProcessed: 0, reason: 'no_emails' });
-      createPipelineAlert('warning', 'No Emails to Process', 'No emails found in database for company extraction');
+
+      // If we fetched emails but couldn't process any, that's a problem
+      if (pipelineStatus.stats.emailsFetched > 0) {
+        createPipelineAlert('warning', 'Emails Fetched but Not Processed',
+          `Fetched ${pipelineStatus.stats.emailsFetched} emails from Gmail but found 0 to process. They may need to be marked as pending.`);
+      } else {
+        createPipelineAlert('warning', 'No Emails to Process', 'No emails found in database for company extraction');
+      }
     }
     } catch (extractionError) {
       monitor.failStep('company_extraction', extractionError instanceof Error ? extractionError : new Error('Company extraction failed'));

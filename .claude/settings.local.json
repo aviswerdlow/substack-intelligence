@@ -11,7 +11,9 @@
       "mcp__puppeteer__puppeteer_navigate",
       "mcp__puppeteer__puppeteer_screenshot",
       "Bash(cat:*)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Read(//Users/aviswerdlow/Downloads/**)",
+      "Read(//var/folders/9k/cf7wq2r55x3gk_jhf3ysdnmc0000gn/T/TemporaryItems/NSIRD_screencaptureui_SEge0Z/**)"
     ],
     "deny": []
   }
