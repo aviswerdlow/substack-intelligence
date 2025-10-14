@@ -4,7 +4,7 @@ import { createServiceRoleClient } from '@substack-intelligence/database';
 import { GmailConnector } from '@substack-intelligence/ingestion';
 import { ClaudeExtractor } from '@substack-intelligence/ai';
 import { PipelineMonitor, createPipelineAlert, logPipelineHealthCheck } from '@/lib/monitoring/pipeline-metrics';
-import { pipelineCacheManager } from '@/lib/cache/pipeline-cache';
+import pipelineCache, { pipelineCacheManager, CACHE_KEYS } from '@/lib/cache/pipeline-cache';
 import { pushPipelineUpdate } from '@/lib/pipeline-updates';
 import {
   buildMissingUserIdColumnResponse,
@@ -103,7 +103,16 @@ export async function POST(request: NextRequest) {
   const requestStartTime = Date.now(); // Track overall request start time
   const monitor = new PipelineMonitor();
   let userId = 'dev'; // Define userId outside try block for error handler access
-  
+  let lockAcquired = false; // Track if we acquired the lock
+
+  // Set up a timeout to ensure we don't exceed Vercel's limits
+  const timeoutHandle = setTimeout(() => {
+    console.error('[Pipeline Sync] Pipeline execution timeout - forcefully releasing lock');
+    if (lockAcquired) {
+      pipelineCacheManager.clearSyncLock();
+    }
+  }, (maxDuration - 10) * 1000); // Release lock 10 seconds before max timeout
+
   try {
     monitor.startStep('authentication', { userAgent: request.headers.get('user-agent') });
     
@@ -113,7 +122,9 @@ export async function POST(request: NextRequest) {
     if (!user && !isDevelopment) {
       monitor.failStep('authentication', new Error('Unauthorized access attempt'));
       createPipelineAlert('error', 'Authentication Failed', 'Unauthorized pipeline access attempt');
-      
+
+      clearTimeout(timeoutHandle); // Clear timeout on early return
+
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -134,7 +145,9 @@ export async function POST(request: NextRequest) {
         `Gmail OAuth configuration incomplete. Missing: ${oauthValidation.missingVars.join(', ')}`,
         { missingVars: oauthValidation.missingVars }
       );
-      
+
+      clearTimeout(timeoutHandle); // Clear timeout on early return
+
       return NextResponse.json({
         success: false,
         error: `Gmail OAuth configuration incomplete. Missing environment variables: ${oauthValidation.missingVars.join(', ')}. Please check your environment setup.`,
@@ -230,7 +243,9 @@ export async function POST(request: NextRequest) {
     if (!gmailTokens && !hasClerkGoogleOAuth) {
       monitor.setHealthStatus('configuration', false, 'User has not connected Gmail');
       monitor.failStep('configuration_validation', new Error('Gmail not connected'));
-      
+
+      clearTimeout(timeoutHandle); // Clear timeout on early return
+
       return NextResponse.json({
         success: false,
         error: 'Gmail account not connected. Please connect your Gmail account in Settings first.',
@@ -244,28 +259,49 @@ export async function POST(request: NextRequest) {
     monitor.completeStep('configuration_validation', { configurationValid: true, gmailConnected: true });
     monitor.setHealthStatus('configuration', true);
 
-    // Check for concurrent pipeline runs
+    // Check for concurrent pipeline runs with better stale lock detection
     monitor.startStep('sync_lock_check');
-    if (pipelineCacheManager.getSyncLock()) {
-      monitor.failStep('sync_lock_check', new Error('Pipeline already running'));
-      
-      createPipelineAlert('warning', 'Concurrent Pipeline Run Blocked', 
-        'Another pipeline sync is already in progress',
-        { sessionId: monitor.getCurrentMetrics() }
-      );
-      
-      return NextResponse.json({
-        success: false,
-        error: 'Pipeline sync already in progress. Please wait for the current sync to complete.',
-        details: {
-          concurrentRunBlocked: true,
-          retryAfter: 300 // seconds
+
+    // First, check if there's a stale lock and clear it
+    const lockInfo = pipelineCacheManager.getSyncLock();
+    if (lockInfo) {
+      console.log('[Pipeline Sync] Existing lock detected, checking if stale...');
+
+      // The getSyncLock method already handles stale locks (>10 min old)
+      // but let's add an additional check for locks older than 5 minutes
+      // since our maxDuration is 5 minutes
+      const currentLock = pipelineCache.get(CACHE_KEYS.PIPELINE_SYNC_LOCK);
+      if (currentLock && typeof currentLock === 'object' && 'timestamp' in currentLock) {
+        const lockAge = Date.now() - (currentLock as { timestamp: number }).timestamp;
+        if (lockAge > 5 * 60 * 1000) { // 5 minutes
+          console.log(`[Pipeline Sync] Clearing stale lock (age: ${Math.round(lockAge/1000)}s)`);
+          pipelineCacheManager.clearSyncLock();
+        } else {
+          monitor.failStep('sync_lock_check', new Error('Pipeline already running'));
+
+          createPipelineAlert('warning', 'Concurrent Pipeline Run Blocked',
+            'Another pipeline sync is already in progress',
+            { sessionId: monitor.getCurrentMetrics(), lockAge: Math.round(lockAge/1000) }
+          );
+
+          clearTimeout(timeoutHandle); // Clear timeout if we're not proceeding
+
+          return NextResponse.json({
+            success: false,
+            error: `Pipeline sync already in progress (running for ${Math.round(lockAge/1000)}s). Please wait for the current sync to complete or try again in a minute.`,
+            details: {
+              concurrentRunBlocked: true,
+              lockAge: Math.round(lockAge/1000),
+              retryAfter: Math.max(60, 300 - Math.round(lockAge/1000)) // seconds
+            }
+          }, { status: 429 });
         }
-      }, { status: 429 });
+      }
     }
-    
+
     // Acquire sync lock
     pipelineCacheManager.setSyncLock();
+    lockAcquired = true; // Mark that we've acquired the lock
     monitor.completeStep('sync_lock_check', { lockAcquired: true });
 
     // Parse request body for options
@@ -285,6 +321,13 @@ export async function POST(request: NextRequest) {
     if (!options.forceRefresh && pipelineStatus.lastSync) {
       const timeSinceLastSync = Date.now() - pipelineStatus.lastSync.getTime();
       if (timeSinceLastSync < 15 * 60 * 1000) { // 15 minutes
+        // Release the lock since we're not going to use it
+        if (lockAcquired) {
+          pipelineCacheManager.clearSyncLock();
+          lockAcquired = false;
+        }
+        clearTimeout(timeoutHandle); // Clear timeout on early return
+
         return NextResponse.json({
           success: true,
           skipped: true,
@@ -422,6 +465,13 @@ export async function POST(request: NextRequest) {
           message: 'This Google account does not have Gmail enabled. Please sign out and sign in with a different Google account that has Gmail access.',
         });
 
+        // Release lock and clear timeout on early return
+        if (lockAcquired) {
+          pipelineCacheManager.clearSyncLock();
+          lockAcquired = false;
+        }
+        clearTimeout(timeoutHandle);
+
         return NextResponse.json({
           success: false,
           error: 'Gmail not available on this Google account',
@@ -466,7 +516,14 @@ export async function POST(request: NextRequest) {
 
         pipelineStatus.status = 'error';
         pipelineStatus.message = 'AI service unavailable';
-        
+
+        // Release lock and clear timeout on early return
+        if (lockAcquired) {
+          pipelineCacheManager.clearSyncLock();
+          lockAcquired = false;
+        }
+        clearTimeout(timeoutHandle);
+
         return NextResponse.json({
           success: false,
           error: 'AI service initialization failed. Please ensure your Anthropic API key is properly configured in environment variables.',
@@ -959,10 +1016,14 @@ export async function POST(request: NextRequest) {
     
     // Invalidate cache after successful pipeline run
     pipelineCacheManager.invalidateAll();
-    
-    // Release sync lock
+
+    // Clear the timeout since we're done
+    clearTimeout(timeoutHandle);
+
+    // Release sync lock - will also be released in finally, but good to be explicit
     pipelineCacheManager.clearSyncLock();
-    
+    lockAcquired = false;
+
     return NextResponse.json({
       success: true,
       data: pipelineStatus,
@@ -975,7 +1036,7 @@ export async function POST(request: NextRequest) {
         version: '1.0.0'
       }
     });
-    
+
   } catch (error) {
     console.error('[Pipeline Sync] Pipeline failed with error:', error);
     console.error('[Pipeline Sync] Error details:', {
@@ -995,10 +1056,7 @@ export async function POST(request: NextRequest) {
         'Database schema is missing the required user_id column. Please run the latest migrations to enable secure pipeline sync.';
     }
     const monitoringResults = monitor.complete(false);
-    
-    // Release sync lock on error
-    pipelineCacheManager.clearSyncLock();
-    
+
     // Push error update to client through SSE
     await pushPipelineUpdate(userId, {
       type: 'error',
@@ -1041,5 +1099,16 @@ export async function POST(request: NextRequest) {
         errorCount: monitoringResults.metrics.errors?.length || 0
       }
     }, { status: 500 });
+  } finally {
+    // ALWAYS release the lock and clear the timeout, no matter what happens
+    clearTimeout(timeoutHandle);
+
+    if (lockAcquired) {
+      console.log('[Pipeline Sync] Releasing lock in finally block');
+      pipelineCacheManager.clearSyncLock();
+      lockAcquired = false;
+    }
+
+    console.log('[Pipeline Sync] Cleanup complete - lock released, timeout cleared');
   }
 }
