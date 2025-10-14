@@ -422,11 +422,12 @@ export async function POST(request: NextRequest) {
       let storedCount = 0;
       for (const email of emails) {
         try {
-          // Build email data object
+          // Build email data object matching the database schema
           const emailData = {
             user_id: userId,
-            gmail_id: email.id || `${email.date}_${email.from}`, // Fallback ID if gmail_id is missing
+            message_id: email.id || `${email.date}_${email.from}`, // Gmail message ID
             subject: email.subject || 'No Subject',
+            sender: email.from || 'Unknown', // Sender field is required
             newsletter_name: email.from || 'Unknown',
             raw_html: email.html || email.text || '',
             clean_text: email.text || '',
