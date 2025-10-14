@@ -418,31 +418,39 @@ export async function POST(request: NextRequest) {
       console.log('[PIPELINE:DEBUG] Storing fetched emails in database...');
       const supabaseForEmails = createServiceRoleClient();
 
+      // Store emails one by one to ensure they have pending status
+      let storedCount = 0;
       for (const email of emails) {
-        // Check if email already exists
-        const { data: existingEmail } = await supabaseForEmails
-          .from('emails')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('gmail_id', email.id)
-          .maybeSingle();
+        try {
+          // Build email data object
+          const emailData = {
+            user_id: userId,
+            gmail_id: email.id || `${email.date}_${email.from}`, // Fallback ID if gmail_id is missing
+            subject: email.subject || 'No Subject',
+            newsletter_name: email.from || 'Unknown',
+            raw_html: email.html || email.text || '',
+            clean_text: email.text || '',
+            received_at: email.date || new Date().toISOString(),
+            processing_status: 'pending' // Mark as pending for processing
+          };
 
-        if (!existingEmail) {
-          // Insert new email with pending status
-          await supabaseForEmails
+          // Try to insert the email (will fail if it already exists due to unique constraints)
+          const { error: insertError } = await supabaseForEmails
             .from('emails')
-            .insert({
-              user_id: userId,
-              gmail_id: email.id,
-              subject: email.subject,
-              newsletter_name: email.from,
-              raw_html: email.html || email.text,
-              clean_text: email.text,
-              received_at: email.date,
-              processing_status: 'pending' // Mark as pending for processing
-            });
+            .insert(emailData);
+
+          if (!insertError) {
+            storedCount++;
+          } else if (insertError.message && !insertError.message.includes('duplicate')) {
+            // Log non-duplicate errors but continue
+            console.warn(`Failed to store email: ${insertError.message}`);
+          }
+        } catch (err: any) {
+          console.warn(`Error storing email: ${err?.message || err}`);
         }
       }
+
+      console.log(`[PIPELINE:DEBUG] Stored ${storedCount} new emails in database`);
 
       monitor.setMetric('emailsFetched', emails.length);
       monitor.trackGmailApiCall('fetchDailySubstacks', true, fetchDuration);
