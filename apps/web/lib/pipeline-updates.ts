@@ -80,7 +80,7 @@ export async function getPipelineUpdates(userId: string): Promise<any[]> {
       }
 
       console.log('[PIPELINE-UPDATES:DEBUG] Fetched', data?.length || 0, 'updates from Supabase for user:', userId);
-      return data?.map(row => ({ ...row.update_data, _dbId: row.id })) || [];
+      return data?.map(row => ({ ...(row.update_data as any), _dbId: row.id })) || [];
     } catch (error) {
       console.error('[PIPELINE-UPDATES:ERROR] Exception fetching updates:', error);
       return [];

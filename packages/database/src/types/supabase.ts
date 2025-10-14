@@ -318,6 +318,30 @@ export interface Database {
         }
         Relationships: []
       }
+      pipeline_updates: {
+        Row: {
+          id: string
+          user_id: string
+          update_data: Json
+          created_at: string
+          consumed: boolean
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          update_data: Json
+          created_at?: string
+          consumed?: boolean
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          update_data?: Json
+          created_at?: string
+          consumed?: boolean
+        }
+        Relationships: []
+      }
     }
     Views: {
       daily_intelligence: {
