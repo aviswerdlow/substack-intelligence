@@ -416,9 +416,11 @@ export async function POST(request: NextRequest) {
 
       // Store fetched emails in the database if they don't already exist
       console.log('[PIPELINE:DEBUG] Storing fetched emails in database...');
+      const supabaseForEmails = createServiceRoleClient();
+
       for (const email of emails) {
         // Check if email already exists
-        const { data: existingEmail } = await supabase
+        const { data: existingEmail } = await supabaseForEmails
           .from('emails')
           .select('id')
           .eq('user_id', userId)
@@ -427,7 +429,7 @@ export async function POST(request: NextRequest) {
 
         if (!existingEmail) {
           // Insert new email with pending status
-          await supabase
+          await supabaseForEmails
             .from('emails')
             .insert({
               user_id: userId,
