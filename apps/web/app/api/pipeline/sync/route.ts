@@ -125,11 +125,11 @@ export async function POST(request: NextRequest) {
         : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   const backgroundUrl = new URL('/api/pipeline/process-background', origin);
   const forwardAuthHeaders: Record<string, string> = {};
-  for (const [key, value] of request.headers.entries()) {
+  request.headers.forEach((value, key) => {
     if (key === 'cookie' || key === 'authorization' || key.startsWith('x-clerk-')) {
       forwardAuthHeaders[key] = value;
     }
-  }
+  });
   console.log('[Pipeline Sync] Background processing URL:', backgroundUrl.toString());
   console.log('[Pipeline Sync] Forwarding auth headers to background worker:', {
     forwardedKeys: Object.keys(forwardAuthHeaders),
