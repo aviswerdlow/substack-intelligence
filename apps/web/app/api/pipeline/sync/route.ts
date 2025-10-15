@@ -114,6 +114,15 @@ export async function POST(request: NextRequest) {
     }
   }, (maxDuration - 10) * 1000); // Release lock 10 seconds before max timeout
 
+  const traceContext = {
+    requestId: request.headers.get('x-request-id') || `sync-${Date.now()}`,
+    url: request.url,
+    ip: request.headers.get('x-forwarded-for'),
+    userAgent: request.headers.get('user-agent')
+  };
+
+  console.log('[Pipeline Sync] POST invoked', traceContext);
+
   const triggerBackgroundProcessing = async (
     queuedEmails: number,
     options: {
@@ -128,6 +137,12 @@ export async function POST(request: NextRequest) {
       rateLimited: !!options.rateLimited
     });
 
+    console.log('[Pipeline Sync] Background processing loop starting', {
+      queuedEmails,
+      rateLimited: !!options.rateLimited,
+      batchSize: Math.max(10, Math.min(20, queuedEmails || 15))
+    });
+
     const batchSize = Math.max(10, Math.min(20, queuedEmails || 15));
     const maxProcessingTime = options.rateLimited ? 30000 : 45000;
     let remaining = queuedEmails;
@@ -139,6 +154,14 @@ export async function POST(request: NextRequest) {
     try {
       do {
         iterations++;
+        console.log('[Pipeline Sync] Background iteration started', {
+          iteration: iterations,
+          batchSize,
+          maxProcessingTime,
+          queuedEmails,
+          elapsed: Date.now() - requestStartTime
+        });
+
         const result = await processBackgroundEmails({
           userId,
           batchSize,
@@ -152,6 +175,14 @@ export async function POST(request: NextRequest) {
           aggregatedErrors.push(...result.errors);
         }
         remaining = result.remaining;
+
+        console.log('[Pipeline Sync] Background iteration completed', {
+          iteration: iterations,
+          processed: result.processed,
+          companiesExtracted: result.companiesExtracted,
+          remaining,
+          iterationErrors: result.errors?.length || 0
+        });
 
         if (remaining <= 0 || result.processed === 0) {
           break;
@@ -194,6 +225,14 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
+    console.log('[Pipeline Sync] Background processing summary', {
+      totalProcessed,
+      totalCompaniesExtracted,
+      remaining,
+      iterations,
+      aggregatedErrors
+    });
+
     pipelineStatus.stats.companiesExtracted = totalCompaniesExtracted;
     pipelineStatus.stats.totalMentions = totalCompaniesExtracted;
     pipelineStatus.progress = remaining > 0 ? 90 : 100;
@@ -232,6 +271,14 @@ export async function POST(request: NextRequest) {
     const monitoringResults = monitor.complete(true, pipelineStatus.stats);
 
     pipelineCacheManager.invalidateAll();
+
+    console.log('[Pipeline Sync] Background trigger completed', {
+      queued: remaining > 0,
+      batchSize,
+      runs: iterations,
+      remaining,
+      aggregatedErrors: aggregatedErrors.length
+    });
 
     return NextResponse.json({
       success: true,

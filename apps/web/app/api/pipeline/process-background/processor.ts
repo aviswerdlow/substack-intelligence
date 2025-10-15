@@ -24,6 +24,7 @@ export async function processBackgroundEmails({
   maxProcessingTime = 50000,
   logPrefix = '[Background]',
 }: ProcessBackgroundOptions): Promise<ProcessBackgroundResult> {
+  console.log(`${logPrefix} Starting background processor`, {userId, batchSize, maxProcessingTime});
   if (!userId) {
     throw new Error('userId is required');
   }
@@ -251,6 +252,13 @@ export async function processBackgroundEmails({
       { userId, processedCount, companiesExtracted }
     );
   }
+
+  console.log(`${logPrefix} Finished background processor`, {
+    processed: processedCount,
+    remaining,
+    companiesExtracted,
+    errors: errors.length
+  });
 
   return {
     success: true,
