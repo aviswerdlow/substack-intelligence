@@ -22,8 +22,25 @@ export async function POST(request: NextRequest) {
     
     const supabase = createServiceRoleClient();
     const startTime = Date.now();
-    const maxProcessingTime = 50000; // 50 seconds with 60s maxDuration
+    const maxProcessingTime = 50000; // 50 seconds reserved for extraction
     const normalizedBatchSize = Math.max(1, Math.min(batchSize, 25));
+    const forwardedHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
+    const forwardedProto =
+      request.headers.get('x-forwarded-proto') ??
+      (forwardedHost && forwardedHost.startsWith('localhost') ? 'http' : 'https');
+    const origin =
+      forwardedHost
+        ? `${forwardedProto}://${forwardedHost}`
+        : process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const followUpUrl = new URL('/api/pipeline/process-background', origin);
+    const followUpHeaders: Record<string, string> = {};
+    request.headers.forEach((value, key) => {
+      if (key === 'cookie' || key === 'authorization' || key.startsWith('x-clerk-')) {
+        followUpHeaders[key] = value;
+      }
+    });
     
     // Initialize Claude extractor once per invocation
     let extractor: ClaudeExtractor;
@@ -67,11 +84,11 @@ export async function POST(request: NextRequest) {
       console.log(`Background processing ${pendingEmails.length} emails for user ${userId}`);
       
       for (const email of pendingEmails) {
-        if (Date.now() - startTime > maxProcessingTime) {
-          console.log(`Background processing timeout, processed ${processedCount} so far`);
+        const elapsedMs = Date.now() - startTime;
+        if (elapsedMs > maxProcessingTime) {
+          console.log(`Background processing timeout after ${elapsedMs}ms, processed ${processedCount} so far`);
           break;
         }
-        
         const nowIso = new Date().toISOString();
         
         try {
@@ -249,6 +266,41 @@ export async function POST(request: NextRequest) {
         { userId, processedCount, companiesExtracted }
       );
     }
+
+    let followUpTriggered = false;
+    if (remaining > 0) {
+      console.log(`[Background] ${remaining} emails still pending for user ${userId}. Scheduling follow-up run...`);
+      try {
+        const followUpResponse = await fetch(followUpUrl.toString(), {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            ...followUpHeaders
+          },
+          cache: 'no-store',
+          body: JSON.stringify({
+            userId,
+            batchSize: Math.min(normalizedBatchSize, remaining)
+          })
+        });
+
+        if (!followUpResponse.ok) {
+          const rawBody = await followUpResponse.text().catch(() => '');
+          console.error('[Background] Follow-up trigger failed', {
+            status: followUpResponse.status,
+            statusText: followUpResponse.statusText,
+            headers: Object.fromEntries(followUpResponse.headers.entries()),
+            body: rawBody
+          });
+        } else {
+          followUpTriggered = true;
+          console.log('[Background] Follow-up run triggered successfully');
+        }
+      } catch (followError) {
+        console.error('[Background] Failed to trigger follow-up run', followError);
+      }
+    }
     
     return NextResponse.json({
       success: true,
@@ -256,6 +308,7 @@ export async function POST(request: NextRequest) {
       remaining,
       companiesExtracted,
       errors: errors.length > 0 ? errors : undefined,
+      followUpTriggered,
       message: remaining > 0
         ? `Processed ${processedCount} emails, ${remaining} remaining`
         : remaining === 0 && processedCount > 0
