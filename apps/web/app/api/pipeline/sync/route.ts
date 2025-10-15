@@ -3,7 +3,6 @@ import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import type { Database } from '@substack-intelligence/database';
 import { GmailConnector } from '@substack-intelligence/ingestion';
-import { ClaudeExtractor } from '@substack-intelligence/ai';
 import { PipelineMonitor, createPipelineAlert, logPipelineHealthCheck } from '@/lib/monitoring/pipeline-metrics';
 import pipelineCache, { pipelineCacheManager, CACHE_KEYS } from '@/lib/cache/pipeline-cache';
 import { pushPipelineUpdate } from '@/lib/pipeline-updates';
@@ -113,6 +112,148 @@ export async function POST(request: NextRequest) {
       pipelineCacheManager.clearSyncLock();
     }
   }, (maxDuration - 10) * 1000); // Release lock 10 seconds before max timeout
+
+  const triggerBackgroundProcessing = async (
+    queuedEmails: number,
+    options: {
+      fallbackProcessedCount?: number;
+      messageOverride?: string;
+      statusOverride?: 'extracting' | 'complete';
+      rateLimited?: boolean;
+    } = {}
+  ): Promise<NextResponse> => {
+    monitor.startStep('background_trigger', {
+      emailsQueued: queuedEmails,
+      rateLimited: !!options.rateLimited
+    });
+
+    const backgroundPayload = {
+      userId,
+      batchSize: Math.max(10, Math.min(20, queuedEmails || 15))
+    };
+    const backgroundUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/pipeline/process-background`;
+    let backgroundResult: any = null;
+
+    try {
+      const response = await fetch(backgroundUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(backgroundPayload)
+      });
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        console.error('[Pipeline Sync] Background trigger failed', {
+          status: response.status,
+          details
+        });
+        monitor.completeStep('background_trigger', { triggered: false, status: response.status });
+
+        pipelineStatus = {
+          status: 'error',
+          progress: 0,
+          message: 'Background processing failed to start. Please try again.',
+          lastSync: pipelineStatus.lastSync,
+          stats: pipelineStatus.stats
+        };
+
+        await pushPipelineUpdate(userId, {
+          type: 'error',
+          status: 'error',
+          message: 'Background processing failed to start. Please try again shortly.',
+          stats: pipelineStatus.stats
+        });
+
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to start background processing',
+          details,
+          background: {
+            queued: false,
+            batchSize: backgroundPayload.batchSize
+          }
+        }, { status: 500 });
+      }
+
+      backgroundResult = await response.json().catch(() => null);
+      monitor.completeStep('background_trigger', { triggered: true, result: backgroundResult });
+      console.log('[Pipeline Sync] Background processing trigger acknowledged', backgroundResult);
+    } catch (error) {
+      monitor.failStep('background_trigger', error instanceof Error ? error : new Error('Background trigger failed'));
+      console.error('[Pipeline Sync] Failed to trigger background processing', error);
+
+      await pushPipelineUpdate(userId, {
+        type: 'error',
+        status: 'error',
+        message: 'Background processing failed to start due to a network error. Please try again.',
+        stats: pipelineStatus.stats
+      });
+
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to trigger background processing',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        background: {
+          queued: false,
+          batchSize: backgroundPayload.batchSize
+        }
+      }, { status: 500 });
+    }
+
+    const remainingCount = typeof backgroundResult?.remaining === 'number' ? backgroundResult.remaining : 0;
+    const processedCount =
+      typeof backgroundResult?.processed === 'number'
+        ? backgroundResult.processed
+        : options.fallbackProcessedCount ?? queuedEmails ?? 0;
+
+    pipelineStatus = {
+      status: options.statusOverride ?? (remainingCount > 0 ? 'extracting' : 'complete'),
+      progress: remainingCount > 0 ? 75 : 100,
+      message:
+        options.messageOverride ??
+        (remainingCount > 0
+          ? `Processed ${processedCount} emails. ${remainingCount} pending in background.`
+          : 'Background processing completed.'),
+      lastSync: new Date(),
+      stats: pipelineStatus.stats
+    };
+    if (typeof backgroundResult?.companiesExtracted === 'number') {
+      pipelineStatus.stats.companiesExtracted = backgroundResult.companiesExtracted;
+    }
+
+    await pushPipelineUpdate(userId, {
+      type: remainingCount > 0 ? 'background_processing' : 'background_complete',
+      status: options.statusOverride ?? (remainingCount > 0 ? 'extracting' : 'complete'),
+      progress: pipelineStatus.progress,
+      message: pipelineStatus.message,
+      stats: pipelineStatus.stats,
+      processedCount,
+      companiesExtracted: backgroundResult?.companiesExtracted,
+      totalCount: remainingCount > 0 ? processedCount + remainingCount : processedCount
+    });
+
+    const monitoringResults = monitor.complete(true, pipelineStatus.stats);
+
+    return NextResponse.json({
+      success: true,
+      data: pipelineStatus,
+      background: {
+        queued: true,
+        batchSize: backgroundPayload.batchSize,
+        result: backgroundResult
+      },
+      monitoring: {
+        sessionId: monitoringResults.sessionId,
+        summary: monitoringResults.summary
+      },
+      meta: {
+        timestamp: new Date().toISOString(),
+        version: '1.0.0'
+      }
+    });
+  };
 
   try {
     monitor.startStep('authentication', { userAgent: request.headers.get('user-agent') });
@@ -379,6 +520,8 @@ export async function POST(request: NextRequest) {
     console.log('[PIPELINE:DEBUG] Initial status update pushed successfully');
 
     // Step 1: Fetch emails from Gmail
+    let emails: any[] = [];
+    let fetchDuration = 0;
     try {
       console.log('[Pipeline Sync] Creating GmailConnector with:', {
         useClerkOAuth,
@@ -405,8 +548,8 @@ export async function POST(request: NextRequest) {
         setTimeout(() => reject(new Error('Gmail fetch timed out after 40 seconds')), 40000)
       );
 
-      const emails = await Promise.race([fetchPromise, timeoutPromise]) as any[];
-      const fetchDuration = Date.now() - fetchStartTime;
+      emails = await Promise.race([fetchPromise, timeoutPromise]) as any[];
+      fetchDuration = Date.now() - fetchStartTime;
 
       console.log('[PIPELINE:DEBUG] Gmail fetch completed successfully');
       console.log('[PIPELINE:DEBUG] Fetch results:', {
@@ -507,171 +650,15 @@ export async function POST(request: NextRequest) {
 
       console.log('[PIPELINE:DEBUG] emails_fetched update pushed successfully');
       
-      if (emails.length > 0) {
-        // Hand off extraction to background processor
-        monitor.startStep('background_trigger', { emailsQueued: emails.length });
-        
-        const backgroundPayload = {
-          userId,
-          batchSize: Math.max(10, Math.min(20, emails.length || 15))
-        };
-        const backgroundUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/pipeline/process-background`;
-        let backgroundResult: any = null;
-        try {
-          const response = await fetch(backgroundUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(backgroundPayload)
-          });
+      const messageOverride = emails.length > 0
+        ? undefined
+        : 'No new Substack emails fetched. Processing existing backlog...';
 
-          if (!response.ok) {
-            const details = await response.json().catch(() => ({}));
-            console.error('[Pipeline Sync] Background trigger failed', {
-              status: response.status,
-              details
-            });
-            monitor.completeStep('background_trigger', { triggered: false, status: response.status });
-
-            pipelineStatus = {
-              status: 'error',
-              progress: 0,
-              message: 'Background processing failed to start. Please try again.',
-              lastSync: pipelineStatus.lastSync,
-              stats: pipelineStatus.stats
-            };
-
-            await pushPipelineUpdate(userId, {
-              type: 'error',
-              status: 'error',
-              message: 'Background processing failed to start. Please try again shortly.',
-              stats: pipelineStatus.stats
-            });
-
-            return NextResponse.json({
-              success: false,
-              error: 'Failed to start background processing',
-              details,
-              background: {
-                queued: false,
-                batchSize: backgroundPayload.batchSize
-              }
-            }, { status: 500 });
-          }
-
-          backgroundResult = await response.json().catch(() => null);
-          monitor.completeStep('background_trigger', { triggered: true, result: backgroundResult });
-          console.log('[Pipeline Sync] Background processing trigger acknowledged', backgroundResult);
-        } catch (error) {
-          monitor.failStep('background_trigger', error instanceof Error ? error : new Error('Background trigger failed'));
-          console.error('[Pipeline Sync] Failed to trigger background processing', error);
-
-          await pushPipelineUpdate(userId, {
-            type: 'error',
-            status: 'error',
-            message: 'Background processing failed to start due to a network error. Please try again.',
-            stats: pipelineStatus.stats
-          });
-
-          return NextResponse.json({
-            success: false,
-            error: 'Failed to trigger background processing',
-            details: error instanceof Error ? error.message : 'Unknown error',
-            background: {
-              queued: false,
-              batchSize: backgroundPayload.batchSize
-            }
-          }, { status: 500 });
-        }
-
-        const remainingCount = typeof backgroundResult?.remaining === 'number' ? backgroundResult.remaining : 0;
-        const processedCount = typeof backgroundResult?.processed === 'number' ? backgroundResult.processed : (emails.length || 0);
-
-        pipelineStatus = {
-          status: remainingCount > 0 ? 'extracting' : 'complete',
-          progress: remainingCount > 0 ? 75 : 100,
-          message: remainingCount > 0
-            ? `Processed ${processedCount} emails. ${remainingCount} pending in background.`
-            : 'Background processing completed.',
-          lastSync: new Date(),
-          stats: pipelineStatus.stats
-        };
-        if (typeof backgroundResult?.companiesExtracted === 'number') {
-          pipelineStatus.stats.companiesExtracted = backgroundResult.companiesExtracted;
-        }
-        
-        await pushPipelineUpdate(userId, {
-          type: remainingCount > 0 ? 'background_processing' : 'background_complete',
-          status: remainingCount > 0 ? 'extracting' : 'complete',
-          progress: pipelineStatus.progress,
-          message: pipelineStatus.message,
-          stats: pipelineStatus.stats,
-          processedCount,
-          companiesExtracted: backgroundResult?.companiesExtracted,
-          totalCount: remainingCount > 0 ? processedCount + remainingCount : processedCount
-        });
-
-        const monitoringResults = monitor.complete(true, pipelineStatus.stats);
-        
-        return NextResponse.json({
-          success: true,
-          data: pipelineStatus,
-          background: {
-            queued: true,
-            batchSize: backgroundPayload.batchSize,
-            result: backgroundResult
-          },
-          monitoring: {
-            sessionId: monitoringResults.sessionId,
-            summary: monitoringResults.summary
-          },
-          meta: {
-            timestamp: new Date().toISOString(),
-            version: '1.0.0'
-          }
-        });
-      } else {
-        pipelineStatus = {
-          status: 'complete',
-          progress: 100,
-          message: 'No new Substack emails found to process.',
-          lastSync: new Date(),
-          stats: pipelineStatus.stats
-        };
-        
-        createPipelineAlert('warning', 'No Emails Found', 
-          `No Substack emails found in the last ${options.daysBack} days`,
-          { daysBack: options.daysBack }
-        );
-        
-        await pushPipelineUpdate(userId, {
-          type: 'no_emails',
-          status: 'complete',
-          progress: 100,
-          message: 'No new Substack emails found. Check back later.',
-          stats: pipelineStatus.stats
-        });
-
-        const monitoringResults = monitor.complete(true, pipelineStatus.stats);
-        
-        return NextResponse.json({
-          success: true,
-          data: pipelineStatus,
-          background: {
-            queued: false,
-            batchSize: 0
-          },
-          monitoring: {
-            sessionId: monitoringResults.sessionId,
-            summary: monitoringResults.summary
-          },
-          meta: {
-            timestamp: new Date().toISOString(),
-            version: '1.0.0'
-          }
-        });
-      }
+      return await triggerBackgroundProcessing(emails.length, {
+        fallbackProcessedCount: emails.length,
+        messageOverride,
+        rateLimited: false
+      });
     } catch (gmailError) {
       const errorMessage = gmailError instanceof Error ? gmailError.message : 'Gmail fetch failed';
       console.error('[Pipeline Sync] Gmail fetch error:', errorMessage);
@@ -701,606 +688,47 @@ export async function POST(request: NextRequest) {
           }
         }, { status: 403 });
       }
-      
+
+      const isRateLimitError = /rate limit/i.test(errorMessage);
+      if (isRateLimitError) {
+        console.warn('[Pipeline Sync] Gmail rate limit encountered, processing backlog only.');
+        monitor.setHealthStatus('gmail', false, errorMessage);
+        monitor.trackGmailApiCall(
+          'fetchDailySubstacks',
+          false,
+          undefined,
+          gmailError instanceof Error ? gmailError : new Error('Gmail fetch failed')
+        );
+        monitor.completeStep('gmail_fetch', {
+          emailsCount: 0,
+          duration: fetchDuration,
+          rateLimited: true
+        });
+
+        pipelineStatus.progress = Math.max(pipelineStatus.progress, 40);
+        pipelineStatus.status = 'extracting';
+        pipelineStatus.message = 'Gmail rate limit hit. Processing existing backlog...';
+
+        await pushPipelineUpdate(userId, {
+          type: 'status',
+          status: 'extracting',
+          progress: pipelineStatus.progress,
+          message: pipelineStatus.message,
+          stats: pipelineStatus.stats
+        });
+
+        return await triggerBackgroundProcessing(0, {
+          fallbackProcessedCount: 0,
+          messageOverride: 'Gmail rate limit hit. Processing existing backlog.',
+          statusOverride: 'extracting',
+          rateLimited: true
+        });
+      }
+
       monitor.setHealthStatus('gmail', false, errorMessage);
       monitor.trackGmailApiCall('fetchDailySubstacks', false, undefined, gmailError instanceof Error ? gmailError : new Error('Gmail fetch failed'));
       throw gmailError;
     }
-
-    // Step 2: Extract companies from emails
-    monitor.startStep('company_extraction');
-    pipelineStatus.status = 'extracting';
-    
-    let totalCompaniesExtracted = 0;
-    let newCompaniesCount = 0;
-    let totalMentions = 0;
-    
-    try {
-      const supabase = createServiceRoleClient();
-      
-      // Initialize Claude extractor with error handling
-      let extractor;
-      try {
-        extractor = new ClaudeExtractor();
-      } catch (extractorError) {
-        monitor.setHealthStatus('configuration', false, 'Claude extractor initialization failed');
-        monitor.failStep('company_extraction', extractorError as Error);
-        
-        const errorMessage = extractorError instanceof Error ? extractorError.message : 'Unknown error';
-        await pushPipelineUpdate(userId, {
-          type: 'error',
-          status: 'error',
-          message: `AI service initialization failed: ${errorMessage}. Please check your Anthropic API key configuration.`,
-        });
-
-        pipelineStatus.status = 'error';
-        pipelineStatus.message = 'AI service unavailable';
-
-        // Release lock and clear timeout on early return
-        if (lockAcquired) {
-          pipelineCacheManager.clearSyncLock();
-          lockAcquired = false;
-        }
-        clearTimeout(timeoutHandle);
-
-        return NextResponse.json({
-          success: false,
-          error: 'AI service initialization failed. Please ensure your Anthropic API key is properly configured in environment variables.',
-          details: {
-            error: errorMessage,
-            service: 'anthropic'
-          }
-        }, { status: 500 });
-      }
-      
-      // Get the latest emails from database for this specific user that haven't been processed
-      const dbQueryStartTime = Date.now();
-      // Process a reasonable batch size while respecting timeout limits
-      const { data: dbEmails, error: fetchError } = await supabase
-        .from('emails')
-        .select('*')
-        .eq('user_id', userId) // CRITICAL: Filter by user_id for data isolation
-        .or('processing_status.is.null,processing_status.eq.pending') // Get unprocessed emails (null or pending)
-        .order('received_at', { ascending: false })
-        .limit(30); // Increased batch size - can process ~30 in 4 minutes
-
-      monitor.trackDatabaseOperation('select', 'emails', dbEmails?.length, !fetchError, fetchError || undefined);
-
-      if (fetchError) {
-        monitor.setHealthStatus('database', false, fetchError.message);
-        const schemaError = mapToMissingUserIdColumnError('emails', fetchError);
-        if (schemaError) {
-          throw schemaError;
-        }
-        throw new Error(`Failed to fetch emails from database: ${fetchError.message}`);
-      }
-      
-      console.log('[PIPELINE:DEBUG] Database query completed:', {
-        emailsFound: dbEmails?.length || 0,
-        queryDuration: `${Date.now() - dbQueryStartTime}ms`,
-        userId: userId
-      });
-
-      if (dbEmails && dbEmails.length > 0) {
-        console.log('[PIPELINE:DEBUG] Retrieved emails from database for processing');
-        console.log('[PIPELINE:DEBUG] Processing batch:', {
-          emailCount: dbEmails.length,
-          firstEmail: dbEmails[0]?.subject || dbEmails[0]?.newsletter_name,
-          processingStatus: dbEmails.map(e => e.processing_status)
-        });
-
-        monitor.setMetric('emailsProcessed', dbEmails.length);
-        monitor.completeStep('database_fetch', { emailsRetrieved: dbEmails.length, duration: Date.now() - dbQueryStartTime });
-
-      // Process emails with smart timing to avoid timeouts
-      const companiesFound: any[] = [];
-      const newlyDiscoveredCompanies = new Set<string>(); // Track companies discovered in this run
-      const processingStartTime = Date.now();
-      const maxProcessingTime = 240000; // 4 minutes for processing (conservative with 5min total limit)
-      let processedInThisRun = 0;
-      let skippedDueToContent = 0;
-      let skippedDueToAIError = 0;
-      const emailsToProcess = [...dbEmails]; // Copy array to track remaining
-
-      console.log('[PIPELINE:DEBUG] Starting email processing loop');
-      console.log('[PIPELINE:DEBUG] Processing configuration:', {
-        emailsToProcess: emailsToProcess.length,
-        maxProcessingTime: `${maxProcessingTime}ms`,
-        startTime: new Date(processingStartTime).toISOString()
-      });
-      
-      for (let i = 0; i < emailsToProcess.length; i++) {
-        // Check if we're approaching timeout limit (both processing time and total time)
-        const processingTimeElapsed = Date.now() - processingStartTime;
-        const totalTimeElapsed = Date.now() - requestStartTime;
-
-        // Stop if we've used too much processing time OR total time is approaching 4.5min
-        if (processingTimeElapsed > maxProcessingTime || totalTimeElapsed > 270000) {
-          console.log(`Approaching timeout limit, processed ${processedInThisRun} emails, ${emailsToProcess.length - i} remaining`);
-          console.log(`Processing time: ${processingTimeElapsed}ms, Total time: ${totalTimeElapsed}ms`);
-          
-          // Mark remaining emails for background processing
-          const remainingEmails = emailsToProcess.slice(i);
-          if (remainingEmails.length > 0) {
-            await pushPipelineUpdate(userId, {
-              type: 'partial_completion',
-              status: 'complete',
-              message: `Processed ${processedInThisRun} of ${emailsToProcess.length} emails. Run pipeline again to process remaining ${remainingEmails.length} emails.`,
-              stats: pipelineStatus.stats,
-              remainingCount: remainingEmails.length
-            });
-
-            console.log(`Partial completion: ${processedInThisRun} emails processed, ${remainingEmails.length} remaining`);
-            
-            // Set partial success status
-            pipelineStatus.status = 'complete';
-            pipelineStatus.message = `Processed ${processedInThisRun} emails. ${remainingEmails.length} emails remaining - run pipeline again to continue.`;
-          }
-          break;
-        }
-        
-        const email = emailsToProcess[i];
-        
-        // Mark email as processing
-        const { error: markProcessingError } = await supabase
-          .from('emails')
-          .update({
-            processing_status: 'processing',
-            processed_at: new Date().toISOString()
-          })
-          .eq('id', email.id);
-
-        if (markProcessingError) {
-          const schemaError = mapToMissingUserIdColumnError('emails', markProcessingError);
-          if (schemaError) {
-            throw schemaError;
-          }
-          throw new Error(
-            `Failed to mark email ${email.id} as processing: ${markProcessingError.message ?? 'Unknown error'}`
-          );
-        }
-        
-        // Update progress
-        const extractionProgress = 40 + (40 * (i + 1) / dbEmails.length);
-        pipelineStatus.progress = Math.round(extractionProgress);
-        pipelineStatus.message = `Extracting companies from email ${i + 1}/${dbEmails.length}...`;
-        
-        // Push granular progress update
-        const elapsedSeconds = (Date.now() - processingStartTime) / 1000;
-        const emailsPerSecond = (i + 1) / elapsedSeconds;
-        const remainingEmails = dbEmails.length - (i + 1);
-        const estimatedTimeRemaining = remainingEmails / emailsPerSecond;
-
-        console.log('[PIPELINE:DEBUG] Processing email', {
-          index: i + 1,
-          total: dbEmails.length,
-          emailId: email.id,
-          subject: email.subject || email.newsletter_name,
-          progress: Math.round(extractionProgress),
-          elapsedSeconds: Math.round(elapsedSeconds),
-          estimatedRemaining: Math.round(estimatedTimeRemaining)
-        });
-
-        console.log('[PIPELINE:DEBUG] Pushing processing_email update');
-
-        await pushPipelineUpdate(userId, {
-          type: 'processing_email',
-          status: 'extracting',
-          progress: Math.round(extractionProgress),
-          message: `Analyzing "${email.newsletter_name || email.subject}"...`,
-          stats: {
-            ...pipelineStatus.stats,
-            companiesExtracted: totalCompaniesExtracted,
-            newCompanies: newCompaniesCount,
-            totalMentions: totalMentions  // Include current totalMentions in progress updates
-          },
-          currentEmail: i + 1,
-          totalEmails: dbEmails.length,
-          estimatedTimeRemaining: Math.round(estimatedTimeRemaining),
-          companiesFound: companiesFound.slice(-5) // Last 5 companies
-        });
-
-        console.log('[PIPELINE:DEBUG] processing_email update pushed');
-        
-        try {
-          // Extract companies from email content
-          let extractionResult;
-          try {
-            console.log(`Processing email ${i + 1}/${dbEmails.length}: ${email.subject || email.newsletter_name}`);
-            
-            // Skip if no content (reduced threshold to 20 chars from 100)
-            const content = email.clean_text || email.raw_html || '';
-            if (!content || content.trim().length < 20) {
-              console.log(`[PIPELINE:DEBUG] Skipping email ${email.id} - insufficient content (${content.trim().length} chars)`);
-              console.log(`[PIPELINE:DEBUG] Skipped email details:`, {
-                id: email.id,
-                subject: email.subject,
-                newsletter_name: email.newsletter_name,
-                contentLength: content.trim().length
-              });
-              skippedDueToContent++;
-              continue;
-            }
-            
-            extractionResult = await extractor.extractCompanies(
-              content,
-              email.newsletter_name || 'Unknown Newsletter'
-            );
-          } catch (aiError) {
-            console.error(`[PIPELINE:DEBUG] Failed to extract from email ${email.id}:`, aiError);
-            console.error(`[PIPELINE:DEBUG] AI extraction error details:`, {
-              emailId: email.id,
-              subject: email.subject,
-              newsletter: email.newsletter_name,
-              error: aiError instanceof Error ? aiError.message : 'Unknown AI error'
-            });
-            skippedDueToAIError++;
-            // Skip this email and continue with others
-            await pushPipelineUpdate(userId, {
-              type: 'processing_email',
-              status: 'extracting',
-              progress: Math.round(extractionProgress),
-              message: `Skipping "${email.newsletter_name || email.subject}" due to AI error`,
-              stats: pipelineStatus.stats
-            });
-            continue;
-          }
-          
-          console.log(`Extracted ${extractionResult.companies.length} companies from: ${email.subject}`);
-          
-          // Store extracted companies
-          for (const company of extractionResult.companies) {
-            // Check if company already exists for this user
-            const { data: existingCompany, error: existingCompanyError } = await supabase
-              .from('companies')
-              .select('id, mention_count')
-              .eq('user_id', userId) // Filter by user_id
-              .eq('name', company.name)
-              .maybeSingle();
-
-            if (existingCompanyError) {
-              if (existingCompanyError.code !== 'PGRST116') {
-                const schemaError = mapToMissingUserIdColumnError('companies', existingCompanyError);
-                if (schemaError) {
-                  throw schemaError;
-                }
-                throw new Error(
-                  `Failed to check existing company ${company.name}: ${existingCompanyError.message ?? 'Unknown error'}`
-                );
-              }
-            }
-
-            if (existingCompany) {
-              // Update existing company
-              const { error: updateCompanyError } = await supabase
-                .from('companies')
-                .update({
-                  mention_count: (existingCompany.mention_count || 0) + 1,
-                  last_updated_at: new Date().toISOString()
-                })
-                .eq('id', existingCompany.id);
-
-              if (updateCompanyError) {
-                const schemaError = mapToMissingUserIdColumnError('companies', updateCompanyError);
-                if (schemaError) {
-                  throw schemaError;
-                }
-                throw new Error(
-                  `Failed to update company ${company.name}: ${updateCompanyError.message ?? 'Unknown error'}`
-                );
-              }
-
-              // Track for live updates
-              companiesFound.push({
-                name: company.name,
-                description: company.description,
-                isNew: false,
-                source: email.newsletter_name || email.subject
-              });
-
-              // Create mention record
-              const { error: mentionInsertError } = await supabase
-                .from('company_mentions')
-                .insert({
-                  user_id: userId, // Associate with current user
-                  company_id: existingCompany.id,
-                  email_id: email.id,
-                  context: company.context || 'Mentioned in newsletter',
-                  sentiment: 'neutral',
-                  confidence: company.confidence || 0.8,
-                  extracted_at: new Date().toISOString()
-                });
-
-              if (mentionInsertError) {
-                const schemaError = mapToMissingUserIdColumnError('company_mentions', mentionInsertError);
-                if (schemaError) {
-                  throw schemaError;
-                }
-                throw new Error(
-                  `Failed to record mention for ${company.name}: ${mentionInsertError.message ?? 'Unknown error'}`
-                );
-              }
-            } else {
-              // Create new company
-              newCompaniesCount++;
-              const normalizedName = company.name.toLowerCase()
-                .replace(/[^a-z0-9]/g, '-')
-                .replace(/-+/g, '-')
-                .replace(/^-|-$/g, '') + '-' + Date.now();
-
-              const { data: newCompany, error: insertCompanyError } = await supabase
-                .from('companies')
-                .insert({
-                  user_id: userId, // Associate with current user
-                  name: company.name,
-                  normalized_name: normalizedName,
-                  description: company.description,
-                  industry: Array.isArray(company.industry) ? company.industry : company.industry ? [company.industry] : [],
-                  mention_count: 1,
-                  first_seen_at: new Date().toISOString(),
-                  last_updated_at: new Date().toISOString()
-                })
-                .select()
-                .single();
-
-              if (insertCompanyError) {
-                const schemaError = mapToMissingUserIdColumnError('companies', insertCompanyError);
-                if (schemaError) {
-                  throw schemaError;
-                }
-                throw new Error(
-                  `Failed to create company ${company.name}: ${insertCompanyError.message ?? 'Unknown error'}`
-                );
-              }
-
-              if (newCompany) {
-                // Create mention record
-                const { error: newMentionError } = await supabase
-                  .from('company_mentions')
-                  .insert({
-                    user_id: userId, // Associate with current user
-                    company_id: newCompany.id,
-                    email_id: email.id,
-                    context: company.context || 'Mentioned in newsletter',
-                    sentiment: 'neutral',
-                    confidence: company.confidence || 0.8,
-                    extracted_at: new Date().toISOString()
-                  });
-
-                if (newMentionError) {
-                  const schemaError = mapToMissingUserIdColumnError('company_mentions', newMentionError);
-                  if (schemaError) {
-                    throw schemaError;
-                  }
-                  throw new Error(
-                    `Failed to record mention for new company ${company.name}: ${newMentionError.message ?? 'Unknown error'}`
-                  );
-                }
-
-                // Track for live updates
-                companiesFound.push({
-                  name: company.name,
-                  description: company.description,
-                  isNew: true,
-                  source: email.newsletter_name || email.subject
-                });
-                
-                // Only push discovery update if this is the FIRST time we've seen this company in this run
-                if (!newlyDiscoveredCompanies.has(company.name)) {
-                  newlyDiscoveredCompanies.add(company.name);
-
-                  console.log('[PIPELINE:DEBUG] New company discovered:', {
-                    name: company.name,
-                    description: company.description?.substring(0, 100),
-                    totalNewCompanies: newCompaniesCount
-                  });
-
-                  console.log('[PIPELINE:DEBUG] Pushing company_discovered update');
-
-                  await pushPipelineUpdate(userId, {
-                    type: 'company_discovered',
-                    company: {
-                      name: company.name,
-                      description: company.description,
-                      isNew: true
-                    },
-                    stats: {
-                      ...pipelineStatus.stats,
-                      companiesExtracted: totalCompaniesExtracted + 1,
-                      newCompanies: newCompaniesCount,
-                      totalMentions: totalMentions  // Include current totalMentions
-                    }
-                  });
-
-                  console.log('[PIPELINE:DEBUG] company_discovered update pushed');
-                }
-              }
-            }
-            
-            totalCompaniesExtracted++;
-            totalMentions++;
-          }
-          
-          // Mark email as successfully processed
-          const { error: markCompletedError } = await supabase
-            .from('emails')
-            .update({
-              processing_status: 'completed',
-              processed_at: new Date().toISOString(),
-              error_message: null
-            })
-            .eq('id', email.id);
-
-          if (markCompletedError) {
-            const schemaError = mapToMissingUserIdColumnError('emails', markCompletedError);
-            if (schemaError) {
-              throw schemaError;
-            }
-            throw new Error(
-              `Failed to mark email ${email.id} as completed: ${markCompletedError.message ?? 'Unknown error'}`
-            );
-          }
-
-          processedInThisRun++;
-        } catch (emailError) {
-          monitor.trackExtractionOperation(email.id, 0, false, emailError instanceof Error ? emailError : new Error('Email processing failed'));
-
-          // Mark email as failed
-          const { error: markFailedError } = await supabase
-            .from('emails')
-            .update({
-              processing_status: 'failed',
-              error_message: emailError instanceof Error ? emailError.message : 'Unknown error',
-              processed_at: new Date().toISOString()
-            })
-            .eq('id', email.id);
-
-          if (markFailedError) {
-            const schemaError = mapToMissingUserIdColumnError('emails', markFailedError);
-            if (schemaError) {
-              throw schemaError;
-            }
-            throw new Error(
-              `Failed to mark email ${email.id} as failed: ${markFailedError.message ?? 'Unknown error'}`
-            );
-          }
-
-          createPipelineAlert('warning', 'Email Processing Failed',
-            `Failed to process email: ${email.subject}`,
-            { emailId: email.id, error: emailError instanceof Error ? emailError.message : 'Unknown error' }
-          );
-
-          // Note: Do NOT count this as processed since it failed during processing
-        }
-      }
-      
-      // Log processing summary
-      console.log('[PIPELINE:DEBUG] Email processing summary:', {
-        totalAttempted: dbEmails.length,
-        successfullyProcessed: processedInThisRun,
-        skippedDueToContent: skippedDueToContent,
-        skippedDueToAIError: skippedDueToAIError,
-        totalSkipped: skippedDueToContent + skippedDueToAIError,
-        processingRate: `${Math.round(processedInThisRun / dbEmails.length * 100)}%`
-      });
-
-      monitor.completeStep('company_extraction', {
-        emailsProcessed: processedInThisRun, // Changed to actual processed count
-        totalCompaniesExtracted,
-        newCompaniesCount,
-        totalMentions
-      });
-    } else {
-      console.log('[PIPELINE:DEBUG] No emails found for processing');
-      console.log('[PIPELINE:DEBUG] This could mean:', {
-        reason1: 'All emails already processed',
-        reason2: 'No emails match the pending/null status filter',
-        reason3: 'Emails were not properly stored after fetching',
-        totalFetched: pipelineStatus.stats.emailsFetched
-      });
-
-      monitor.completeStep('company_extraction', { emailsProcessed: 0, reason: 'no_emails' });
-
-      // If we fetched emails but couldn't process any, that's a problem
-      if (pipelineStatus.stats.emailsFetched > 0) {
-        createPipelineAlert('warning', 'Emails Fetched but Not Processed',
-          `Fetched ${pipelineStatus.stats.emailsFetched} emails from Gmail but found 0 to process. They may need to be marked as pending.`);
-      } else {
-        createPipelineAlert('warning', 'No Emails to Process', 'No emails found in database for company extraction');
-      }
-    }
-    } catch (extractionError) {
-      monitor.failStep('company_extraction', extractionError instanceof Error ? extractionError : new Error('Company extraction failed'));
-      throw extractionError;
-    }
-    
-    // Complete pipeline
-    monitor.startStep('pipeline_completion');
-
-    console.log('[PIPELINE:DEBUG] Pipeline processing completed');
-    console.log('[PIPELINE:DEBUG] Final statistics:', {
-      emailsFetched: pipelineStatus.stats.emailsFetched,
-      companiesExtracted: totalCompaniesExtracted,
-      newCompanies: newCompaniesCount,
-      totalMentions: totalMentions,
-      executionTime: `${Date.now() - requestStartTime}ms`
-    });
-
-    // Update the final stats first
-    pipelineStatus = {
-      status: 'complete',
-      progress: 100,
-      message: 'Pipeline completed successfully',
-      lastSync: new Date(),
-      stats: {
-        emailsFetched: pipelineStatus.stats.emailsFetched,
-        companiesExtracted: totalCompaniesExtracted,
-        newCompanies: newCompaniesCount,
-        totalMentions: totalMentions
-      }
-    };
-
-    // Now push completion update with the updated stats
-    console.log('[PIPELINE:DEBUG] Pushing completion update to userId:', userId);
-    console.log('[PIPELINE:DEBUG] Completion data:', JSON.stringify({
-      type: 'complete',
-      status: 'complete',
-      progress: 100,
-      message: `Discovered ${totalCompaniesExtracted} companies (${newCompaniesCount} new) from ${pipelineStatus.stats.emailsFetched} newsletters`,
-      stats: pipelineStatus.stats
-    }));
-
-    await pushPipelineUpdate(userId, {
-      type: 'complete',
-      status: 'complete',
-      progress: 100,
-      message: `Discovered ${totalCompaniesExtracted} companies (${newCompaniesCount} new) from ${pipelineStatus.stats.emailsFetched} newsletters`,
-      stats: pipelineStatus.stats  // Now this has the correct totalMentions
-    });
-
-    console.log('[PIPELINE:DEBUG] Completion update pushed successfully');
-    
-    // Update final metrics
-    monitor.setMetric('companiesExtracted', totalCompaniesExtracted);
-    monitor.setMetric('newCompanies', newCompaniesCount);
-    monitor.setMetric('totalMentions', totalMentions);
-    
-    const monitoringResults = monitor.complete(true, pipelineStatus.stats);
-    
-    // Create success alert for significant results
-    if (totalCompaniesExtracted > 0) {
-      createPipelineAlert('info', 'Pipeline Completed Successfully', 
-        `Pipeline extracted ${totalCompaniesExtracted} companies (${newCompaniesCount} new) from ${pipelineStatus.stats.emailsFetched} emails`,
-        {
-          ...pipelineStatus.stats,
-          executionTime: monitoringResults.metrics.executionTime,
-          sessionId: monitoringResults.sessionId
-        }
-      );
-    }
-    
-    // Invalidate cache after successful pipeline run
-    pipelineCacheManager.invalidateAll();
-
-    // Clear the timeout since we're done
-    clearTimeout(timeoutHandle);
-
-    // Release sync lock - will also be released in finally, but good to be explicit
-    pipelineCacheManager.clearSyncLock();
-    lockAcquired = false;
-
-    return NextResponse.json({
-      success: true,
-      data: pipelineStatus,
-      monitoring: {
-        sessionId: monitoringResults.sessionId,
-        summary: monitoringResults.summary
-      },
-      meta: {
-        timestamp: new Date().toISOString(),
-        version: '1.0.0'
-      }
-    });
 
   } catch (error) {
     console.error('[Pipeline Sync] Pipeline failed with error:', error);
