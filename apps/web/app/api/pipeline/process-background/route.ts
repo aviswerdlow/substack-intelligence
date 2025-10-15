@@ -269,7 +269,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let followUpTriggered = false;
     if (remaining > 0) {
       const followUpBatchSize = Math.min(normalizedBatchSize, remaining);
       console.log(`[Background] ${remaining} emails still pending for user ${userId}. Scheduling follow-up run with batch size ${followUpBatchSize}...`);
