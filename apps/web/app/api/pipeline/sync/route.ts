@@ -432,7 +432,12 @@ export async function POST(request: NextRequest) {
             raw_html: email.html || email.text || '',
             clean_text: email.text || '',
             received_at: email.date || new Date().toISOString(),
-            processing_status: 'pending' // Mark as pending for processing
+            processing_status: 'pending',
+            extraction_status: 'pending',
+            extraction_started_at: null,
+            extraction_completed_at: null,
+            extraction_error: null,
+            companies_extracted: 0
           };
 
           // Try to insert the email (will fail if it already exists due to unique constraints)
@@ -486,11 +491,115 @@ export async function POST(request: NextRequest) {
 
       console.log('[PIPELINE:DEBUG] emails_fetched update pushed successfully');
       
-      if (emails.length === 0) {
+      if (emails.length > 0) {
+        // Hand off extraction to background processor
+        monitor.startStep('background_trigger', { emailsQueued: emails.length });
+        
+        const backgroundPayload = {
+          userId,
+          batchSize: Math.max(10, Math.min(20, emails.length || 15))
+        };
+        const backgroundUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/pipeline/process-background`;
+        const backgroundTrigger = fetch(backgroundUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(backgroundPayload)
+        })
+          .then(async (response) => {
+            if (!response.ok) {
+              const details = await response.json().catch(() => ({}));
+              console.error('[Pipeline Sync] Background trigger failed', {
+                status: response.status,
+                details
+              });
+            } else {
+              console.log('[Pipeline Sync] Background processing trigger acknowledged');
+            }
+          })
+          .catch((error) => {
+            console.error('[Pipeline Sync] Failed to trigger background processing', error);
+          });
+        
+        // Detach the promise so the pipeline response doesn't wait for completion
+        void backgroundTrigger;
+        monitor.completeStep('background_trigger', { triggered: true });
+
+        pipelineStatus = {
+          status: 'extracting',
+          progress: 50,
+          message: 'Background processing in progress...',
+          lastSync: new Date(),
+          stats: pipelineStatus.stats
+        };
+        
+        await pushPipelineUpdate(userId, {
+          type: 'background_processing',
+          status: 'extracting',
+          progress: 50,
+          message: 'Handed off to background worker. Processing will continue automatically.',
+          stats: pipelineStatus.stats
+        });
+
+        const monitoringResults = monitor.complete(true, pipelineStatus.stats);
+        
+        return NextResponse.json({
+          success: true,
+          data: pipelineStatus,
+          background: {
+            queued: true,
+            batchSize: backgroundPayload.batchSize
+          },
+          monitoring: {
+            sessionId: monitoringResults.sessionId,
+            summary: monitoringResults.summary
+          },
+          meta: {
+            timestamp: new Date().toISOString(),
+            version: '1.0.0'
+          }
+        });
+      } else {
+        pipelineStatus = {
+          status: 'complete',
+          progress: 100,
+          message: 'No new Substack emails found to process.',
+          lastSync: new Date(),
+          stats: pipelineStatus.stats
+        };
+        
         createPipelineAlert('warning', 'No Emails Found', 
           `No Substack emails found in the last ${options.daysBack} days`,
           { daysBack: options.daysBack }
         );
+        
+        await pushPipelineUpdate(userId, {
+          type: 'no_emails',
+          status: 'complete',
+          progress: 100,
+          message: 'No new Substack emails found. Check back later.',
+          stats: pipelineStatus.stats
+        });
+
+        const monitoringResults = monitor.complete(true, pipelineStatus.stats);
+        
+        return NextResponse.json({
+          success: true,
+          data: pipelineStatus,
+          background: {
+            queued: false,
+            batchSize: 0
+          },
+          monitoring: {
+            sessionId: monitoringResults.sessionId,
+            summary: monitoringResults.summary
+          },
+          meta: {
+            timestamp: new Date().toISOString(),
+            version: '1.0.0'
+          }
+        });
       }
     } catch (gmailError) {
       const errorMessage = gmailError instanceof Error ? gmailError.message : 'Gmail fetch failed';

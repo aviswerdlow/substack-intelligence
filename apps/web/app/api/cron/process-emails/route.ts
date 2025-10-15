@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const { data: usersWithPending, error: queryError } = await supabase
       .from('emails')
       .select('user_id')
-      .eq('extraction_status', 'pending')
+      .eq('processing_status', 'pending')
       .not('user_id', 'is', null)
       .limit(10); // Process up to 10 users per cron run
     
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
             },
             body: JSON.stringify({
               userId,
-              batchSize: 5 // Process 5 emails per user in this cron run
+              batchSize: 15 // Process 15 emails per user in this cron run
             })
           }
         );

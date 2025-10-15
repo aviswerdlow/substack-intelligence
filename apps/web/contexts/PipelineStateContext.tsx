@@ -34,17 +34,32 @@ export interface ActivityLogEntry {
 
 // SSE Update types
 export interface PipelineUpdate {
-  type: 'connected' | 'status' | 'emails_fetched' | 'processing_email' | 'company_discovered' | 'complete' | 'error' | 'heartbeat';
+  type:
+    | 'connected'
+    | 'status'
+    | 'emails_fetched'
+    | 'processing_email'
+    | 'company_discovered'
+    | 'background_processing'
+    | 'background_progress'
+    | 'background_complete'
+    | 'no_emails'
+    | 'complete'
+    | 'error'
+    | 'heartbeat';
   status?: PipelineStatus;
   progress?: number;
   message?: string;
   stats?: PipelineMetrics;
   currentEmail?: number;
   totalEmails?: number;
+  totalCount?: number;
   estimatedTimeRemaining?: number;
   company?: CompanyDiscovery;
   emailCount?: number;
   timestamp?: string;
+  processedCount?: number;
+  companiesExtracted?: number;
 }
 
 // Pipeline state
@@ -299,6 +314,56 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
           if (update.stats) newState.metrics = update.stats;
           break;
 
+        case 'background_processing':
+          newState.status = 'extracting';
+          if (update.progress !== undefined) newState.progress = update.progress;
+          if (update.message) newState.message = update.message;
+          if (update.stats) newState.metrics = update.stats;
+          addActivityLog(update.message || 'Background processing started', 'info');
+          break;
+
+        case 'background_progress':
+          newState.status = 'processing';
+          if (update.processedCount !== undefined) newState.currentEmail = update.processedCount;
+          if (update.totalCount !== undefined) newState.totalEmails = update.totalCount;
+          if (update.progress !== undefined) newState.progress = update.progress;
+          if (update.message) newState.message = update.message;
+          if (update.stats) newState.metrics = update.stats;
+          break;
+
+        case 'background_complete':
+          newState.status = 'complete';
+          newState.progress = 100;
+          newState.endTime = new Date();
+          newState.lastSyncTime = new Date();
+          newState.lastSyncSuccess = true;
+          newState.dataFreshness = 'fresh';
+          if (update.companiesExtracted !== undefined) {
+            newState.metrics.companiesExtracted = update.companiesExtracted;
+          }
+          if (update.stats) newState.metrics = update.stats;
+          addActivityLog(
+            `Background processing complete (${update.processedCount || 0} emails)`,
+            'success'
+          );
+          toast({
+            title: 'Pipeline Complete',
+            description: update.message || 'Background processing finished successfully.'
+          });
+          break;
+
+        case 'no_emails':
+          newState.status = 'complete';
+          newState.progress = update.progress ?? 100;
+          newState.message = update.message || 'No new emails found.';
+          newState.endTime = new Date();
+          newState.lastSyncTime = new Date();
+          newState.lastSyncSuccess = true;
+          newState.dataFreshness = 'fresh';
+          if (update.stats) newState.metrics = update.stats;
+          addActivityLog(update.message || 'No new Substack newsletters to process', 'info');
+          break;
+
         case 'company_discovered':
           if (update.company) {
             const discovery: CompanyDiscovery = {
@@ -457,16 +522,17 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
       return;
     }
     
-    // Check if data is fresh (less than 5 minutes old)
+    // Log data freshness for informational purposes only - don't block manual runs
     if (state.lastSyncTime) {
       const dataAge = (Date.now() - state.lastSyncTime.getTime()) / (1000 * 60); // in minutes
-      if (dataAge < 5) {
-        console.log('Data is very fresh (< 5 minutes), skipping sync');
+      console.log(`Starting pipeline. Last sync was ${dataAge.toFixed(1)} minutes ago`);
+
+      // Only show a notice if data is very fresh (< 1 minute), but still allow the run
+      if (dataAge < 1) {
         toast({
-          title: 'Data is Fresh',
-          description: 'Intelligence data was updated less than 5 minutes ago.',
+          title: 'Recent Sync Detected',
+          description: 'Data was updated less than a minute ago. Starting new sync anyway.',
         });
-        return;
       }
     }
     

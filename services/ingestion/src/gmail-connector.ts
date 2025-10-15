@@ -400,7 +400,12 @@ export class GmailConnector {
         processed_at: email.processedAt.toISOString(),
         raw_html: redactSensitiveData(email.html),
         clean_text: redactSensitiveData(email.text),
-        processing_status: 'pending' as const // Mark as pending for company extraction
+        processing_status: 'pending' as const,
+        extraction_status: 'pending' as const,
+        extraction_started_at: null,
+        extraction_completed_at: null,
+        extraction_error: null,
+        companies_extracted: 0
       }));
       
       // Upsert emails (insert or update if message_id exists)

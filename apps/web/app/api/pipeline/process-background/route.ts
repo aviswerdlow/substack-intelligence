@@ -23,37 +23,10 @@ export async function POST(request: NextRequest) {
     const supabase = createServiceRoleClient();
     const startTime = Date.now();
     const maxProcessingTime = 50000; // 50 seconds with 60s maxDuration
+    const normalizedBatchSize = Math.max(1, Math.min(batchSize, 25));
     
-    // Get pending emails for this user
-    const { data: pendingEmails, error: fetchError } = await supabase
-      .from('emails')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('processing_status', 'pending')
-      .order('received_at', { ascending: false })
-      .limit(batchSize);
-    
-    if (fetchError) {
-      console.error('Failed to fetch pending emails:', fetchError);
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to fetch pending emails'
-      }, { status: 500 });
-    }
-    
-    if (!pendingEmails || pendingEmails.length === 0) {
-      return NextResponse.json({
-        success: true,
-        processed: 0,
-        remaining: 0,
-        message: 'No pending emails to process'
-      });
-    }
-    
-    console.log(`Background processing ${pendingEmails.length} emails for user ${userId}`);
-    
-    // Initialize Claude extractor
-    let extractor;
+    // Initialize Claude extractor once per invocation
+    let extractor: ClaudeExtractor;
     try {
       extractor = new ClaudeExtractor();
     } catch (error) {
@@ -67,163 +40,193 @@ export async function POST(request: NextRequest) {
     let processedCount = 0;
     let companiesExtracted = 0;
     const errors: string[] = [];
+    let totalQueued = 0;
     
-    // Process each email
-    for (const email of pendingEmails) {
-      // Check if we're approaching timeout
-      if (Date.now() - startTime > maxProcessingTime) {
-        console.log(`Background processing timeout, processed ${processedCount} of ${pendingEmails.length}`);
+    while (Date.now() - startTime < maxProcessingTime) {
+      const { data: pendingEmails, error: fetchError } = await supabase
+        .from('emails')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('processing_status', 'pending')
+        .order('received_at', { ascending: false })
+        .limit(normalizedBatchSize);
+      
+      if (fetchError) {
+        console.error('Failed to fetch pending emails:', fetchError);
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to fetch pending emails'
+        }, { status: 500 });
+      }
+      
+      if (!pendingEmails || pendingEmails.length === 0) {
         break;
       }
       
-      try {
-        // Mark as processing
-        await supabase
-          .from('emails')
-          .update({
-            processing_status: 'processing',
-            processed_at: new Date().toISOString()
-          })
-          .eq('id', email.id);
+      totalQueued += pendingEmails.length;
+      console.log(`Background processing ${pendingEmails.length} emails for user ${userId}`);
+      
+      for (const email of pendingEmails) {
+        if (Date.now() - startTime > maxProcessingTime) {
+          console.log(`Background processing timeout, processed ${processedCount} so far`);
+          break;
+        }
         
-        // Skip if no content
-        const content = email.clean_text || email.raw_html || '';
-        if (!content || content.trim().length < 100) {
+        const nowIso = new Date().toISOString();
+        
+        try {
           await supabase
             .from('emails')
             .update({
-              processing_status: 'completed',
-              processed_at: new Date().toISOString(),
-              error_message: null
+              processing_status: 'processing',
+              extraction_status: 'processing',
+              extraction_started_at: nowIso,
+              processed_at: nowIso,
+              error_message: null,
+              extraction_error: null
             })
             .eq('id', email.id);
           
-          processedCount++;
-          continue;
-        }
-        
-        // Extract companies
-        const extractionResult = await extractor.extractCompanies(
-          content,
-          email.newsletter_name || 'Unknown Newsletter'
-        );
-        
-        console.log(`Extracted ${extractionResult.companies.length} companies from email ${email.id}`);
-        
-        // Store extracted companies
-        for (const company of extractionResult.companies) {
-          // Check if company exists for this user
-          const { data: existingCompany } = await supabase
-            .from('companies')
-            .select('id, mention_count')
-            .eq('user_id', userId)
-            .eq('name', company.name)
-            .single();
-          
-          if (existingCompany) {
-            // Update existing company
+          const content = email.clean_text || email.raw_html || '';
+          if (!content || content.trim().length < 20) {
             await supabase
-              .from('companies')
+              .from('emails')
               .update({
-                mention_count: (existingCompany.mention_count || 0) + 1,
-                last_updated_at: new Date().toISOString()
+                processing_status: 'completed',
+                extraction_status: 'completed',
+                extraction_completed_at: nowIso,
+                processed_at: nowIso,
+                companies_extracted: 0,
+                error_message: null,
+                extraction_error: null
               })
-              .eq('id', existingCompany.id);
+              .eq('id', email.id);
             
-            // Create mention record
-            await supabase
-              .from('company_mentions')
-              .insert({
-                user_id: userId,
-                company_id: existingCompany.id,
-                email_id: email.id,
-                context: company.context || 'Mentioned in newsletter',
-                sentiment: 'neutral',
-                confidence: company.confidence || 0.8,
-                extracted_at: new Date().toISOString()
-              });
-          } else {
-            // Create new company
-            const normalizedName = company.name.toLowerCase()
-              .replace(/[^a-z0-9]/g, '-')
-              .replace(/-+/g, '-')
-              .replace(/^-|-$/g, '') + '-' + Date.now();
-            
-            const { data: newCompany } = await supabase
+            processedCount++;
+            continue;
+          }
+          
+          const extractionResult = await extractor.extractCompanies(
+            content,
+            email.newsletter_name || 'Unknown Newsletter'
+          );
+          
+          console.log(`Extracted ${extractionResult.companies.length} companies from email ${email.id}`);
+          
+          let companiesInEmail = 0;
+          
+          for (const company of extractionResult.companies) {
+            const { data: existingCompany } = await supabase
               .from('companies')
-              .insert({
-                user_id: userId,
-                name: company.name,
-                normalized_name: normalizedName,
-                description: company.description,
-                industry: Array.isArray(company.industry) ? company.industry : company.industry ? [company.industry] : [],
-                mention_count: 1,
-                first_seen_at: new Date().toISOString(),
-                last_updated_at: new Date().toISOString()
-              })
-              .select()
+              .select('id, mention_count')
+              .eq('user_id', userId)
+              .eq('name', company.name)
               .single();
             
-            if (newCompany) {
-              // Create mention record
+            if (existingCompany) {
+              await supabase
+                .from('companies')
+                .update({
+                  mention_count: (existingCompany.mention_count || 0) + 1,
+                  last_updated_at: new Date().toISOString()
+                })
+                .eq('id', existingCompany.id);
+              
               await supabase
                 .from('company_mentions')
                 .insert({
                   user_id: userId,
-                  company_id: newCompany.id,
+                  company_id: existingCompany.id,
                   email_id: email.id,
                   context: company.context || 'Mentioned in newsletter',
                   sentiment: 'neutral',
                   confidence: company.confidence || 0.8,
                   extracted_at: new Date().toISOString()
                 });
+            } else {
+              const normalizedName = company.name.toLowerCase()
+                .replace(/[^a-z0-9]/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '') + '-' + Date.now();
+              
+              const { data: newCompany } = await supabase
+                .from('companies')
+                .insert({
+                  user_id: userId,
+                  name: company.name,
+                  normalized_name: normalizedName,
+                  description: company.description,
+                  industry: Array.isArray(company.industry) ? company.industry : company.industry ? [company.industry] : [],
+                  mention_count: 1,
+                  first_seen_at: new Date().toISOString(),
+                  last_updated_at: new Date().toISOString()
+                })
+                .select()
+                .single();
+              
+              if (newCompany) {
+                await supabase
+                  .from('company_mentions')
+                  .insert({
+                    user_id: userId,
+                    company_id: newCompany.id,
+                    email_id: email.id,
+                    context: company.context || 'Mentioned in newsletter',
+                    sentiment: 'neutral',
+                    confidence: company.confidence || 0.8,
+                    extracted_at: new Date().toISOString()
+                  });
+              }
             }
+            
+            companiesInEmail++;
+            companiesExtracted++;
           }
           
-          companiesExtracted++;
+          await supabase
+            .from('emails')
+            .update({
+              processing_status: 'completed',
+              extraction_status: 'completed',
+              extraction_completed_at: new Date().toISOString(),
+              processed_at: new Date().toISOString(),
+              error_message: null,
+              extraction_error: null,
+              companies_extracted: companiesInEmail
+            })
+            .eq('id', email.id);
+          
+          processedCount++;
+          
+          pushPipelineUpdate(userId, {
+            type: 'background_progress',
+            status: 'extracting',
+            message: `Background: Processed ${processedCount} emails`,
+            processedCount,
+            totalCount: totalQueued,
+            companiesExtracted
+          });
+        } catch (error) {
+          console.error(`Failed to process email ${email.id}:`, error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          errors.push(`Email ${email.id}: ${errorMessage}`);
+          
+          await supabase
+            .from('emails')
+            .update({
+              processing_status: 'failed',
+              extraction_status: 'failed',
+              extraction_error: errorMessage,
+              error_message: errorMessage,
+              processed_at: new Date().toISOString()
+            })
+            .eq('id', email.id);
+          
+          processedCount++;
         }
-        
-        // Mark email as completed
-        await supabase
-          .from('emails')
-          .update({
-            processing_status: 'completed',
-            processed_at: new Date().toISOString(),
-            error_message: null
-          })
-          .eq('id', email.id);
-        
-        processedCount++;
-        
-        // Send progress update
-        pushPipelineUpdate(userId, {
-          type: 'background_progress',
-          status: 'extracting',
-          message: `Background: Processed ${processedCount} of ${pendingEmails.length} emails`,
-          processedCount,
-          totalCount: pendingEmails.length,
-          companiesExtracted
-        });
-        
-      } catch (error) {
-        console.error(`Failed to process email ${email.id}:`, error);
-        errors.push(`Email ${email.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        
-        // Mark as failed
-        await supabase
-          .from('emails')
-          .update({
-            processing_status: 'failed',
-            error_message: error instanceof Error ? error.message : 'Unknown error',
-            processed_at: new Date().toISOString()
-          })
-          .eq('id', email.id);
-        
-        processedCount++;
       }
     }
     
-    // Check if there are more pending emails
     const { count: remainingCount } = await supabase
       .from('emails')
       .select('*', { count: 'exact', head: true })
@@ -232,8 +235,7 @@ export async function POST(request: NextRequest) {
     
     const remaining = remainingCount || 0;
     
-    // Send completion update if all done
-    if (remaining === 0) {
+    if (remaining === 0 && processedCount > 0) {
       pushPipelineUpdate(userId, {
         type: 'background_complete',
         status: 'complete',
@@ -254,9 +256,11 @@ export async function POST(request: NextRequest) {
       remaining,
       companiesExtracted,
       errors: errors.length > 0 ? errors : undefined,
-      message: remaining > 0 
+      message: remaining > 0
         ? `Processed ${processedCount} emails, ${remaining} remaining`
-        : `All emails processed successfully`
+        : remaining === 0 && processedCount > 0
+          ? 'All emails processed successfully'
+          : 'No pending emails to process'
     });
     
   } catch (error) {
