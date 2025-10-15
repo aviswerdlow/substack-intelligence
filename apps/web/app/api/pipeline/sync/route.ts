@@ -516,46 +516,100 @@ export async function POST(request: NextRequest) {
           batchSize: Math.max(10, Math.min(20, emails.length || 15))
         };
         const backgroundUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/pipeline/process-background`;
-        const backgroundTrigger = fetch(backgroundUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(backgroundPayload)
-        })
-          .then(async (response) => {
-            if (!response.ok) {
-              const details = await response.json().catch(() => ({}));
-              console.error('[Pipeline Sync] Background trigger failed', {
-                status: response.status,
-                details
-              });
-            } else {
-              console.log('[Pipeline Sync] Background processing trigger acknowledged');
-            }
-          })
-          .catch((error) => {
-            console.error('[Pipeline Sync] Failed to trigger background processing', error);
+        let backgroundResult: any = null;
+        try {
+          const response = await fetch(backgroundUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(backgroundPayload)
           });
-        
-        // Detach the promise so the pipeline response doesn't wait for completion
-        void backgroundTrigger;
-        monitor.completeStep('background_trigger', { triggered: true });
+
+          if (!response.ok) {
+            const details = await response.json().catch(() => ({}));
+            console.error('[Pipeline Sync] Background trigger failed', {
+              status: response.status,
+              details
+            });
+            monitor.completeStep('background_trigger', { triggered: false, status: response.status });
+
+            pipelineStatus = {
+              status: 'error',
+              progress: 0,
+              message: 'Background processing failed to start. Please try again.',
+              lastSync: pipelineStatus.lastSync,
+              stats: pipelineStatus.stats
+            };
+
+            await pushPipelineUpdate(userId, {
+              type: 'error',
+              status: 'error',
+              message: 'Background processing failed to start. Please try again shortly.',
+              stats: pipelineStatus.stats
+            });
+
+            return NextResponse.json({
+              success: false,
+              error: 'Failed to start background processing',
+              details,
+              background: {
+                queued: false,
+                batchSize: backgroundPayload.batchSize
+              }
+            }, { status: 500 });
+          }
+
+          backgroundResult = await response.json().catch(() => null);
+          monitor.completeStep('background_trigger', { triggered: true, result: backgroundResult });
+          console.log('[Pipeline Sync] Background processing trigger acknowledged', backgroundResult);
+        } catch (error) {
+          monitor.failStep('background_trigger', error instanceof Error ? error : new Error('Background trigger failed'));
+          console.error('[Pipeline Sync] Failed to trigger background processing', error);
+
+          await pushPipelineUpdate(userId, {
+            type: 'error',
+            status: 'error',
+            message: 'Background processing failed to start due to a network error. Please try again.',
+            stats: pipelineStatus.stats
+          });
+
+          return NextResponse.json({
+            success: false,
+            error: 'Failed to trigger background processing',
+            details: error instanceof Error ? error.message : 'Unknown error',
+            background: {
+              queued: false,
+              batchSize: backgroundPayload.batchSize
+            }
+          }, { status: 500 });
+        }
+
+        const remainingCount = typeof backgroundResult?.remaining === 'number' ? backgroundResult.remaining : 0;
+        const processedCount = typeof backgroundResult?.processed === 'number' ? backgroundResult.processed : (emails.length || 0);
 
         pipelineStatus = {
-          status: 'extracting',
-          progress: 50,
-          message: 'Background processing in progress...',
+          status: remainingCount > 0 ? 'extracting' : 'complete',
+          progress: remainingCount > 0 ? 75 : 100,
+          message: remainingCount > 0
+            ? `Processed ${processedCount} emails. ${remainingCount} pending in background.`
+            : 'Background processing completed.',
           lastSync: new Date(),
           stats: pipelineStatus.stats
         };
+        if (typeof backgroundResult?.companiesExtracted === 'number') {
+          pipelineStatus.stats.companiesExtracted = backgroundResult.companiesExtracted;
+        }
         
         await pushPipelineUpdate(userId, {
-          type: 'background_processing',
-          status: 'extracting',
-          progress: 50,
-          message: 'Handed off to background worker. Processing will continue automatically.',
-          stats: pipelineStatus.stats
+          type: remainingCount > 0 ? 'background_processing' : 'background_complete',
+          status: remainingCount > 0 ? 'extracting' : 'complete',
+          progress: pipelineStatus.progress,
+          message: pipelineStatus.message,
+          stats: pipelineStatus.stats,
+          processedCount,
+          companiesExtracted: backgroundResult?.companiesExtracted,
+          totalCount: remainingCount > 0 ? processedCount + remainingCount : processedCount
         });
 
         const monitoringResults = monitor.complete(true, pipelineStatus.stats);
@@ -565,7 +619,8 @@ export async function POST(request: NextRequest) {
           data: pipelineStatus,
           background: {
             queued: true,
-            batchSize: backgroundPayload.batchSize
+            batchSize: backgroundPayload.batchSize,
+            result: backgroundResult
           },
           monitoring: {
             sessionId: monitoringResults.sessionId,
