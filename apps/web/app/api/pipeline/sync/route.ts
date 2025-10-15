@@ -3,6 +3,7 @@ import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import type { Database } from '@substack-intelligence/database';
 import { GmailConnector } from '@substack-intelligence/ingestion';
+import { processBackgroundEmails } from '../process-background/processor';
 import { PipelineMonitor, createPipelineAlert, logPipelineHealthCheck } from '@/lib/monitoring/pipeline-metrics';
 import pipelineCache, { pipelineCacheManager, CACHE_KEYS } from '@/lib/cache/pipeline-cache';
 import { pushPipelineUpdate } from '@/lib/pipeline-updates';
@@ -113,29 +114,6 @@ export async function POST(request: NextRequest) {
     }
   }, (maxDuration - 10) * 1000); // Release lock 10 seconds before max timeout
 
-  const forwardedHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
-  const forwardedProto =
-    request.headers.get('x-forwarded-proto') ??
-    (forwardedHost && forwardedHost.startsWith('localhost') ? 'http' : 'https');
-  const origin =
-    forwardedHost
-      ? `${forwardedProto}://${forwardedHost}`
-      : process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  const backgroundUrl = new URL('/api/pipeline/process-background', origin);
-  const forwardAuthHeaders: Record<string, string> = {};
-  request.headers.forEach((value, key) => {
-    if (key === 'cookie' || key === 'authorization' || key.startsWith('x-clerk-')) {
-      forwardAuthHeaders[key] = value;
-    }
-  });
-  console.log('[Pipeline Sync] Background processing URL:', backgroundUrl.toString());
-  console.log('[Pipeline Sync] Forwarding auth headers to background worker:', {
-    forwardedKeys: Object.keys(forwardAuthHeaders),
-    hasCookie: Object.prototype.hasOwnProperty.call(forwardAuthHeaders, 'cookie')
-  });
-
   const triggerBackgroundProcessing = async (
     queuedEmails: number,
     options: {
@@ -150,137 +128,120 @@ export async function POST(request: NextRequest) {
       rateLimited: !!options.rateLimited
     });
 
-    const backgroundPayload = {
-      userId,
-      batchSize: Math.max(10, Math.min(20, queuedEmails || 15))
-    };
-    const backgroundUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/pipeline/process-background`;
-    let backgroundResult: any = null;
+    const batchSize = Math.max(10, Math.min(20, queuedEmails || 15));
+    const maxProcessingTime = options.rateLimited ? 30000 : 45000;
+    let remaining = queuedEmails;
+    let totalProcessed = 0;
+    let totalCompaniesExtracted = 0;
+    let iterations = 0;
+    const aggregatedErrors: string[] = [];
 
     try {
-      const response = await fetch(backgroundUrl.toString(), {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          ...forwardAuthHeaders
-        },
-        cache: 'no-store',
-        body: JSON.stringify(backgroundPayload)
-      });
+      do {
+        iterations++;
+        const result = await processBackgroundEmails({
+          userId,
+          batchSize,
+          maxProcessingTime,
+          logPrefix: `[Pipeline Sync][run ${iterations}]`
+        });
 
-      if (!response.ok) {
-        const rawBody = await response.text().catch(() => '');
-        let details: any = rawBody;
-        try {
-          details = rawBody ? JSON.parse(rawBody) : {};
-        } catch {
-          // keep raw body string
+        totalProcessed += result.processed;
+        totalCompaniesExtracted += result.companiesExtracted;
+        if (result.errors?.length) {
+          aggregatedErrors.push(...result.errors);
         }
-        console.error('[Pipeline Sync] Background trigger failed', {
-          status: response.status,
-          statusText: response.statusText,
-          headers: Object.fromEntries(response.headers.entries()),
-          body: details
-        });
-        monitor.completeStep('background_trigger', { triggered: false, status: response.status });
+        remaining = result.remaining;
 
-        pipelineStatus = {
-          status: 'error',
-          progress: 0,
-          message: 'Background processing failed to start. Please try again.',
-          lastSync: pipelineStatus.lastSync,
-          stats: pipelineStatus.stats
-        };
+        if (remaining <= 0 || result.processed === 0) {
+          break;
+        }
 
-        await pushPipelineUpdate(userId, {
-          type: 'error',
-          status: 'error',
-          message: 'Background processing failed to start. Please try again shortly.',
-          stats: pipelineStatus.stats
-        });
+        if (Date.now() - requestStartTime > 270000) {
+          console.log('[Pipeline Sync] Approaching request timeout, stopping additional background runs.');
+          break;
+        }
+      } while (remaining > 0);
 
-        return NextResponse.json({
-          success: false,
-          error: 'Failed to start background processing',
-          details,
-          background: {
-            queued: false,
-            batchSize: backgroundPayload.batchSize
-          }
-        }, { status: 500 });
-      }
-
-      backgroundResult = await response.json().catch(async () => {
-        const text = await response.text().catch(() => '');
-        console.warn('[Pipeline Sync] Background response not JSON. Raw body:', text);
-        return null;
+      monitor.completeStep('background_trigger', {
+        triggered: true,
+        runs: iterations,
+        processed: totalProcessed,
+        remaining
       });
-      monitor.completeStep('background_trigger', { triggered: true, result: backgroundResult });
-      console.log('[Pipeline Sync] Background processing trigger acknowledged', backgroundResult);
     } catch (error) {
-      monitor.failStep('background_trigger', error instanceof Error ? error : new Error('Background trigger failed'));
-      console.error('[Pipeline Sync] Failed to trigger background processing', error);
+      monitor.failStep('background_trigger', error instanceof Error ? error : new Error('Background processing failed'));
+      console.error('[Pipeline Sync] Background processing failed:', error);
+
+      pipelineStatus = {
+        status: 'error',
+        progress: 0,
+        message: 'Background processing failed. Please try again.',
+        lastSync: pipelineStatus.lastSync,
+        stats: pipelineStatus.stats
+      };
 
       await pushPipelineUpdate(userId, {
         type: 'error',
         status: 'error',
-        message: 'Background processing failed to start due to a network error. Please try again.',
+        message: options.messageOverride || 'Background processing failed. Please try again shortly.',
         stats: pipelineStatus.stats
       });
 
       return NextResponse.json({
         success: false,
-        error: 'Failed to trigger background processing',
-        details: error instanceof Error ? error.message : 'Unknown error',
-        background: {
-          queued: false,
-          batchSize: backgroundPayload.batchSize
-        }
+        error: error instanceof Error ? error.message : 'Unknown background processing error'
       }, { status: 500 });
     }
 
-    const remainingCount = typeof backgroundResult?.remaining === 'number' ? backgroundResult.remaining : 0;
-    const processedCount =
-      typeof backgroundResult?.processed === 'number'
-        ? backgroundResult.processed
-        : options.fallbackProcessedCount ?? queuedEmails ?? 0;
+    pipelineStatus.stats.companiesExtracted = totalCompaniesExtracted;
+    pipelineStatus.stats.totalMentions = totalCompaniesExtracted;
+    pipelineStatus.progress = remaining > 0 ? 90 : 100;
+    pipelineStatus.lastSync = new Date();
+    pipelineStatus.status = options.statusOverride ?? 'complete';
+    pipelineStatus.message = options.messageOverride ?? (
+      remaining > 0
+        ? `Processed ${totalProcessed} emails. ${remaining} remaining - run pipeline again to continue.`
+        : 'Pipeline completed successfully'
+    );
 
-    pipelineStatus = {
-      status: options.statusOverride ?? (remainingCount > 0 ? 'extracting' : 'complete'),
-      progress: remainingCount > 0 ? 75 : 100,
-      message:
-        options.messageOverride ??
-        (remainingCount > 0
-          ? `Processed ${processedCount} emails. ${remainingCount} pending in background.`
-          : 'Background processing completed.'),
-      lastSync: new Date(),
-      stats: pipelineStatus.stats
-    };
-    if (typeof backgroundResult?.companiesExtracted === 'number') {
-      pipelineStatus.stats.companiesExtracted = backgroundResult.companiesExtracted;
+    if (remaining > 0) {
+      await pushPipelineUpdate(userId, {
+        type: 'partial_completion',
+        status: 'complete',
+        progress: pipelineStatus.progress,
+        message: pipelineStatus.message,
+        stats: pipelineStatus.stats,
+        remainingCount: remaining
+      });
+    } else {
+      await pushPipelineUpdate(userId, {
+        type: 'complete',
+        status: 'complete',
+        progress: 100,
+        message: `Discovered ${totalCompaniesExtracted} companies from ${pipelineStatus.stats.emailsFetched} newsletters`,
+        stats: pipelineStatus.stats
+      });
     }
 
-    await pushPipelineUpdate(userId, {
-      type: remainingCount > 0 ? 'background_processing' : 'background_complete',
-      status: options.statusOverride ?? (remainingCount > 0 ? 'extracting' : 'complete'),
-      progress: pipelineStatus.progress,
-      message: pipelineStatus.message,
-      stats: pipelineStatus.stats,
-      processedCount,
-      companiesExtracted: backgroundResult?.companiesExtracted,
-      totalCount: remainingCount > 0 ? processedCount + remainingCount : processedCount
-    });
+    monitor.setMetric('emailsProcessed', totalProcessed);
+    monitor.setMetric('companiesExtracted', totalCompaniesExtracted);
+    monitor.setMetric('newCompanies', pipelineStatus.stats.newCompanies);
+    monitor.setMetric('totalMentions', pipelineStatus.stats.totalMentions);
 
     const monitoringResults = monitor.complete(true, pipelineStatus.stats);
+
+    pipelineCacheManager.invalidateAll();
 
     return NextResponse.json({
       success: true,
       data: pipelineStatus,
       background: {
-        queued: true,
-        batchSize: backgroundPayload.batchSize,
-        result: backgroundResult
+        queued: remaining > 0,
+        batchSize,
+        runs: iterations,
+        remaining,
+        errors: aggregatedErrors.length ? aggregatedErrors : undefined
       },
       monitoring: {
         sessionId: monitoringResults.sessionId,
