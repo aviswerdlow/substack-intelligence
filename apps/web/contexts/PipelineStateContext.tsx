@@ -263,17 +263,17 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
   const handleStreamUpdate = useCallback((update: PipelineUpdate) => {
     // Ignore heartbeats
     if (update.type === 'heartbeat') return;
-    
+
     setState(prev => {
       let newState = { ...prev };
-      
+
       switch (update.type) {
         case 'connected':
           newState.isConnected = true;
           newState.connectionError = null;
           addActivityLog('Connected to pipeline stream', 'success');
           break;
-          
+
         case 'status':
           if (update.status) newState.status = update.status;
           if (update.progress !== undefined) newState.progress = update.progress;
@@ -281,7 +281,7 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
           if (update.stats) newState.metrics = update.stats;
           addActivityLog(update.message || 'Status update', 'info');
           break;
-          
+
         case 'emails_fetched':
           newState.status = 'fetching';
           if (update.emailCount) newState.totalEmails = update.emailCount;
@@ -289,7 +289,7 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
           if (update.stats) newState.metrics = update.stats;
           addActivityLog(`Found ${update.emailCount || 0} newsletters to analyze`, 'info');
           break;
-          
+
         case 'processing_email':
           newState.status = 'processing';
           if (update.currentEmail !== undefined) newState.currentEmail = update.currentEmail;
@@ -298,7 +298,7 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
           if (update.message) newState.message = update.message;
           if (update.stats) newState.metrics = update.stats;
           break;
-          
+
         case 'company_discovered':
           if (update.company) {
             const discovery: CompanyDiscovery = {
@@ -312,7 +312,7 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
           }
           if (update.stats) newState.metrics = update.stats;
           break;
-          
+
         case 'complete':
           newState.status = 'complete';
           newState.progress = 100;
@@ -328,23 +328,8 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
             title: 'Pipeline Complete',
             description: `Discovered ${newState.metrics.companiesExtracted} companies from ${newState.metrics.emailsFetched} emails`,
           });
-
-          // Important: Disconnect from stream after completion to prevent auto-reconnect
-          // This prevents the EventSource from reconnecting and fetching stale updates
-          setTimeout(() => {
-            disconnectFromStream();
-            // Reset to idle state after a short delay
-            setTimeout(() => {
-              setState(prev => ({
-                ...prev,
-                status: 'idle',
-                progress: 0,
-                message: ''
-              }));
-            }, 2000);
-          }, 100);
           break;
-          
+
         case 'error':
           newState.status = 'error';
           newState.endTime = new Date();
@@ -360,28 +345,14 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
             description: update.message || 'An error occurred during pipeline execution',
             variant: 'destructive'
           });
-
-          // Disconnect from stream after error to prevent auto-reconnect
-          setTimeout(() => {
-            disconnectFromStream();
-            // Reset to idle state after a short delay
-            setTimeout(() => {
-              setState(prev => ({
-                ...prev,
-                status: 'idle',
-                progress: 0,
-                message: ''
-              }));
-            }, 2000);
-          }, 100);
           break;
       }
-      
+
       // Calculate processing rate
       if (newState.startTime && newState.currentEmail > 0) {
         const elapsed = (Date.now() - newState.startTime.getTime()) / 1000 / 60; // in minutes
         newState.metrics.processingRate = Math.round(newState.currentEmail / elapsed);
-        
+
         // Estimate remaining time
         if (newState.totalEmails > 0) {
           const remaining = newState.totalEmails - newState.currentEmail;
@@ -389,10 +360,10 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
           newState.estimatedTimeRemaining = Math.round(estimatedMinutes * 60); // in seconds
         }
       }
-      
+
       return newState;
     });
-  }, [toast, addActivityLog, disconnectFromStream]);
+  }, [toast, addActivityLog]);
   
   // Connect to SSE stream
   const connectToStream = useCallback(() => {
@@ -582,12 +553,33 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, activityLog: [] }));
   }, []);
   
+  // Handle disconnection after completion or error
+  useEffect(() => {
+    if (state.status === 'complete' || state.status === 'error') {
+      // Disconnect from stream after terminal state to prevent auto-reconnect
+      const disconnectTimer = setTimeout(() => {
+        disconnectFromStream();
+        // Reset to idle state after a short delay
+        const resetTimer = setTimeout(() => {
+          setState(prev => ({
+            ...prev,
+            status: 'idle',
+            progress: 0,
+            message: ''
+          }));
+        }, 2000);
+        return () => clearTimeout(resetTimer);
+      }, 100);
+      return () => clearTimeout(disconnectTimer);
+    }
+  }, [state.status, disconnectFromStream]);
+
   // Check freshness on mount only once
   useEffect(() => {
     checkDataFreshness();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - only run once on mount
-  
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
