@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
     let processedCount = 0;
     let companiesExtracted = 0;
     const errors: string[] = [];
+    let followUpTriggered = false;
     let totalQueued = 0;
     
     while (Date.now() - startTime < maxProcessingTime) {
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
       }
       
       if (!pendingEmails || pendingEmails.length === 0) {
+        console.log(`[Background] No more pending emails for user ${userId}, exiting loop.`);
         break;
       }
       
@@ -269,7 +271,12 @@ export async function POST(request: NextRequest) {
 
     let followUpTriggered = false;
     if (remaining > 0) {
-      console.log(`[Background] ${remaining} emails still pending for user ${userId}. Scheduling follow-up run...`);
+      const followUpBatchSize = Math.min(normalizedBatchSize, remaining);
+      console.log(`[Background] ${remaining} emails still pending for user ${userId}. Scheduling follow-up run with batch size ${followUpBatchSize}...`);
+      console.log('[Background] Follow-up request details:', {
+        url: followUpUrl.toString(),
+        forwardedHeaders: Object.keys(followUpHeaders)
+      });
       try {
         const followUpResponse = await fetch(followUpUrl.toString(), {
           method: 'POST',
@@ -281,7 +288,7 @@ export async function POST(request: NextRequest) {
           cache: 'no-store',
           body: JSON.stringify({
             userId,
-            batchSize: Math.min(normalizedBatchSize, remaining)
+            batchSize: followUpBatchSize
           })
         });
 
