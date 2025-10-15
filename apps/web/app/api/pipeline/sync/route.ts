@@ -158,10 +158,18 @@ export async function POST(request: NextRequest) {
       });
 
       if (!response.ok) {
-        const details = await response.json().catch(() => ({}));
+        const rawBody = await response.text().catch(() => '');
+        let details: any = rawBody;
+        try {
+          details = rawBody ? JSON.parse(rawBody) : {};
+        } catch {
+          // keep raw body string
+        }
         console.error('[Pipeline Sync] Background trigger failed', {
           status: response.status,
-          details
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          body: details
         });
         monitor.completeStep('background_trigger', { triggered: false, status: response.status });
 
@@ -191,7 +199,11 @@ export async function POST(request: NextRequest) {
         }, { status: 500 });
       }
 
-      backgroundResult = await response.json().catch(() => null);
+      backgroundResult = await response.json().catch(async () => {
+        const text = await response.text().catch(() => '');
+        console.warn('[Pipeline Sync] Background response not JSON. Raw body:', text);
+        return null;
+      });
       monitor.completeStep('background_trigger', { triggered: true, result: backgroundResult });
       console.log('[Pipeline Sync] Background processing trigger acknowledged', backgroundResult);
     } catch (error) {
