@@ -322,12 +322,27 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
           newState.dataFreshness = 'fresh';
           if (update.stats) newState.metrics = update.stats;
           addActivityLog('Pipeline completed successfully', 'success');
-          
+
           // Show success toast
           toast({
             title: 'Pipeline Complete',
             description: `Discovered ${newState.metrics.companiesExtracted} companies from ${newState.metrics.emailsFetched} emails`,
           });
+
+          // Important: Disconnect from stream after completion to prevent auto-reconnect
+          // This prevents the EventSource from reconnecting and fetching stale updates
+          setTimeout(() => {
+            disconnectFromStream();
+            // Reset to idle state after a short delay
+            setTimeout(() => {
+              setState(prev => ({
+                ...prev,
+                status: 'idle',
+                progress: 0,
+                message: ''
+              }));
+            }, 2000);
+          }, 100);
           break;
           
         case 'error':
@@ -338,13 +353,27 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
             newState.connectionError = update.message;
             addActivityLog(`Error: ${update.message}`, 'error');
           }
-          
+
           // Show error toast
           toast({
             title: 'Pipeline Error',
             description: update.message || 'An error occurred during pipeline execution',
             variant: 'destructive'
           });
+
+          // Disconnect from stream after error to prevent auto-reconnect
+          setTimeout(() => {
+            disconnectFromStream();
+            // Reset to idle state after a short delay
+            setTimeout(() => {
+              setState(prev => ({
+                ...prev,
+                status: 'idle',
+                progress: 0,
+                message: ''
+              }));
+            }, 2000);
+          }, 100);
           break;
       }
       
@@ -363,7 +392,7 @@ export function PipelineStateProvider({ children }: { children: ReactNode }) {
       
       return newState;
     });
-  }, [toast, addActivityLog]);
+  }, [toast, addActivityLog, disconnectFromStream]);
   
   // Connect to SSE stream
   const connectToStream = useCallback(() => {

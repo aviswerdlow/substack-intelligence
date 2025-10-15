@@ -86,9 +86,17 @@ export async function getPipelineUpdates(userId: string): Promise<any[]> {
       return [];
     }
   } else {
-    // Development: Return from in-memory Map
+    // Development: Return from in-memory Map and then clear them (consume on read)
     const updates = inMemoryUpdates.get(userId) || [];
     console.log('[PIPELINE-UPDATES:DEBUG] Fetched', updates.length, 'updates from memory for user:', userId);
+
+    // In dev mode, immediately clear updates after fetching to simulate consumption
+    // This prevents stale updates from being re-sent when EventSource reconnects
+    if (updates.length > 0) {
+      inMemoryUpdates.delete(userId);
+      console.log('[PIPELINE-UPDATES:DEBUG] Cleared consumed updates from memory');
+    }
+
     return updates;
   }
 }
