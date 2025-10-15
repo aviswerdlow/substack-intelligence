@@ -618,6 +618,8 @@ export async function POST(request: NextRequest) {
       const processingStartTime = Date.now();
       const maxProcessingTime = 240000; // 4 minutes for processing (conservative with 5min total limit)
       let processedInThisRun = 0;
+      let skippedDueToContent = 0;
+      let skippedDueToAIError = 0;
       const emailsToProcess = [...dbEmails]; // Copy array to track remaining
 
       console.log('[PIPELINE:DEBUG] Starting email processing loop');
@@ -726,10 +728,17 @@ export async function POST(request: NextRequest) {
           try {
             console.log(`Processing email ${i + 1}/${dbEmails.length}: ${email.subject || email.newsletter_name}`);
             
-            // Skip if no content
+            // Skip if no content (reduced threshold to 20 chars from 100)
             const content = email.clean_text || email.raw_html || '';
-            if (!content || content.trim().length < 100) {
-              console.log(`Skipping email ${email.id} - insufficient content`);
+            if (!content || content.trim().length < 20) {
+              console.log(`[PIPELINE:DEBUG] Skipping email ${email.id} - insufficient content (${content.trim().length} chars)`);
+              console.log(`[PIPELINE:DEBUG] Skipped email details:`, {
+                id: email.id,
+                subject: email.subject,
+                newsletter_name: email.newsletter_name,
+                contentLength: content.trim().length
+              });
+              skippedDueToContent++;
               continue;
             }
             
@@ -738,8 +747,14 @@ export async function POST(request: NextRequest) {
               email.newsletter_name || 'Unknown Newsletter'
             );
           } catch (aiError) {
-            console.error(`Failed to extract from email ${email.id}:`, aiError);
-            console.error(`Email subject: ${email.subject}, Newsletter: ${email.newsletter_name}`);
+            console.error(`[PIPELINE:DEBUG] Failed to extract from email ${email.id}:`, aiError);
+            console.error(`[PIPELINE:DEBUG] AI extraction error details:`, {
+              emailId: email.id,
+              subject: email.subject,
+              newsletter: email.newsletter_name,
+              error: aiError instanceof Error ? aiError.message : 'Unknown AI error'
+            });
+            skippedDueToAIError++;
             // Skip this email and continue with others
             await pushPipelineUpdate(userId, {
               type: 'processing_email',
@@ -974,13 +989,23 @@ export async function POST(request: NextRequest) {
             `Failed to process email: ${email.subject}`,
             { emailId: email.id, error: emailError instanceof Error ? emailError.message : 'Unknown error' }
           );
-          
-          processedInThisRun++; // Count as processed even if failed
+
+          // Note: Do NOT count this as processed since it failed during processing
         }
       }
       
+      // Log processing summary
+      console.log('[PIPELINE:DEBUG] Email processing summary:', {
+        totalAttempted: dbEmails.length,
+        successfullyProcessed: processedInThisRun,
+        skippedDueToContent: skippedDueToContent,
+        skippedDueToAIError: skippedDueToAIError,
+        totalSkipped: skippedDueToContent + skippedDueToAIError,
+        processingRate: `${Math.round(processedInThisRun / dbEmails.length * 100)}%`
+      });
+
       monitor.completeStep('company_extraction', {
-        emailsProcessed: dbEmails.length,
+        emailsProcessed: processedInThisRun, // Changed to actual processed count
         totalCompaniesExtracted,
         newCompaniesCount,
         totalMentions
