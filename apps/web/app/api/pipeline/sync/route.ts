@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
+import type { Database } from '@substack-intelligence/database';
 import { GmailConnector } from '@substack-intelligence/ingestion';
 import { ClaudeExtractor } from '@substack-intelligence/ai';
 import { PipelineMonitor, createPipelineAlert, logPipelineHealthCheck } from '@/lib/monitoring/pipeline-metrics';
@@ -422,23 +423,38 @@ export async function POST(request: NextRequest) {
       let storedCount = 0;
       for (const email of emails) {
         try {
+          // Normalize timestamps
+          const receivedAt =
+            email.receivedAt instanceof Date
+              ? email.receivedAt.toISOString()
+              : typeof email.receivedAt === 'string'
+                ? email.receivedAt
+                : new Date().toISOString();
+          const processedAt =
+            email.processedAt instanceof Date
+              ? email.processedAt.toISOString()
+              : typeof email.processedAt === 'string'
+                ? email.processedAt
+                : new Date().toISOString();
+
           // Build email data object matching the database schema
           const emailData = {
             user_id: userId,
-            message_id: email.id || `${email.date}_${email.from}`, // Gmail message ID
+            message_id: email.messageId || email.id || `${receivedAt}_${email.sender || 'unknown'}`,
             subject: email.subject || 'No Subject',
-            sender: email.from || 'Unknown', // Sender field is required
-            newsletter_name: email.from || 'Unknown',
+            sender: email.sender || 'Unknown',
+            newsletter_name: email.newsletterName || email.sender || 'Unknown',
             raw_html: email.html || email.text || '',
             clean_text: email.text || '',
-            received_at: email.date || new Date().toISOString(),
-            processing_status: 'pending',
-            extraction_status: 'pending',
+            received_at: receivedAt,
+            processed_at: processedAt,
+            processing_status: 'pending' as const,
+            extraction_status: 'pending' as const,
             extraction_started_at: null,
             extraction_completed_at: null,
             extraction_error: null,
             companies_extracted: 0
-          };
+          } satisfies Database['public']['Tables']['emails']['Insert'];
 
           // Try to insert the email (will fail if it already exists due to unique constraints)
           const { error: insertError } = await supabaseForEmails
