@@ -124,7 +124,17 @@ export async function POST(request: NextRequest) {
         ? `https://${process.env.VERCEL_URL}`
         : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   const backgroundUrl = new URL('/api/pipeline/process-background', origin);
+  const forwardAuthHeaders: Record<string, string> = {};
+  for (const [key, value] of request.headers.entries()) {
+    if (key === 'cookie' || key === 'authorization' || key.startsWith('x-clerk-')) {
+      forwardAuthHeaders[key] = value;
+    }
+  }
   console.log('[Pipeline Sync] Background processing URL:', backgroundUrl.toString());
+  console.log('[Pipeline Sync] Forwarding auth headers to background worker:', {
+    forwardedKeys: Object.keys(forwardAuthHeaders),
+    hasCookie: Object.prototype.hasOwnProperty.call(forwardAuthHeaders, 'cookie')
+  });
 
   const triggerBackgroundProcessing = async (
     queuedEmails: number,
@@ -151,7 +161,9 @@ export async function POST(request: NextRequest) {
       const response = await fetch(backgroundUrl.toString(), {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...forwardAuthHeaders
         },
         cache: 'no-store',
         body: JSON.stringify(backgroundPayload)
