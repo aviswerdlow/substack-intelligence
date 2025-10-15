@@ -113,6 +113,19 @@ export async function POST(request: NextRequest) {
     }
   }, (maxDuration - 10) * 1000); // Release lock 10 seconds before max timeout
 
+  const forwardedHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
+  const forwardedProto =
+    request.headers.get('x-forwarded-proto') ??
+    (forwardedHost && forwardedHost.startsWith('localhost') ? 'http' : 'https');
+  const origin =
+    forwardedHost
+      ? `${forwardedProto}://${forwardedHost}`
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const backgroundUrl = new URL('/api/pipeline/process-background', origin);
+  console.log('[Pipeline Sync] Background processing URL:', backgroundUrl.toString());
+
   const triggerBackgroundProcessing = async (
     queuedEmails: number,
     options: {
@@ -135,11 +148,12 @@ export async function POST(request: NextRequest) {
     let backgroundResult: any = null;
 
     try {
-      const response = await fetch(backgroundUrl, {
+      const response = await fetch(backgroundUrl.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
+        cache: 'no-store',
         body: JSON.stringify(backgroundPayload)
       });
 
