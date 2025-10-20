@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 interface PipelineStatus {
@@ -77,6 +77,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<Error | null>(null);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [syncInterval, setSyncInterval] = useState(30); // 30 minutes default
+  const lastAutoSyncRef = useRef(0);
   
   // Check pipeline status
   const checkStatus = useCallback(async () => {
@@ -205,19 +206,29 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   // Auto-sync logic
   useEffect(() => {
     if (!autoSyncEnabled) return;
-    
-    // Check every minute if we need to sync
-    const interval = setInterval(async () => {
-      await checkStatus();
-      
-      if (pipelineStatus && !pipelineStatus.dataIsFresh && !isSyncing) {
-        console.log('Auto-syncing stale data...');
-        await syncPipeline();
-      }
-    }, 60 * 1000); // Check every minute
-    
-    return () => clearInterval(interval);
-  }, [autoSyncEnabled, pipelineStatus, isSyncing, checkStatus, syncPipeline]);
+    if (!pipelineStatus) return;
+    if (isSyncing) return;
+
+    const activeStatuses: PipelineStatus['status'][] = ['fetching', 'extracting'];
+    if (activeStatuses.includes(pipelineStatus.status)) return;
+
+    const now = Date.now();
+    const fifteenMinutes = 15 * 60 * 1000;
+
+    let lastSyncMs = 0;
+    if (pipelineStatus.lastSync instanceof Date) {
+      lastSyncMs = pipelineStatus.lastSync.getTime();
+    } else if (typeof pipelineStatus.lastSync === 'string') {
+      lastSyncMs = Date.parse(pipelineStatus.lastSync);
+    }
+
+    if (lastSyncMs && now - lastSyncMs < fifteenMinutes) return;
+    if (now - lastAutoSyncRef.current < 5 * 60 * 1000) return;
+
+    lastAutoSyncRef.current = now;
+    console.log('Auto-sync triggered (stale data detected)');
+    void syncPipeline();
+  }, [autoSyncEnabled, pipelineStatus, isSyncing, syncPipeline]);
   
   // Poll for status updates while syncing
   useEffect(() => {
