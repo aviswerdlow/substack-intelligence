@@ -167,7 +167,8 @@ describe('Pipeline Sync Route Integration Tests', () => {
           emailsFetched: expect.any(Number),
           companiesExtracted: expect.any(Number),
           newCompanies: expect.any(Number),
-          totalMentions: expect.any(Number)
+          totalMentions: expect.any(Number),
+          failedEmails: expect.any(Number)
         }
       });
     });

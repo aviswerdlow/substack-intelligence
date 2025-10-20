@@ -39,6 +39,7 @@ interface PipelineUpdate {
     companiesExtracted: number;
     newCompanies: number;
     totalMentions: number;
+    failedEmails: number;
   };
   currentEmail?: number;
   totalEmails?: number;
@@ -63,7 +64,8 @@ export function PipelineProgressCard() {
     emailsFetched: 0,
     companiesExtracted: 0,
     newCompanies: 0,
-    totalMentions: 0
+    totalMentions: 0,
+    failedEmails: 0
   });
   const [companiesDiscovered, setCompaniesDiscovered] = useState<CompanyDiscovery[]>([]);
   const [activityLog, setActivityLog] = useState<string[]>([]);

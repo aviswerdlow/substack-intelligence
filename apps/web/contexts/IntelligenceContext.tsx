@@ -13,6 +13,7 @@ interface PipelineStatus {
     companiesExtracted: number;
     newCompanies: number;
     totalMentions: number;
+    failedEmails: number;
   };
   dataIsFresh: boolean;
   nextSyncIn: number;
@@ -58,7 +59,8 @@ const defaultPipelineStatus: PipelineStatus = {
     emailsFetched: 0,
     companiesExtracted: 0,
     newCompanies: 0,
-    totalMentions: 0
+    totalMentions: 0,
+    failedEmails: 0
   },
   dataIsFresh: false,
   nextSyncIn: 0

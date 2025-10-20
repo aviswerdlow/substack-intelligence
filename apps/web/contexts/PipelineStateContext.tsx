@@ -21,6 +21,7 @@ export interface PipelineMetrics {
   companiesExtracted: number;
   newCompanies: number;
   totalMentions: number;
+  failedEmails: number;
   processingRate: number; // emails per minute
 }
 
@@ -60,6 +61,7 @@ export interface PipelineUpdate {
   timestamp?: string;
   processedCount?: number;
   companiesExtracted?: number;
+  failedCount?: number;
 }
 
 // Pipeline state
@@ -129,6 +131,7 @@ const initialState: PipelineState = {
     companiesExtracted: 0,
     newCompanies: 0,
     totalMentions: 0,
+    failedEmails: 0,
     processingRate: 0
   },
   currentEmail: 0,

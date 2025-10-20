@@ -6,6 +6,7 @@ interface PipelineMetrics {
   companiesExtracted: number;
   newCompanies: number;
   totalMentions: number;
+  failedEmails: number;
   
   // Error metrics
   errors: Array<{
@@ -55,6 +56,7 @@ class PipelineMonitor {
       companiesExtracted: 0,
       newCompanies: 0,
       totalMentions: 0,
+      failedEmails: 0,
       errors: [],
       gmailApiCalls: 0,
       extractionApiCalls: 0,
@@ -259,6 +261,7 @@ class PipelineMonitor {
         emailsFetched: this.metrics.emailsFetched,
         emailsProcessed: this.metrics.emailsProcessed,
         companiesExtracted: this.metrics.companiesExtracted,
+        failedEmails: this.metrics.failedEmails,
         avgTimePerEmail: this.metrics.emailsProcessed! > 0 
           ? Math.round(this.metrics.executionTime! / this.metrics.emailsProcessed!) 
           : 0,
@@ -281,9 +284,9 @@ class PipelineMonitor {
     const errors = this.metrics.errors!.length;
     
     if (errors === 0) {
-      return `Pipeline completed successfully in ${duration}s. Processed ${this.metrics.emailsProcessed} emails, extracted ${this.metrics.companiesExtracted} companies.`;
+      return `Pipeline completed successfully in ${duration}s. Processed ${this.metrics.emailsProcessed} emails, extracted ${this.metrics.companiesExtracted} companies${this.metrics.failedEmails ? `, ${this.metrics.failedEmails} failed` : ''}.`;
     } else {
-      return `Pipeline completed with ${errors} errors in ${duration}s. Processed ${this.metrics.emailsProcessed} emails, extracted ${this.metrics.companiesExtracted} companies.`;
+      return `Pipeline completed with ${errors} errors in ${duration}s. Processed ${this.metrics.emailsProcessed} emails, extracted ${this.metrics.companiesExtracted} companies${this.metrics.failedEmails ? `, ${this.metrics.failedEmails} failed` : ''}.`;
     }
   }
 
