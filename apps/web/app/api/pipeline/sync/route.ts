@@ -564,7 +564,8 @@ export async function POST(request: NextRequest) {
         emailsFetched: 0,
         companiesExtracted: 0,
         newCompanies: 0,
-        totalMentions: 0
+        totalMentions: 0,
+        failedEmails: 0
       }
     };
     
