@@ -76,7 +76,7 @@ export class GmailConnector {
     }
   }
 
-  async fetchDailySubstacks(daysBack: number = 30, userId?: string): Promise<ProcessedEmail[]> {
+  async fetchDailySubstacks(daysBack: number = 30, userId?: string, options?: { startDate?: Date; endDate?: Date }): Promise<ProcessedEmail[]> {
     const startTime = Date.now();
     
     // Ensure Gmail client is initialized (for Clerk OAuth)
@@ -101,13 +101,24 @@ export class GmailConnector {
         daysBack
       });
       
-      // Calculate date range for the past N days
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - daysBack);
+      // Calculate date range
+      let startDate = options?.startDate ? new Date(options.startDate) : new Date();
+      if (!options?.startDate) {
+        startDate.setDate(startDate.getDate() - daysBack);
+      }
       startDate.setHours(0, 0, 0, 0);
-      
-      const endDate = new Date();
+
+      let endDate = options?.endDate ? new Date(options.endDate) : new Date();
       endDate.setHours(23, 59, 59, 999);
+
+      if (startDate > endDate) {
+        startDate = new Date(endDate.getTime() - 24 * 60 * 60 * 1000);
+        startDate.setHours(0, 0, 0, 0);
+      }
+
+      if (options?.startDate) {
+        console.log('[GmailConnector] Incremental fetch start date override:', startDate.toISOString());
+      }
       
       // Build Gmail search query
       const query = [

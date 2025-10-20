@@ -30,7 +30,8 @@ let pipelineStatus = {
     emailsFetched: 0,
     companiesExtracted: 0,
     newCompanies: 0,
-    totalMentions: 0
+    totalMentions: 0,
+    failedEmails: 0
   }
 };
 
@@ -148,6 +149,7 @@ export async function POST(request: NextRequest) {
     let remaining = queuedEmails;
     let totalProcessed = 0;
     let totalCompaniesExtracted = 0;
+    let totalFailed = 0;
     let iterations = 0;
     const aggregatedErrors: string[] = [];
 
@@ -171,6 +173,7 @@ export async function POST(request: NextRequest) {
 
         totalProcessed += result.processed;
         totalCompaniesExtracted += result.companiesExtracted;
+        totalFailed += result.failed;
         if (result.errors?.length) {
           aggregatedErrors.push(...result.errors);
         }
@@ -225,16 +228,11 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    console.log('[Pipeline Sync] Background processing summary', {
-      totalProcessed,
-      totalCompaniesExtracted,
-      remaining,
-      iterations,
-      aggregatedErrors
-    });
+    console.log('[Pipeline Sync] Background processing summary', { totalProcessed, totalCompaniesExtracted, remaining, iterations, aggregatedErrors, totalFailed });
 
     pipelineStatus.stats.companiesExtracted = totalCompaniesExtracted;
     pipelineStatus.stats.totalMentions = totalCompaniesExtracted;
+    pipelineStatus.stats.failedEmails = totalFailed;
     pipelineStatus.progress = remaining > 0 ? 90 : 100;
     pipelineStatus.lastSync = new Date();
     pipelineStatus.status = options.statusOverride ?? 'complete';
@@ -244,6 +242,17 @@ export async function POST(request: NextRequest) {
         : 'Pipeline completed successfully'
     );
 
+    if (aggregatedErrors.length) {
+      await pushPipelineUpdate(userId, {
+        type: 'status',
+        status: 'extracting',
+        progress: pipelineStatus.progress,
+        message: `Encountered ${aggregatedErrors.length} Claude issues across ${totalFailed} emails; continuing with remaining ${remaining}.`,
+        stats: pipelineStatus.stats,
+        failedCount: totalFailed,
+        errors: aggregatedErrors
+      });
+    }
     if (remaining > 0) {
       await pushPipelineUpdate(userId, {
         type: 'partial_completion',
@@ -251,7 +260,8 @@ export async function POST(request: NextRequest) {
         progress: pipelineStatus.progress,
         message: pipelineStatus.message,
         stats: pipelineStatus.stats,
-        remainingCount: remaining
+        remainingCount: remaining,
+        failedCount: totalFailed
       });
     } else {
       await pushPipelineUpdate(userId, {
@@ -259,7 +269,8 @@ export async function POST(request: NextRequest) {
         status: 'complete',
         progress: 100,
         message: `Discovered ${totalCompaniesExtracted} companies from ${pipelineStatus.stats.emailsFetched} newsletters`,
-        stats: pipelineStatus.stats
+        stats: pipelineStatus.stats,
+        failedCount: totalFailed
       });
     }
 
@@ -267,6 +278,7 @@ export async function POST(request: NextRequest) {
     monitor.setMetric('companiesExtracted', totalCompaniesExtracted);
     monitor.setMetric('newCompanies', pipelineStatus.stats.newCompanies);
     monitor.setMetric('totalMentions', pipelineStatus.stats.totalMentions);
+    monitor.setMetric('failedEmails', totalFailed);
 
     const monitoringResults = monitor.complete(true, pipelineStatus.stats);
 
@@ -277,7 +289,17 @@ export async function POST(request: NextRequest) {
       batchSize,
       runs: iterations,
       remaining,
-      aggregatedErrors: aggregatedErrors.length
+      aggregatedErrors: aggregatedErrors.length,
+      failed: totalFailed
+    });
+
+    console.log('[Pipeline Sync] Background trigger completed', {
+      queued: remaining > 0,
+      batchSize,
+      runs: iterations,
+      remaining,
+      aggregatedErrors: aggregatedErrors.length,
+      failed: totalFailed
     });
 
     return NextResponse.json({
@@ -288,7 +310,8 @@ export async function POST(request: NextRequest) {
         batchSize,
         runs: iterations,
         remaining,
-        errors: aggregatedErrors.length ? aggregatedErrors : undefined
+        errors: aggregatedErrors.length ? aggregatedErrors : undefined,
+        failed: totalFailed
       },
       monitoring: {
         sessionId: monitoringResults.sessionId,
@@ -575,7 +598,27 @@ export async function POST(request: NextRequest) {
         hasRefreshToken: useClerkOAuth ? 'N/A' : !!gmailTokens?.refreshToken
       });
       
+      const supabaseForEmails = createServiceRoleClient();
       let connector;
+
+      let startDateOverride: Date | undefined;
+      try {
+        const { data: lastEmail } = await supabaseForEmails
+          .from('emails')
+          .select('received_at')
+          .eq('user_id', userId)
+          .order('received_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (lastEmail?.received_at) {
+          const lastDate = new Date(lastEmail.received_at);
+          startDateOverride = new Date(lastDate.getTime() - 60 * 60 * 1000);
+          console.log('[Pipeline Sync] Using incremental Gmail fetch since', startDateOverride.toISOString());
+        }
+      } catch (incrementalError) {
+        console.warn('[Pipeline Sync] Failed to compute incremental start date', incrementalError);
+      }
       if (useClerkOAuth) {
         console.log('[Pipeline Sync] Initializing GmailConnector with Clerk OAuth for user:', userId);
         // Use Clerk OAuth - GmailConnector will fetch tokens from Clerk as needed
@@ -589,7 +632,7 @@ export async function POST(request: NextRequest) {
       const fetchStartTime = Date.now();
 
       // Add timeout to Gmail fetch to prevent hanging (40 seconds max)
-      const fetchPromise = connector.fetchDailySubstacks(options.daysBack, userId);
+      const fetchPromise = connector.fetchDailySubstacks(options.daysBack, userId, { startDate: startDateOverride });
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Gmail fetch timed out after 40 seconds')), 40000)
       );
@@ -606,7 +649,6 @@ export async function POST(request: NextRequest) {
 
       // Store fetched emails in the database if they don't already exist
       console.log('[PIPELINE:DEBUG] Storing fetched emails in database...');
-      const supabaseForEmails = createServiceRoleClient();
 
       // Store emails one by one to ensure they have pending status
       let storedCount = 0;

@@ -4,12 +4,17 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { ExtractionResultSchema, hashContent } from '@substack-intelligence/shared';
 
+const REDIS_PLACEHOLDER_MARKERS = ['your-redis', 'example', 'localhost', 'changeme'];
+
 export class ClaudeExtractor {
   private client!: Anthropic;
   private ratelimit: Ratelimit | null = null;
   private cache: Redis | null = null;
   private maxRetries: number = 3;
   private baseDelay: number = 1000; // 1 second base delay
+  private requestTimeoutMs: number = Math.max(5000, Number(process.env.CLAUDE_REQUEST_TIMEOUT_MS) || 12000);
+  private rateLimitDisabled: boolean = false;
+  private cacheDisabled: boolean = false;
   private isInitialized: boolean = false;
   
   constructor(client?: Anthropic) {
@@ -31,6 +36,49 @@ export class ClaudeExtractor {
       console.error('[ClaudeExtractor] ❌ Constructor failed:', error);
       throw new Error(`ClaudeExtractor initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  private normalizeClaudeError(error: any): any {
+    if (error?.name === 'AbortError') {
+      const timeoutError = new Error(`Claude request timed out after ${this.requestTimeoutMs}ms`);
+      timeoutError.name = 'ClaudeTimeoutError';
+      return timeoutError;
+    }
+
+    return error;
+  }
+
+  private shouldEnableRedis(redisUrl?: string | null, redisToken?: string | null): boolean {
+    if (!redisUrl || !redisToken) {
+      return false;
+    }
+
+    const normalizedUrl = redisUrl.trim().toLowerCase();
+    const normalizedToken = redisToken.trim().toLowerCase();
+
+    return !REDIS_PLACEHOLDER_MARKERS.some(marker =>
+      normalizedUrl.includes(marker) || normalizedToken.includes(marker)
+    );
+  }
+
+  private disableRateLimiting(error?: unknown) {
+    if (!this.rateLimitDisabled && error) {
+      console.warn('[ClaudeExtractor] ⚠️ Disabling rate limiting after error:', error instanceof Error ? error.message : error);
+    } else if (!this.rateLimitDisabled) {
+      console.warn('[ClaudeExtractor] ⚠️ Disabling rate limiting');
+    }
+    this.ratelimit = null;
+    this.rateLimitDisabled = true;
+  }
+
+  private disableCache(error?: unknown) {
+    if (!this.cacheDisabled && error) {
+      console.warn('[ClaudeExtractor] ⚠️ Disabling Redis cache after error:', error instanceof Error ? error.message : error);
+    } else if (!this.cacheDisabled) {
+      console.warn('[ClaudeExtractor] ⚠️ Disabling Redis cache');
+    }
+    this.cache = null;
+    this.cacheDisabled = true;
   }
 
   private initializeProductionClient() {
@@ -67,22 +115,36 @@ export class ClaudeExtractor {
 
   private initializeOptionalServices() {
     // Initialize Redis cache and rate limiting if available
-    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-      try {
-        this.cache = Redis.fromEnv();
-        this.ratelimit = new Ratelimit({
-          redis: this.cache,
-          limiter: Ratelimit.slidingWindow(100, '1 m'),
-          analytics: true
-        });
-        console.log('[ClaudeExtractor] ✅ Redis cache and rate limiting initialized');
-      } catch (error) {
-        console.warn('[ClaudeExtractor] ⚠️ Rate limiting initialization failed:', error);
-        this.cache = null;
-        this.ratelimit = null;
+    const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
+    const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+    this.rateLimitDisabled = false;
+    this.cacheDisabled = false;
+
+    if (!this.shouldEnableRedis(redisUrl, redisToken)) {
+      if (redisUrl || redisToken) {
+        console.warn('[ClaudeExtractor] ⚠️ Skipping Redis setup due to placeholder configuration');
+      } else {
+        console.log('[ClaudeExtractor] ℹ️ Redis not configured - rate limiting disabled');
       }
-    } else {
-      console.log('[ClaudeExtractor] ℹ️ Redis not configured - rate limiting disabled');
+      this.cache = null;
+      this.ratelimit = null;
+      return;
+    }
+
+    try {
+      this.cache = Redis.fromEnv();
+      this.ratelimit = new Ratelimit({
+        redis: this.cache,
+        limiter: Ratelimit.slidingWindow(100, '1 m'),
+        analytics: true
+      });
+      console.log('[ClaudeExtractor] ✅ Redis cache and rate limiting initialized');
+    } catch (error) {
+      console.warn('[ClaudeExtractor] ⚠️ Rate limiting initialization failed:', error instanceof Error ? error.message : error);
+      this.cache = null;
+      this.ratelimit = null;
+      this.cacheDisabled = true;
+      this.rateLimitDisabled = true;
     }
   }
 
@@ -117,6 +179,7 @@ export class ClaudeExtractor {
         console.log('[ClaudeExtractor] ✅ Rate limit check passed');
       } catch (error) {
         console.warn('[ClaudeExtractor] ⚠️ Rate limit check failed:', error);
+        this.disableRateLimiting(error);
         // Continue without rate limiting if rate limit service fails
       }
     }
@@ -132,6 +195,7 @@ export class ClaudeExtractor {
         }
       } catch (error) {
         console.warn('[ClaudeExtractor] ⚠️ Cache read failed:', error);
+        this.disableCache(error);
         // Continue without cache if cache service fails
       }
     }
@@ -151,6 +215,11 @@ export class ClaudeExtractor {
       let lastError: any;
       
       for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+        const controller = new AbortController();
+        const timeoutHandle = setTimeout(() => {
+          controller.abort();
+        }, this.requestTimeoutMs);
+
         try {
           console.log(`[ClaudeExtractor] 🔄 Attempt ${attempt}/${this.maxRetries}`);
           
@@ -170,27 +239,28 @@ export class ClaudeExtractor {
                 Exclude: public companies unless they're launching new ventures.
               `
             }]
-          });
+          }, { signal: controller.signal });
           
           console.log('[ClaudeExtractor] ✅ API call successful');
           console.log('[ClaudeExtractor] 📊 Response usage:', response.usage);
           break; // Success, exit retry loop
           
         } catch (apiError: any) {
-          lastError = apiError;
+          const normalizedError = this.normalizeClaudeError(apiError);
+          lastError = normalizedError;
           console.error(`[ClaudeExtractor] ❌ Attempt ${attempt} failed:`, {
-            error: apiError,
-            message: apiError?.message,
-            status: apiError?.status,
-            type: apiError?.type
+            error: normalizedError,
+            message: normalizedError?.message,
+            status: normalizedError?.status,
+            type: normalizedError?.type
           });
           
           // Check if error is retryable
-          const isRetryable = this.isRetryableError(apiError);
+          const isRetryable = this.isRetryableError(normalizedError);
           
           if (!isRetryable) {
             console.error('[ClaudeExtractor] 🛑 Non-retryable error, stopping attempts');
-            throw apiError;
+            throw normalizedError;
           }
           
           if (attempt < this.maxRetries) {
@@ -199,8 +269,10 @@ export class ClaudeExtractor {
             await this.sleep(delay);
           } else {
             console.error('[ClaudeExtractor] 💔 All retry attempts exhausted');
-            throw lastError;
+            throw normalizedError;
           }
+        } finally {
+          clearTimeout(timeoutHandle);
         }
       }
       
@@ -273,6 +345,7 @@ export class ClaudeExtractor {
           console.log('[ClaudeExtractor] ✅ Result cached successfully');
         } catch (cacheError) {
           console.warn('[ClaudeExtractor] ⚠️ Cache write failed:', cacheError);
+          this.disableCache(cacheError);
           // Continue without caching - this is not a critical failure
         }
       }
@@ -466,6 +539,15 @@ Return ONLY the JSON object, no additional text.`;
 
   // Helper method to determine if an error is retryable
   private isRetryableError(error: any): boolean {
+    if (!error) {
+      return false;
+    }
+
+    if (error?.name === 'ClaudeTimeoutError') {
+      console.log('[ClaudeExtractor] ⏱️ Timeout error - will retry');
+      return true;
+    }
+
     // Don't retry authentication errors
     if (error?.status === 401) {
       console.error('[ClaudeExtractor] 🔐 Authentication error - not retryable');

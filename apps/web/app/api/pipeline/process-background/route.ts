@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ...result,
-      followUpTriggered: false
+      followUpTriggered: result.remaining > 0
     });
   } catch (error) {
     console.error('[Background API] Background processing error:', error);

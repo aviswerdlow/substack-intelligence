@@ -15,6 +15,7 @@ export interface ProcessBackgroundResult {
   processed: number;
   remaining: number;
   companiesExtracted: number;
+  failed: number;
   errors?: string[];
 }
 
@@ -45,6 +46,7 @@ export async function processBackgroundEmails({
   let companiesExtracted = 0;
   const errors: string[] = [];
   let totalQueued = 0;
+  let failedCount = 0;
 
   while (Date.now() - startTime < maxProcessingTime) {
     const { data: pendingEmails, error: fetchError } = await supabase
@@ -75,16 +77,16 @@ export async function processBackgroundEmails({
         break;
       }
 
-      const nowIso = new Date().toISOString();
-
       try {
+        const processingIso = new Date().toISOString();
+
         await supabase
           .from('emails')
           .update({
             processing_status: 'processing',
             extraction_status: 'processing',
-            extraction_started_at: nowIso,
-            processed_at: nowIso,
+            extraction_started_at: processingIso,
+            processed_at: processingIso,
             error_message: null,
             extraction_error: null
           })
@@ -92,13 +94,14 @@ export async function processBackgroundEmails({
 
         const content = email.clean_text || email.raw_html || '';
         if (!content || content.trim().length < 20) {
+          const completionIso = new Date().toISOString();
           await supabase
             .from('emails')
             .update({
               processing_status: 'completed',
               extraction_status: 'completed',
-              extraction_completed_at: nowIso,
-              processed_at: nowIso,
+              extraction_completed_at: completionIso,
+              processed_at: completionIso,
               companies_extracted: 0,
               error_message: null,
               extraction_error: null
@@ -113,6 +116,10 @@ export async function processBackgroundEmails({
           content,
           email.newsletter_name || 'Unknown Newsletter'
         );
+
+        if (extractionResult?.metadata?.error) {
+          throw new Error(extractionResult.metadata.error);
+        }
 
         console.log(`${logPrefix} Extracted ${extractionResult.companies.length} companies from email ${email.id}`);
 
@@ -186,13 +193,15 @@ export async function processBackgroundEmails({
           companiesExtracted++;
         }
 
+        const completionIso = new Date().toISOString();
+
         await supabase
           .from('emails')
           .update({
             processing_status: 'completed',
             extraction_status: 'completed',
-            extraction_completed_at: new Date().toISOString(),
-            processed_at: new Date().toISOString(),
+            extraction_completed_at: completionIso,
+            processed_at: completionIso,
             error_message: null,
             extraction_error: null,
             companies_extracted: companiesInEmail
@@ -201,7 +210,7 @@ export async function processBackgroundEmails({
 
         processedCount++;
 
-        pushPipelineUpdate(userId, {
+        await pushPipelineUpdate(userId, {
           type: 'background_progress',
           status: 'extracting',
           message: `Background: Processed ${processedCount} emails`,
@@ -213,6 +222,9 @@ export async function processBackgroundEmails({
         console.error(`${logPrefix} Failed to process email ${email.id}:`, error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         errors.push(`Email ${email.id}: ${errorMessage}`);
+        failedCount++;
+
+        const failureIso = new Date().toISOString();
 
         await supabase
           .from('emails')
@@ -221,11 +233,22 @@ export async function processBackgroundEmails({
             extraction_status: 'failed',
             extraction_error: errorMessage,
             error_message: errorMessage,
-            processed_at: new Date().toISOString()
+            processed_at: failureIso,
+            extraction_completed_at: failureIso
           })
           .eq('id', email.id);
 
         processedCount++;
+
+        await pushPipelineUpdate(userId, {
+          type: 'background_progress',
+          status: 'extracting',
+          message: `Background: Failed to process ${email.newsletter_name || 'newsletter'} (${errorMessage})`,
+          processedCount,
+          totalCount: totalQueued,
+          companiesExtracted,
+          failedCount
+        });
       }
     }
   }
@@ -257,14 +280,18 @@ export async function processBackgroundEmails({
     processed: processedCount,
     remaining,
     companiesExtracted,
+    failed: failedCount,
     errors: errors.length
   });
 
+  console.log(`${logPrefix} Finished background processor`, { processed: processedCount, remaining, companiesExtracted, failed: failedCount, errors: errors.length });
+
   return {
-    success: true,
+    success: errors.length === 0,
     processed: processedCount,
     remaining,
     companiesExtracted,
+    failed: failedCount,
     errors: errors.length > 0 ? errors : undefined
   };
 }

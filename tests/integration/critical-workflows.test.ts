@@ -114,7 +114,7 @@ describe('Critical Business Workflows', () => {
       }
 
       // Verify all steps were called
-      expect(mockGmailConnector.fetchDailySubstacks).toHaveBeenCalledWith(1);
+      expect(mockGmailConnector.fetchDailySubstacks).toHaveBeenCalledWith(1, undefined, expect.any(Object));
       expect(mockClaudeExtractor.extractCompanies).toHaveBeenCalled();
       expect(mockDatabase.from).toHaveBeenCalledWith('companies');
       expect(mockEmailService.sendCompanyAlert).toHaveBeenCalled();

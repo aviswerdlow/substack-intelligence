@@ -62,22 +62,41 @@ describe('Pipeline Sync Route Integration Tests', () => {
     }));
 
     // Mock database
-    vi.mock('@substack-intelligence/database', () => ({
-      createServiceRoleClient: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnThis(),
-          order: vi.fn().mockReturnThis(),
-          limit: vi.fn().mockReturnThis(),
-          eq: vi.fn().mockReturnThis(),
-          single: vi.fn().mockResolvedValue({
-            data: { id: 'company-1', mention_count: 1 },
-            error: null
-          }),
-          insert: vi.fn().mockResolvedValue({ data: { id: 'company-1' }, error: null }),
-          update: vi.fn().mockResolvedValue({ data: { id: 'company-1' }, error: null })
+    vi.mock('@substack-intelligence/database', () => {
+      const emailsTable = {
+        select: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        upsert: vi.fn().mockReturnThis(),
+        insert: vi.fn().mockResolvedValue({ data: [{ id: 'email-1' }], error: null }),
+        update: vi.fn().mockResolvedValue({ data: { id: 'email-1' }, error: null })
+      };
+      const companiesTable = {
+        select: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'company-1', mention_count: 1 }, error: null }),
+        single: vi.fn().mockResolvedValue({ data: { id: 'company-1', mention_count: 1 }, error: null }),
+        insert: vi.fn().mockResolvedValue({ data: { id: 'company-1' }, error: null }),
+        update: vi.fn().mockResolvedValue({ data: { id: 'company-1' }, error: null })
+      };
+      const mentionsTable = {
+        insert: vi.fn().mockResolvedValue({ data: { id: 'mention-1' }, error: null })
+      };
+
+      const mockClient = {
+        from: vi.fn((table: string) => {
+          if (table === 'emails') return emailsTable;
+          if (table === 'companies') return companiesTable;
+          if (table === 'company_mentions') return mentionsTable;
+          return emailsTable;
         })
-      })
-    }));
+      };
+
+      return { createServiceRoleClient: vi.fn(() => mockClient) };
+    });
 
     // Create a mock NextRequest
     mockRequest = {
