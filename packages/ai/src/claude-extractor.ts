@@ -203,7 +203,7 @@ export class ClaudeExtractor {
     try {
       console.log('[ClaudeExtractor] 🚀 Making API call to Claude...');
       console.log('[ClaudeExtractor] 📊 Request details:', {
-        model: 'claude-3-5-sonnet-latest',
+        model: 'claude-3-5-sonnet-20241022',
         max_tokens: 4000,
         temperature: 0.2,
         content_preview: content.slice(0, 100) + '...',
@@ -224,7 +224,7 @@ export class ClaudeExtractor {
           console.log(`[ClaudeExtractor] 🔄 Attempt ${attempt}/${this.maxRetries}`);
           
           response = await this.client.messages.create({
-            model: 'claude-3-5-sonnet-latest',
+            model: 'claude-3-5-sonnet-20241022',
             max_tokens: 4000,
             temperature: 0.2,
             system: this.getSystemPrompt(),
@@ -322,7 +322,7 @@ export class ClaudeExtractor {
           ...parsedResponse.metadata,
           processingTime: Date.now() - startTime,
           tokenCount: response.usage?.input_tokens || 0,
-          modelVersion: 'claude-3-5-sonnet-latest'
+          modelVersion: 'claude-3-5-sonnet-20241022'
         }
       };
       
@@ -396,7 +396,7 @@ export class ClaudeExtractor {
         metadata: {
           processingTime,
           tokenCount: 0,
-          modelVersion: 'claude-3-5-sonnet-latest',
+          modelVersion: 'claude-3-5-sonnet-20241022',
           error: error instanceof Error ? error.message : 'Unknown error',
           errorType: error?.constructor?.name || 'UnknownError',
           errorStatus: error?.status || null,
@@ -450,7 +450,7 @@ You must return ONLY a valid JSON object with this exact structure:
   "metadata": {
     "processingTime": 0,
     "tokenCount": 0,
-    "modelVersion": "claude-3-5-sonnet-latest"
+    "modelVersion": "claude-3-5-sonnet-20241022"
   }
 }
 
@@ -477,7 +477,7 @@ EXTRACTION RULES:
   "metadata": {
     "processingTime": 0,
     "tokenCount": 0,
-    "modelVersion": "claude-3-5-sonnet-latest"
+    "modelVersion": "claude-3-5-sonnet-20241022"
   }
 }
 
