@@ -102,6 +102,14 @@ function validateGmailOAuthConfig(): { isValid: boolean; missingVars: string[] }
 
 // POST endpoint to trigger unified pipeline
 export async function POST(request: NextRequest) {
+  // Immediate logging to confirm request received
+  console.log('==================== PIPELINE SYNC START ====================');
+  console.log('[SYNC-API] POST request received at /api/pipeline/sync');
+  console.log('[SYNC-API] Request method:', request.method);
+  console.log('[SYNC-API] Request URL:', request.url);
+  console.log('[SYNC-API] Request headers:', Object.fromEntries(request.headers.entries()));
+  console.log('[SYNC-API] Timestamp:', new Date().toISOString());
+
   const requestStartTime = Date.now(); // Track overall request start time
   const monitor = new PipelineMonitor();
   let userId = 'dev'; // Define userId outside try block for error handler access
@@ -545,9 +553,12 @@ export async function POST(request: NextRequest) {
     
     try {
       const body = await request.json();
+      console.log('[SYNC-API] Request body received:', body);
       options = { ...options, ...body };
-    } catch {
+      console.log('[SYNC-API] Final options after merge:', options);
+    } catch (e) {
       // Use defaults if no body
+      console.log('[SYNC-API] No body or invalid JSON, using defaults:', e);
     }
 
     // Check if data is fresh and skip if not forcing refresh
