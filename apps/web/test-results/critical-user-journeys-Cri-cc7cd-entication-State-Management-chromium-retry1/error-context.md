@@ -1,0 +1,50 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - heading "Get Started" [level=1] [ref=e6]
+        - paragraph [ref=e7]: Sign up with Google to automatically connect your Gmail for newsletter analysis
+        - paragraph [ref=e8]: We only read your newsletters - your personal emails remain private
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - generic [ref=e13]:
+            - heading "Create your account" [level=1] [ref=e14]
+            - paragraph [ref=e15]: Welcome! Please fill in the details to get started.
+          - generic [ref=e16]:
+            - button "Sign in with Google Continue with Google" [ref=e19] [cursor=pointer]:
+              - generic [ref=e20] [cursor=pointer]:
+                - img "Sign in with Google" [ref=e22] [cursor=pointer]
+                - generic [ref=e23] [cursor=pointer]: Continue with Google
+            - paragraph [ref=e26]: or
+            - generic [ref=e28]:
+              - generic [ref=e29]:
+                - generic [ref=e32]:
+                  - generic [ref=e34]: Email address
+                  - textbox "Email address" [ref=e35]
+                - generic [ref=e38]:
+                  - generic [ref=e40]: Password
+                  - generic [ref=e41]:
+                    - textbox "Password" [ref=e42]
+                    - button "Show password" [ref=e43] [cursor=pointer]:
+                      - img [ref=e44] [cursor=pointer]
+              - button "Continue" [ref=e49] [cursor=pointer]:
+                - generic [ref=e50] [cursor=pointer]:
+                  - text: Continue
+                  - img [ref=e51] [cursor=pointer]
+        - generic [ref=e53]:
+          - generic [ref=e54]:
+            - generic [ref=e55]: Already have an account?
+            - link "Sign in" [ref=e56] [cursor=pointer]:
+              - /url: http://localhost:3000/sign-in
+          - generic [ref=e58]:
+            - generic [ref=e60]:
+              - paragraph [ref=e61]: Secured by
+              - link "Clerk logo" [ref=e62] [cursor=pointer]:
+                - /url: https://go.clerk.com/components
+                - img [ref=e63] [cursor=pointer]
+            - paragraph [ref=e68]: Development mode
+  - alert [ref=e70]
+```
