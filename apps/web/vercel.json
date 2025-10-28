@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "installCommand": "pnpm install --no-frozen-lockfile || npm install",
+  "installCommand": "pnpm install --no-frozen-lockfile --registry https://r.cnpmjs.org",
   "buildCommand": "cd ../.. && pnpm run build --filter=web",
   "outputDirectory": ".next",
   "devCommand": "pnpm run dev",

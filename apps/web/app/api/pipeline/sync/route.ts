@@ -636,8 +636,11 @@ export async function POST(request: NextRequest) {
 
         if (lastEmail?.received_at) {
           const lastDate = new Date(lastEmail.received_at);
-          startDateOverride = new Date(lastDate.getTime() - 60 * 60 * 1000);
-          console.log('[Pipeline Sync] Using incremental Gmail fetch since', startDateOverride.toISOString());
+          // Look back 3 days from the last email to ensure we catch all new emails
+          // This accounts for weekends, delays, and any emails that might have been missed
+          startDateOverride = new Date(lastDate.getTime() - 3 * 24 * 60 * 60 * 1000); // 3 days back
+          console.log('[Pipeline Sync] Using incremental Gmail fetch since', startDateOverride.toISOString(),
+                      '(3 days before last email from', lastDate.toISOString(), ')');
         }
       } catch (incrementalError) {
         console.warn('[Pipeline Sync] Failed to compute incremental start date', incrementalError);
@@ -675,6 +678,7 @@ export async function POST(request: NextRequest) {
 
       // Store emails one by one to ensure they have pending status
       let storedCount = 0;
+      let updatedCount = 0;
       for (const email of emails) {
         try {
           // Normalize timestamps
@@ -691,10 +695,42 @@ export async function POST(request: NextRequest) {
                 ? email.processedAt
                 : new Date().toISOString();
 
+          const messageId = email.messageId || email.id || `${receivedAt}_${email.sender || 'unknown'}`;
+
+          // First check if this email already exists and might be failed/completed
+          const { data: existingEmail } = await supabaseForEmails
+            .from('emails')
+            .select('id, processing_status')
+            .eq('user_id', userId)
+            .eq('message_id', messageId)
+            .maybeSingle();
+
+          if (existingEmail) {
+            // If email exists but is failed or completed without companies, reset to pending
+            if (existingEmail.processing_status === 'failed') {
+              const { error: updateError } = await supabaseForEmails
+                .from('emails')
+                .update({
+                  processing_status: 'pending',
+                  extraction_status: 'pending',
+                  error_message: null,
+                  extraction_error: null
+                })
+                .eq('id', existingEmail.id);
+
+              if (!updateError) {
+                updatedCount++;
+                console.log(`[Pipeline Sync] Reset failed email ${messageId} to pending`);
+              }
+            }
+            // Skip if already exists and not failed
+            continue;
+          }
+
           // Build email data object matching the database schema
           const emailData = {
             user_id: userId,
-            message_id: email.messageId || email.id || `${receivedAt}_${email.sender || 'unknown'}`,
+            message_id: messageId,
             subject: email.subject || 'No Subject',
             sender: email.sender || 'Unknown',
             newsletter_name: email.newsletterName || email.sender || 'Unknown',
@@ -710,7 +746,7 @@ export async function POST(request: NextRequest) {
             companies_extracted: 0
           } satisfies Database['public']['Tables']['emails']['Insert'];
 
-          // Try to insert the email (will fail if it already exists due to unique constraints)
+          // Try to insert the email
           const { error: insertError } = await supabaseForEmails
             .from('emails')
             .insert(emailData);
@@ -726,7 +762,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      console.log(`[PIPELINE:DEBUG] Stored ${storedCount} new emails in database`);
+      console.log(`[PIPELINE:DEBUG] Stored ${storedCount} new emails and reset ${updatedCount} failed emails to pending`);
 
       monitor.setMetric('emailsFetched', emails.length);
       monitor.trackGmailApiCall('fetchDailySubstacks', true, fetchDuration);
