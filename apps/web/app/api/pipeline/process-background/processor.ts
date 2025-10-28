@@ -112,29 +112,79 @@ export async function processBackgroundEmails({
           continue;
         }
 
+        console.log(`${logPrefix} [EXTRACTION:START] Starting extraction for email ${email.id}`, {
+          emailId: email.id,
+          newsletter: email.newsletter_name,
+          contentLength: content.length,
+          contentPreview: content.substring(0, 100)
+        });
+
         const extractionResult = await extractor.extractCompanies(
           content,
           email.newsletter_name || 'Unknown Newsletter'
         );
 
+        console.log(`${logPrefix} [EXTRACTION:RESULT] Raw extraction result:`, {
+          emailId: email.id,
+          hasResult: !!extractionResult,
+          companiesArray: extractionResult?.companies,
+          companiesCount: extractionResult?.companies?.length || 0,
+          metadata: extractionResult?.metadata,
+          hasError: !!extractionResult?.metadata?.error
+        });
+
         if (extractionResult?.metadata?.error) {
+          console.error(`${logPrefix} [EXTRACTION:ERROR] Extraction returned error in metadata:`, {
+            emailId: email.id,
+            error: extractionResult.metadata.error
+          });
           throw new Error(extractionResult.metadata.error);
         }
 
-        console.log(`${logPrefix} Extracted ${extractionResult.companies.length} companies from email ${email.id}`);
+        console.log(`${logPrefix} [EXTRACTION:SUCCESS] Extracted ${extractionResult.companies.length} companies from email ${email.id}`, {
+          emailId: email.id,
+          companies: extractionResult.companies.map(c => ({ name: c.name, description: c.description?.substring(0, 50) }))
+        });
 
         let companiesInEmail = 0;
 
         for (const company of extractionResult.companies) {
-          const { data: existingCompany } = await supabase
+          console.log(`${logPrefix} [DB:CHECK] Checking if company exists:`, {
+            companyName: company.name,
+            userId: userId,
+            emailId: email.id
+          });
+
+          // Check for existing company (case-insensitive)
+          const { data: existingCompany, error: checkError } = await supabase
             .from('companies')
-            .select('id, mention_count')
+            .select('id, mention_count, name')
             .eq('user_id', userId)
-            .eq('name', company.name)
+            .ilike('name', company.name)  // Case-insensitive comparison
             .single();
 
+          if (checkError && checkError.code !== 'PGRST116') { // PGRST116 means no rows found
+            console.error(`${logPrefix} [DB:ERROR] Error checking for existing company:`, {
+              companyName: company.name,
+              error: checkError,
+              errorCode: checkError.code,
+              errorMessage: checkError.message
+            });
+            // Skip this company if we can't check for existing
+            continue;
+          }
+
+          let companySuccessfullySaved = false;
+
           if (existingCompany) {
-            await supabase
+            console.log(`${logPrefix} [DB:UPDATE] Updating existing company:`, {
+              companyId: existingCompany.id,
+              companyName: company.name,
+              currentMentions: existingCompany.mention_count,
+              newMentions: (existingCompany.mention_count || 0) + 1
+            });
+
+            const { error: updateError } = await supabase
               .from('companies')
               .update({
                 mention_count: (existingCompany.mention_count || 0) + 1,
@@ -142,7 +192,19 @@ export async function processBackgroundEmails({
               })
               .eq('id', existingCompany.id);
 
-            await supabase
+            if (updateError) {
+              console.error(`${logPrefix} [DB:ERROR] Failed to update company:`, {
+                companyId: existingCompany.id,
+                error: updateError,
+                errorCode: updateError.code,
+                errorMessage: updateError.message
+              });
+            } else {
+              companySuccessfullySaved = true;
+              console.log(`${logPrefix} [DB:SUCCESS] Successfully updated company mention count`);
+            }
+
+            const { error: mentionError } = await supabase
               .from('company_mentions')
               .insert({
                 user_id: userId,
@@ -153,13 +215,27 @@ export async function processBackgroundEmails({
                 confidence: company.confidence || 0.8,
                 extracted_at: new Date().toISOString()
               });
+
+            if (mentionError) {
+              console.error(`${logPrefix} [DB:ERROR] Failed to insert company mention:`, {
+                companyId: existingCompany.id,
+                error: mentionError
+              });
+            }
           } else {
+            console.log(`${logPrefix} [DB:INSERT] Creating new company:`, {
+              companyName: company.name,
+              description: company.description?.substring(0, 100),
+              industry: company.industry,
+              userId: userId
+            });
+
             const normalizedName = company.name.toLowerCase()
               .replace(/[^a-z0-9]/g, '-')
               .replace(/-+/g, '-')
               .replace(/^-|-$/g, '') + '-' + Date.now();
 
-            const { data: newCompany } = await supabase
+            const { data: newCompany, error: insertError } = await supabase
               .from('companies')
               .insert({
                 user_id: userId,
@@ -174,8 +250,29 @@ export async function processBackgroundEmails({
               .select()
               .single();
 
+            if (insertError) {
+              console.error(`${logPrefix} [DB:ERROR] Failed to insert new company:`, {
+                companyName: company.name,
+                error: insertError,
+                errorCode: insertError.code,
+                errorMessage: insertError.message,
+                errorDetails: insertError.details,
+                normalizedName: normalizedName
+              });
+              // Try to understand if it's a duplicate or other error
+              if (insertError.code === '23505') { // Unique violation
+                console.error(`${logPrefix} [DB:ERROR] Company might already exist with different casing or similar name`);
+              }
+            } else if (newCompany) {
+              companySuccessfullySaved = true;
+              console.log(`${logPrefix} [DB:SUCCESS] Successfully created new company:`, {
+                companyId: newCompany.id,
+                companyName: newCompany.name
+              });
+            }
+
             if (newCompany) {
-              await supabase
+              const { error: mentionError } = await supabase
                 .from('company_mentions')
                 .insert({
                   user_id: userId,
@@ -186,16 +283,40 @@ export async function processBackgroundEmails({
                   confidence: company.confidence || 0.8,
                   extracted_at: new Date().toISOString()
                 });
+
+              if (mentionError) {
+                console.error(`${logPrefix} [DB:ERROR] Failed to insert mention for new company:`, {
+                  companyId: newCompany.id,
+                  error: mentionError
+                });
+              }
             }
           }
 
-          companiesInEmail++;
-          companiesExtracted++;
+          // Only count as extracted if successfully saved to database
+          if (companySuccessfullySaved) {
+            companiesInEmail++;
+            companiesExtracted++;
+            console.log(`${logPrefix} [DB:SUCCESS] Company saved successfully, total extracted: ${companiesExtracted}`);
+          } else {
+            console.error(`${logPrefix} [DB:WARNING] Company not saved to database:`, {
+              companyName: company.name,
+              reason: 'Database operation failed'
+            });
+          }
         }
+
+        console.log(`${logPrefix} [EMAIL:COMPLETE] Finished processing email:`, {
+          emailId: email.id,
+          newsletter: email.newsletter_name,
+          companiesFoundInEmail: companiesInEmail,
+          totalCompaniesExtracted: companiesExtracted,
+          totalEmailsProcessed: processedCount + 1
+        });
 
         const completionIso = new Date().toISOString();
 
-        await supabase
+        const { error: updateEmailError } = await supabase
           .from('emails')
           .update({
             processing_status: 'completed',
@@ -207,6 +328,13 @@ export async function processBackgroundEmails({
             companies_extracted: companiesInEmail
           })
           .eq('id', email.id);
+
+        if (updateEmailError) {
+          console.error(`${logPrefix} [DB:ERROR] Failed to update email status:`, {
+            emailId: email.id,
+            error: updateEmailError
+          });
+        }
 
         processedCount++;
 

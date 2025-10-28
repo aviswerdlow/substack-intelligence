@@ -228,7 +228,22 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    console.log('[Pipeline Sync] Background processing summary', { totalProcessed, totalCompaniesExtracted, remaining, iterations, aggregatedErrors, totalFailed });
+    console.log('[Pipeline Sync] Background processing summary', {
+      totalProcessed,
+      totalCompaniesExtracted,
+      remaining,
+      iterations,
+      aggregatedErrors,
+      totalFailed
+    });
+
+    console.log('[Pipeline Sync] [STATS:UPDATE] Updating pipeline status:', {
+      previousStats: pipelineStatus.stats,
+      newCompaniesExtracted: totalCompaniesExtracted,
+      totalProcessed: totalProcessed,
+      totalFailed: totalFailed,
+      remaining: remaining
+    });
 
     pipelineStatus.stats.companiesExtracted = totalCompaniesExtracted;
     pipelineStatus.stats.totalMentions = totalCompaniesExtracted;
@@ -241,6 +256,13 @@ export async function POST(request: NextRequest) {
         ? `Processed ${totalProcessed} emails. ${remaining} remaining - run pipeline again to continue.`
         : 'Pipeline completed successfully'
     );
+
+    console.log('[Pipeline Sync] [STATS:FINAL] Final pipeline stats:', {
+      stats: pipelineStatus.stats,
+      status: pipelineStatus.status,
+      progress: pipelineStatus.progress,
+      message: pipelineStatus.message
+    });
 
     if (aggregatedErrors.length) {
       await pushPipelineUpdate(userId, {
