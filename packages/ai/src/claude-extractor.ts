@@ -10,8 +10,8 @@ export class ClaudeExtractor {
   private client!: Anthropic;
   private ratelimit: Ratelimit | null = null;
   private cache: Redis | null = null;
-  private maxRetries: number = 3;
-  private baseDelay: number = 1000; // 1 second base delay
+  private maxRetries: number = 5; // Increased for better rate limit handling
+  private baseDelay: number = 2000; // 2 second base delay for rate limits
   private requestTimeoutMs: number = Math.max(5000, Number(process.env.CLAUDE_REQUEST_TIMEOUT_MS) || 12000);
   private rateLimitDisabled: boolean = false;
   private cacheDisabled: boolean = false;
@@ -257,15 +257,25 @@ export class ClaudeExtractor {
           
           // Check if error is retryable
           const isRetryable = this.isRetryableError(normalizedError);
-          
+
           if (!isRetryable) {
             console.error('[ClaudeExtractor] 🛑 Non-retryable error, stopping attempts');
             throw normalizedError;
           }
-          
+
           if (attempt < this.maxRetries) {
-            const delay = this.calculateBackoffDelay(attempt);
-            console.log(`[ClaudeExtractor] ⏰ Waiting ${delay}ms before retry...`);
+            // Special handling for rate limit errors
+            let delay = this.calculateBackoffDelay(attempt);
+
+            if (normalizedError?.status === 429) {
+              // For rate limits, wait longer (minimum 10 seconds, up to 60 seconds)
+              const rateDelay = Math.max(10000, delay * 2);
+              delay = Math.min(rateDelay, 60000);
+              console.log(`[ClaudeExtractor] ⏳ Rate limit hit - waiting ${delay}ms before retry...`);
+            } else {
+              console.log(`[ClaudeExtractor] ⏰ Waiting ${delay}ms before retry...`);
+            }
+
             await this.sleep(delay);
           } else {
             console.error('[ClaudeExtractor] 💔 All retry attempts exhausted');
@@ -490,15 +500,29 @@ Return ONLY the JSON object, no additional text.`;
   async batchExtract(
     contents: Array<{ content: string; newsletterName: string; id?: string }>
   ) {
-    const results = await Promise.allSettled(
-      contents.map(({ content, newsletterName, id }) =>
+    // Process sequentially with delays to avoid rate limits
+    const results: Array<PromiseSettledResult<any>> = [];
+
+    for (let i = 0; i < contents.length; i++) {
+      const { content, newsletterName, id } = contents[i];
+
+      // Add delay between requests (except for the first one)
+      if (i > 0) {
+        const delayMs = 2000; // 2 second delay between emails
+        console.log(`[BatchExtract] ⏰ Waiting ${delayMs}ms before processing next email...`);
+        await this.sleep(delayMs);
+      }
+
+      const result = await Promise.allSettled([
         this.extractCompanies(content, newsletterName).then(result => ({
           id,
           newsletterName,
           ...result
         }))
-      )
-    );
+      ]);
+
+      results.push(result[0]);
+    }
 
     const successful = results
       .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
