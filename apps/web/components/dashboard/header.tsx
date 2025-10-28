@@ -49,7 +49,6 @@ export function DashboardHeader() {
         toast({
           title: 'Sync Completed',
           description: `Synced ${data.emailsSynced || 0} emails. ${data.newEmails || 0} new emails found. ${data.pendingEmails || 0} emails queued for processing.`,
-          duration: 5000,
         });
 
         // Reload after a bit longer to let the user see the message
@@ -66,7 +65,6 @@ export function DashboardHeader() {
         title: 'Sync Failed',
         description: error instanceof Error ? error.message : 'Failed to trigger sync',
         variant: 'destructive',
-        duration: 5000,
       });
     }
   };
