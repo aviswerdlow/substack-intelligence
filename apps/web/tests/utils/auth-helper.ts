@@ -8,8 +8,8 @@ export class AuthHelper {
     
     await this.page.goto('/sign-in');
     
-    // Wait for Clerk to load
-    await this.page.waitForSelector('[data-clerk-sign-in-form]', { 
+    // Wait for NextAuth to load
+    await this.page.waitForSelector('[data-nextauth-sign-in-form]', { 
       timeout: 15000,
       state: 'visible' 
     });
@@ -35,8 +35,8 @@ export class AuthHelper {
     
     await this.page.goto('/sign-up');
     
-    // Wait for Clerk to load
-    await this.page.waitForSelector('[data-clerk-sign-up-form]', { 
+    // Wait for NextAuth to load
+    await this.page.waitForSelector('[data-nextauth-sign-up-form]', { 
       timeout: 15000,
       state: 'visible' 
     });
@@ -56,13 +56,13 @@ export class AuthHelper {
     
     // Handle email verification if required
     try {
-      await this.page.waitForSelector('[data-clerk-verification-form]', { timeout: 5000 });
+      await this.page.waitForSelector('[data-nextauth-verification-form]', { timeout: 5000 });
       console.log('Email verification required - using test bypass');
       
-      // In test environment, Clerk might have verification bypass
+      // In test environment, NextAuth might have verification bypass
       if (process.env.NODE_ENV === 'test') {
         // Skip verification for test environment
-        await this.page.click('button[data-clerk-bypass-verification]', { timeout: 5000 });
+        await this.page.click('button[data-nextauth-bypass-verification]', { timeout: 5000 });
       }
     } catch (error) {
       // Verification not required or already handled
@@ -82,7 +82,7 @@ export class AuthHelper {
     console.log('Signing out...');
     
     // Look for user menu or sign out button
-    const userButton = this.page.locator('[data-clerk-user-button]');
+    const userButton = this.page.locator('[data-nextauth-user-button]');
     await userButton.click();
     
     // Click sign out

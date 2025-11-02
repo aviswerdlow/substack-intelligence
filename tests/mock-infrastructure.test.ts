@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Import centralized mock factories
-import { clerkMocks } from './mocks/auth/clerk';
+import { nextauthMocks } from './mocks/auth/nextauth';
 import { externalServicesMocks } from './mocks/external/services';
 import { gmailMocks } from './mocks/external/gmail';
 import { puppeteerMocks } from './mocks/external/puppeteer';
@@ -26,12 +26,12 @@ describe('Centralized Mock Infrastructure', () => {
     it('should provide easy access to common mock scenarios', () => {
       // Test signed-out user scenario
       testUtils.mockSignedOutUser();
-      expect(clerkMocks.useAuth().isSignedIn).toBe(false);
+      expect(nextauthMocks.useAuth().isSignedIn).toBe(false);
 
       // Test signed-in user scenario
       const user = testUtils.mockSignedInUser({ email: 'test@example.com' });
       expect(user.email).toBe('test@example.com');
-      expect(clerkMocks.useAuth().isSignedIn).toBe(true);
+      expect(nextauthMocks.useAuth().isSignedIn).toBe(true);
     });
 
     it('should provide easy external service mocking', () => {
@@ -47,10 +47,10 @@ describe('Centralized Mock Infrastructure', () => {
     });
   });
 
-  describe('Authentication Mocks (Clerk)', () => {
+  describe('Authentication Mocks (NextAuth)', () => {
     it('should handle user authentication scenarios', () => {
       // Test user creation
-      const user = clerkMocks.createTestUser({
+      const user = nextauthMocks.createTestUser({
         email: 'auth-test@example.com',
         firstName: 'Auth',
         lastName: 'Test'
@@ -63,28 +63,28 @@ describe('Centralized Mock Infrastructure', () => {
     });
 
     it('should handle organization scenarios', () => {
-      const { user, organization } = clerkMocks.mockUserWithOrganization(
+      const { user, organization } = nextauthMocks.mockUserWithOrganization(
         { email: 'org-user@example.com' },
         { name: 'Test Organization' }
       );
 
       expect(user.email).toBe('org-user@example.com');
       expect(organization.name).toBe('Test Organization');
-      expect(clerkMocks.useAuth().isSignedIn).toBe(true);
+      expect(nextauthMocks.useAuth().isSignedIn).toBe(true);
     });
 
     it('should handle sign in/out flows', () => {
-      const user = clerkMocks.createTestUser();
+      const user = nextauthMocks.createTestUser();
       
       // Test sign in
-      clerkMocks.signIn(user);
-      expect(clerkMocks.useAuth().isSignedIn).toBe(true);
-      expect(clerkMocks.useAuth().userId).toBe(user.id);
+      nextauthMocks.signIn(user);
+      expect(nextauthMocks.useAuth().isSignedIn).toBe(true);
+      expect(nextauthMocks.useAuth().userId).toBe(user.id);
 
       // Test sign out
-      clerkMocks.signOut();
-      expect(clerkMocks.useAuth().isSignedIn).toBe(false);
-      expect(clerkMocks.useAuth().userId).toBeNull();
+      nextauthMocks.signOut();
+      expect(nextauthMocks.useAuth().isSignedIn).toBe(false);
+      expect(nextauthMocks.useAuth().userId).toBeNull();
     });
   });
 
@@ -418,7 +418,7 @@ describe('Centralized Mock Infrastructure', () => {
   describe('Integration Testing', () => {
     it('should support complex test scenarios', async () => {
       // Set up authenticated user with organization
-      const { user, organization } = clerkMocks.mockUserWithOrganization(
+      const { user, organization } = nextauthMocks.mockUserWithOrganization(
         { email: 'integration@example.com' },
         { name: 'Integration Test Org' }
       );
@@ -464,8 +464,8 @@ describe('Centralized Mock Infrastructure', () => {
       expect(emailResult.data?.id).toBe('integration-email-123');
       
       // Verify all mocks were called appropriately
-      expect(clerkMocks.useAuth().isSignedIn).toBe(true);
-      expect(clerkMocks.useAuth().userId).toBe(user.id);
+      expect(nextauthMocks.useAuth().isSignedIn).toBe(true);
+      expect(nextauthMocks.useAuth().userId).toBe(user.id);
       expect(databaseQueryMocks.getCompanies).toHaveBeenCalled();
       expect(externalServicesMocks.createAnthropicMessage).toHaveBeenCalled();
       expect(externalServicesMocks.sendEmail).toHaveBeenCalled();

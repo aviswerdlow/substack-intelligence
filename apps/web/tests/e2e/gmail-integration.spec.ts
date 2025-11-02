@@ -17,7 +17,7 @@ test.describe('Gmail Integration Journey', () => {
       
       // Extract user ID from the authenticated session
       const userInfo = await page.evaluate(() => {
-        return (window as any).Clerk?.user?.id;
+        return (window as any).NextAuth?.user?.id;
       });
       testUserId = userInfo || 'test-user-id';
     } else {

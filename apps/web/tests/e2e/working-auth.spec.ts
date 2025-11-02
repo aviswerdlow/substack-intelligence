@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
 
 const TEST_CREDENTIALS = {
-  email: 'aviswerdlow+clerk_test2@gmail.com',
+  email: 'aviswerdlow+nextauth_test2@gmail.com',
   password: 'TestPass2024!Secure',
   verificationCode: '424242'
 };
 
-test.describe('Clerk Email Authentication', () => {
+test.describe('NextAuth Email Authentication', () => {
   test('should sign in with email and password', async ({ page, context }) => {
     // Navigate to homepage
     await page.goto('http://localhost:3000');
@@ -73,14 +73,14 @@ test.describe('Clerk Email Authentication', () => {
       console.log('✅ Successfully redirected to dashboard!');
       
       // Save authentication state
-      await context.storageState({ path: 'clerk-auth-state.json' });
+      await context.storageState({ path: 'nextauth-auth-state.json' });
       console.log('✅ Saved authentication state');
       
       // Take screenshot of dashboard
       await page.screenshot({ path: 'test-results/authenticated-dashboard.png', fullPage: true });
     } else {
       // Check if user button is visible (indicating we're logged in)
-      const userButton = await page.locator('[data-clerk-user-button]').first();
+      const userButton = await page.locator('[data-nextauth-user-button]').first();
       if (await userButton.count() > 0) {
         console.log('✅ User is authenticated (user button found)');
         
@@ -90,7 +90,7 @@ test.describe('Clerk Email Authentication', () => {
         
         if (page.url().includes('dashboard')) {
           console.log('✅ Successfully accessed dashboard');
-          await context.storageState({ path: 'clerk-auth-state.json' });
+          await context.storageState({ path: 'nextauth-auth-state.json' });
           await page.screenshot({ path: 'test-results/authenticated-dashboard.png', fullPage: true });
         }
       } else {
@@ -101,7 +101,7 @@ test.describe('Clerk Email Authentication', () => {
   });
   
   test.describe('With saved authentication', () => {
-    test.use({ storageState: 'clerk-auth-state.json' });
+    test.use({ storageState: 'nextauth-auth-state.json' });
     
     test('should access dashboard directly', async ({ page }) => {
       await page.goto('http://localhost:3000/dashboard');

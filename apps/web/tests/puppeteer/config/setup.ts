@@ -18,7 +18,7 @@ beforeAll(() => {
     // Filter out expected errors
     const errorString = args.join(' ');
     if (
-      errorString.includes('Clerk') ||
+      errorString.includes('NextAuth') ||
       errorString.includes('Axiom') ||
       errorString.includes('CUSTOM_KEY')
     ) {

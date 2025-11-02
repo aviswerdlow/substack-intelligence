@@ -53,7 +53,7 @@ async function testSubstackApp() {
     // Test 2: Check for authentication
     console.log('\n🧪 Test 2: Checking authentication...');
     
-    // Look for Clerk sign-in elements
+    // Look for NextAuth sign-in elements
     const signInButton = await page.$('[data-testid="sign-in"]') || 
                          await page.$('button:contains("Sign in")') ||
                          await page.$('a[href*="sign-in"]');

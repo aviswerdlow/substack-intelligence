@@ -6,7 +6,7 @@ vi.mock('server-only', () => ({}));
 
 // Import centralized mock utilities
 import { createMockNextRequest } from '../mocks/nextjs/server';
-import { clerkMocks } from '../mocks/auth/clerk';
+import { nextauthMocks } from '../mocks/auth/nextauth';
 import { databaseQueryMocks } from '../mocks/database/queries';
 import { gmailMocks } from '../mocks/external/gmail';
 
@@ -96,12 +96,12 @@ describe('API Routes Comprehensive Testing', () => {
     vi.clearAllMocks();
     
     // Reset centralized mocks to default state
-    clerkMocks.resetAllMocks();
+    nextauthMocks.resetAllMocks();
     databaseQueryMocks.resetAllMocks();
     gmailMocks.resetAllMocks();
     
     // Setup default successful auth
-    clerkMocks.mockSignedInUser({
+    nextauthMocks.mockSignedInUser({
       id: 'user_123',
       emailAddress: 'test@example.com'
     });
@@ -132,7 +132,7 @@ describe('API Routes Comprehensive Testing', () => {
       });
 
       it('should return 401 for unauthenticated user', async () => {
-        clerkMocks.currentUser.mockResolvedValue(null);
+        nextauthMocks.currentUser.mockResolvedValue(null);
 
         const mockRequest = new Request('https://test.example.com/api/auth/gmail');
         const response = await getGmailAuth(mockRequest as NextRequest);
@@ -184,7 +184,7 @@ describe('API Routes Comprehensive Testing', () => {
       });
 
       it('should return 401 for unauthenticated user', async () => {
-        clerkMocks.currentUser.mockResolvedValue(null);
+        nextauthMocks.currentUser.mockResolvedValue(null);
 
         const mockRequest = new Request('https://test.example.com/api/auth/gmail', {
           method: 'DELETE'
@@ -260,7 +260,7 @@ describe('API Routes Comprehensive Testing', () => {
       });
 
       it('should return 401 for unauthenticated user', async () => {
-        clerkMocks.currentUser.mockResolvedValue(null);
+        nextauthMocks.currentUser.mockResolvedValue(null);
 
         const mockRequest = createMockNextRequest('https://test.example.com/api/settings');
         const response = await getSettings(mockRequest);
@@ -317,7 +317,7 @@ describe('API Routes Comprehensive Testing', () => {
       });
 
       it('should return 401 for unauthenticated user', async () => {
-        clerkMocks.currentUser.mockResolvedValue(null);
+        nextauthMocks.currentUser.mockResolvedValue(null);
 
         const mockRequest = createMockNextRequest('https://test.example.com/api/settings', {
           method: 'PUT',
@@ -416,7 +416,7 @@ describe('API Routes Comprehensive Testing', () => {
 
     it('should allow unauthenticated access in development', async () => {
       process.env.NODE_ENV = 'development';
-      clerkMocks.currentUser.mockResolvedValue(null);
+      nextauthMocks.currentUser.mockResolvedValue(null);
 
       const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence');
       const response = await getIntelligence(mockRequest);
@@ -428,7 +428,7 @@ describe('API Routes Comprehensive Testing', () => {
 
     it('should return 401 for unauthenticated user in production', async () => {
       process.env.NODE_ENV = 'production';
-      clerkMocks.currentUser.mockResolvedValue(null);
+      nextauthMocks.currentUser.mockResolvedValue(null);
 
       const mockRequest = createMockNextRequest('https://test.example.com/api/intelligence');
       const response = await getIntelligence(mockRequest);

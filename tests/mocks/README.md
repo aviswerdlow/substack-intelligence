@@ -14,7 +14,7 @@ tests/mocks/
 │   ├── supabase.ts         # Supabase client mocks
 │   └── queries.ts          # Database query function mocks
 ├── auth/                    # Authentication mocks
-│   └── clerk.ts            # Clerk authentication mocks
+│   └── nextauth.ts            # NextAuth authentication mocks
 ├── external/               # External service mocks
 │   ├── services.ts         # Anthropic, OpenAI, Resend mocks
 │   ├── gmail.ts           # Gmail API mocks
@@ -57,15 +57,15 @@ describe('My Component', () => {
 For more granular control, import mocks directly:
 
 ```typescript
-import { clerkMocks } from '../mocks/auth/clerk';
+import { nextauthMocks } from '../mocks/auth/nextauth';
 import { externalServicesMocks } from '../mocks/external/services';
 import { DataFixtures } from '../mocks/fixtures/data';
 
 describe('Advanced Mock Usage', () => {
   it('should handle complex scenarios', async () => {
-    // Configure Clerk authentication
-    const user = clerkMocks.createTestUser({ email: 'advanced@example.com' });
-    clerkMocks.signIn(user);
+    // Configure NextAuth authentication
+    const user = nextauthMocks.createTestUser({ email: 'advanced@example.com' });
+    nextauthMocks.signIn(user);
     
     // Configure Anthropic to return specific data
     externalServicesMocks.mockAnthropicSuccess(JSON.stringify({
@@ -123,10 +123,10 @@ expect(companies).toHaveLength(2);
 
 ### 2. Authentication Mocks (`/auth`)
 
-#### Clerk Authentication
+#### NextAuth Authentication
 
 ```typescript
-import { clerkMocks, testScenarios } from '../mocks/auth/clerk';
+import { nextauthMocks, testScenarios } from '../mocks/auth/nextauth';
 
 // Quick scenarios
 testScenarios.signedOutUser();
@@ -134,15 +134,15 @@ testScenarios.signedInUser({ email: 'user@example.com' });
 testScenarios.userWithOrganization();
 
 // Manual configuration
-const user = clerkMocks.createTestUser({ 
+const user = nextauthMocks.createTestUser({ 
   email: 'test@example.com',
   firstName: 'Test',
   lastName: 'User'
 });
-clerkMocks.signIn(user);
+nextauthMocks.signIn(user);
 
 // Check authentication state
-expect(clerkMocks.useAuth().isSignedIn).toBe(true);
+expect(nextauthMocks.useAuth().isSignedIn).toBe(true);
 ```
 
 ### 3. External Service Mocks (`/external`)
@@ -361,11 +361,11 @@ beforeEach(() => {
 When you need fine-grained control, import specific mock factories:
 
 ```typescript
-import { clerkMocks } from '../mocks/auth/clerk';
+import { nextauthMocks } from '../mocks/auth/nextauth';
 import { externalServicesMocks } from '../mocks/external/services';
 
 // Custom user with organization
-const { user, organization } = clerkMocks.mockUserWithOrganization(
+const { user, organization } = nextauthMocks.mockUserWithOrganization(
   { email: 'user@company.com' },
   { name: 'Test Company' }
 );
@@ -386,7 +386,7 @@ Or reset specific mocks when needed:
 ```typescript
 afterEach(() => {
   axiomMocks.clearCollectedData();
-  clerkMocks.signOut();
+  nextauthMocks.signOut();
 });
 ```
 
@@ -432,7 +432,7 @@ If you're migrating from the old inline mocks, follow these steps:
 ### Before (Legacy)
 
 ```typescript
-vi.mock('@clerk/nextjs', () => ({
+vi.mock('@nextauth/nextjs', () => ({
   auth: vi.fn(() => ({ userId: 'test-user-id' })),
   currentUser: vi.fn(() => Promise.resolve({ id: 'test-user-id' }))
 }));
@@ -445,9 +445,9 @@ vi.mock('@clerk/nextjs', () => ({
 testUtils.mockSignedInUser();
 
 // Complex case
-import { clerkMocks } from '../mocks/auth/clerk';
-const user = clerkMocks.createTestUser({ id: 'specific-user-id' });
-clerkMocks.signIn(user);
+import { nextauthMocks } from '../mocks/auth/nextauth';
+const user = nextauthMocks.createTestUser({ id: 'specific-user-id' });
+nextauthMocks.signIn(user);
 ```
 
 ## Troubleshooting

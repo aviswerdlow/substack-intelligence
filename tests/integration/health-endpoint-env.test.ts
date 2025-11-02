@@ -53,8 +53,8 @@ describe('Health Endpoint - Environment Variable Handling', () => {
   it('should return degraded status when database is not configured', async () => {
     // Set up partial environment (no database)
     process.env.ANTHROPIC_API_KEY = 'test-key';
-    process.env.CLERK_SECRET_KEY = 'test-clerk';
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = 'test-clerk-pub';
+    process.env.NEXTAUTH_SECRET_KEY = 'test-nextauth';
+    process.env.NEXT_PUBLIC_NEXTAUTH_PUBLISHABLE_KEY = 'test-nextauth-pub';
     
     // Mock the safe client to return null
     vi.mock('@substack-intelligence/database', () => ({
@@ -94,8 +94,8 @@ describe('Health Endpoint - Environment Variable Handling', () => {
       NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',
       SUPABASE_SERVICE_KEY: 'test-service-key',
       ANTHROPIC_API_KEY: 'test-anthropic-key',
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'test-clerk-pub-key',
-      CLERK_SECRET_KEY: 'test-clerk-secret'
+      NEXT_PUBLIC_NEXTAUTH_PUBLISHABLE_KEY: 'test-nextauth-pub-key',
+      NEXTAUTH_SECRET_KEY: 'test-nextauth-secret'
     };
 
     // Mock a configured but failing database
@@ -146,7 +146,7 @@ describe('Health Endpoint - Environment Variable Handling', () => {
       NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co',
       NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',
       SUPABASE_SERVICE_KEY: 'test-service-key'
-      // Missing: ANTHROPIC_API_KEY, CLERK keys, etc.
+      // Missing: ANTHROPIC_API_KEY, NEXTAUTH keys, etc.
     };
 
     // Mock successful database connection
@@ -187,9 +187,9 @@ describe('Health Endpoint - Environment Variable Handling', () => {
     expect(response.data.database.connected).toBe(true);
     expect(response.data.services.supabase).toBe(true);
     expect(response.data.services.anthropic).toBe(false);
-    expect(response.data.services.clerk).toBe(false);
+    expect(response.data.services.nextauth).toBe(false);
     expect(response.data.warnings.missingEnvVars).toContain('ANTHROPIC_API_KEY');
-    expect(response.data.warnings.missingEnvVars).toContain('CLERK_SECRET_KEY');
+    expect(response.data.warnings.missingEnvVars).toContain('NEXTAUTH_SECRET_KEY');
   });
 
   it('should not crash when createServiceRoleClient would normally throw', async () => {

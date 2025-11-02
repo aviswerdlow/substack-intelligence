@@ -25,17 +25,11 @@ const envSchema = z.object({
     : z.string().min(1),
   NEXT_PUBLIC_SUPABASE_PROJECT_ID: z.string().min(1).optional(),
   
-  // Clerk - lenient during build
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: isBuildTime
-    ? z.string().optional().default('pk_test_placeholder')
+  // NextAuth - lenient during build
+  NEXTAUTH_SECRET: isBuildTime
+    ? z.string().optional().default('placeholder-nextauth-secret')
     : z.string().min(1),
-  CLERK_SECRET_KEY: isBuildTime
-    ? z.string().optional().default('sk_test_placeholder')
-    : z.string().min(1),
-  NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().default('/sign-in'),
-  NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().default('/sign-up'),
-  NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: z.string().default('/dashboard'),
-  NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: z.string().default('/dashboard'),
+  NEXTAUTH_URL: z.string().url().optional().default('http://localhost:3000'),
   
   // AI Services - lenient during build
   ANTHROPIC_API_KEY: isBuildTime
@@ -82,12 +76,8 @@ function validateEnv() {
       NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key',
       SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key',
       NEXT_PUBLIC_SUPABASE_PROJECT_ID: process.env.NEXT_PUBLIC_SUPABASE_PROJECT_ID,
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_placeholder',
-      CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY || 'sk_test_placeholder',
-      NEXT_PUBLIC_CLERK_SIGN_IN_URL: process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in',
-      NEXT_PUBLIC_CLERK_SIGN_UP_URL: process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL || '/sign-up',
-      NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL || '/dashboard',
-      NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL || '/dashboard',
+      NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET || 'placeholder-nextauth-secret',
+      NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'http://localhost:3000',
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || 'placeholder-api-key',
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
       GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || 'placeholder-client-id',

@@ -8,34 +8,34 @@ test.describe('Authentication Flow', () => {
   test('should display sign in page', async ({ page }) => {
     await page.goto('/sign-in');
     
-    // Check for Clerk Auth UI elements
+    // Check for NextAuth Auth UI elements
     await expect(page).toHaveURL(/.*sign-in/);
     
-    // Wait for Clerk to load
-    await page.waitForSelector('[data-clerk-sign-in-form]', { 
+    // Wait for NextAuth to load
+    await page.waitForSelector('[data-nextauth-sign-in-form]', { 
       timeout: 10000,
       state: 'visible' 
     });
     
     // Verify sign in form elements are present
-    const signInForm = page.locator('[data-clerk-sign-in-form]');
+    const signInForm = page.locator('[data-nextauth-sign-in-form]');
     await expect(signInForm).toBeVisible();
   });
 
   test('should display sign up page', async ({ page }) => {
     await page.goto('/sign-up');
     
-    // Check for Clerk Auth UI elements
+    // Check for NextAuth Auth UI elements
     await expect(page).toHaveURL(/.*sign-up/);
     
-    // Wait for Clerk to load
-    await page.waitForSelector('[data-clerk-sign-up-form]', { 
+    // Wait for NextAuth to load
+    await page.waitForSelector('[data-nextauth-sign-up-form]', { 
       timeout: 10000,
       state: 'visible' 
     });
     
     // Verify sign up form elements are present
-    const signUpForm = page.locator('[data-clerk-sign-up-form]');
+    const signUpForm = page.locator('[data-nextauth-sign-up-form]');
     await expect(signUpForm).toBeVisible();
   });
 
@@ -51,8 +51,8 @@ test.describe('Authentication Flow', () => {
   test('should navigate between sign in and sign up', async ({ page }) => {
     await page.goto('/sign-in');
     
-    // Wait for Clerk to load
-    await page.waitForSelector('[data-clerk-sign-in-form]', { 
+    // Wait for NextAuth to load
+    await page.waitForSelector('[data-nextauth-sign-in-form]', { 
       timeout: 10000,
       state: 'visible' 
     });
@@ -76,7 +76,7 @@ test.describe('Authenticated User Flow', () => {
           origin: 'http://localhost:3000',
           localStorage: [
             {
-              name: '__clerk_db_jwt',
+              name: '__nextauth_db_jwt',
               value: 'mock_jwt_token'
             }
           ]
@@ -86,7 +86,7 @@ test.describe('Authenticated User Flow', () => {
   });
 
   test.skip('should access dashboard when authenticated', async ({ page }) => {
-    // This test is skipped as it requires proper Clerk authentication
+    // This test is skipped as it requires proper NextAuth authentication
     // In a real scenario, you would:
     // 1. Set up test user credentials
     // 2. Implement proper authentication flow

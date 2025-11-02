@@ -209,7 +209,7 @@ class AuthMocks {
 
   SignedIn = vi.fn(({ children }: { children: any }) => (this.state.currentUser ? children : null));
   SignedOut = vi.fn(({ children }: { children: any }) => (!this.state.currentUser ? children : null));
-  ClerkProvider = vi.fn(({ children }: { children: any }) => children);
+  NextAuthProvider = vi.fn(({ children }: { children: any }) => children);
   SignInButton = vi.fn(({ children }: { children?: any }) => (children ? children : 'Sign In'));
   SignOutButton = vi.fn(({ children }: { children?: any }) => (children ? children : 'Sign Out'));
   SignUpButton = vi.fn(({ children }: { children?: any }) => (children ? children : 'Sign Up'));
@@ -225,32 +225,32 @@ class AuthMocks {
   }));
 }
 
-export const clerkMocks = new AuthMocks();
+export const nextauthMocks = new AuthMocks();
 
-export const currentUser = clerkMocks.currentUser.bind(clerkMocks);
-export const auth = clerkMocks.auth.bind(clerkMocks);
-export const useUser = clerkMocks.useUser.bind(clerkMocks);
-export const useAuth = clerkMocks.useAuth.bind(clerkMocks);
-export const useSession = clerkMocks.useSession.bind(clerkMocks);
-export const useOrganization = clerkMocks.useOrganization.bind(clerkMocks);
-export const useOrganizationList = clerkMocks.useOrganizationList.bind(clerkMocks);
-export const SignedIn = clerkMocks.SignedIn.bind(clerkMocks);
-export const SignedOut = clerkMocks.SignedOut.bind(clerkMocks);
-export const ClerkProvider = clerkMocks.ClerkProvider.bind(clerkMocks);
-export const SignInButton = clerkMocks.SignInButton.bind(clerkMocks);
-export const SignOutButton = clerkMocks.SignOutButton.bind(clerkMocks);
-export const SignUpButton = clerkMocks.SignUpButton.bind(clerkMocks);
-export const UserButton = clerkMocks.UserButton.bind(clerkMocks);
-export const OrganizationSwitcher = clerkMocks.OrganizationSwitcher.bind(clerkMocks);
-export const verifyToken = clerkMocks.verifyToken.bind(clerkMocks);
-export const createOrganization = clerkMocks.createOrganization.bind(clerkMocks);
+export const currentUser = nextauthMocks.currentUser.bind(nextauthMocks);
+export const auth = nextauthMocks.auth.bind(nextauthMocks);
+export const useUser = nextauthMocks.useUser.bind(nextauthMocks);
+export const useAuth = nextauthMocks.useAuth.bind(nextauthMocks);
+export const useSession = nextauthMocks.useSession.bind(nextauthMocks);
+export const useOrganization = nextauthMocks.useOrganization.bind(nextauthMocks);
+export const useOrganizationList = nextauthMocks.useOrganizationList.bind(nextauthMocks);
+export const SignedIn = nextauthMocks.SignedIn.bind(nextauthMocks);
+export const SignedOut = nextauthMocks.SignedOut.bind(nextauthMocks);
+export const NextAuthProvider = nextauthMocks.NextAuthProvider.bind(nextauthMocks);
+export const SignInButton = nextauthMocks.SignInButton.bind(nextauthMocks);
+export const SignOutButton = nextauthMocks.SignOutButton.bind(nextauthMocks);
+export const SignUpButton = nextauthMocks.SignUpButton.bind(nextauthMocks);
+export const UserButton = nextauthMocks.UserButton.bind(nextauthMocks);
+export const OrganizationSwitcher = nextauthMocks.OrganizationSwitcher.bind(nextauthMocks);
+export const verifyToken = nextauthMocks.verifyToken.bind(nextauthMocks);
+export const createOrganization = nextauthMocks.createOrganization.bind(nextauthMocks);
 
-export const clerkNextjsMocks = {
+export const nextauthNextjsMocks = {
   currentUser,
   auth,
   SignedIn,
   SignedOut,
-  ClerkProvider,
+  NextAuthProvider,
   SignInButton,
   SignOutButton,
   SignUpButton,
@@ -258,7 +258,7 @@ export const clerkNextjsMocks = {
   OrganizationSwitcher
 };
 
-export const clerkReactMocks = {
+export const nextauthReactMocks = {
   useUser,
   useAuth,
   useSession,
@@ -266,7 +266,7 @@ export const clerkReactMocks = {
   useOrganizationList,
   SignedIn,
   SignedOut,
-  ClerkProvider,
+  NextAuthProvider,
   SignInButton,
   SignOutButton,
   SignUpButton,
@@ -274,7 +274,7 @@ export const clerkReactMocks = {
   OrganizationSwitcher
 };
 
-export const clerkServerMocks = {
+export const nextauthServerMocks = {
   currentUser,
   auth,
   verifyToken
@@ -282,15 +282,15 @@ export const clerkServerMocks = {
 
 export const testScenarios = {
   signedOutUser: () => {
-    clerkMocks.mockSignedOutUser();
+    nextauthMocks.mockSignedOutUser();
   },
   signedInUser: (overrides?: Partial<MockUser>) => {
-    return clerkMocks.mockSignedInUser(overrides);
+    return nextauthMocks.mockSignedInUser(overrides);
   },
   userWithOrganization: (
     userOverrides?: Partial<MockUser>,
     orgOverrides?: Partial<MockOrganization>
   ) => {
-    return clerkMocks.mockUserWithOrganization(userOverrides, orgOverrides);
+    return nextauthMocks.mockUserWithOrganization(userOverrides, orgOverrides);
   }
 };

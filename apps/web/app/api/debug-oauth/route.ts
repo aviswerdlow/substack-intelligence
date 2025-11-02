@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       instructions: [
         '1. Check that NEXT_PUBLIC_APP_URL matches your deployment URL',
         '2. Verify the redirect URI in Google Console matches exactly',
-        '3. Check if Clerk authentication is working',
+        '3. Confirm NextAuth session is working',
         '4. Copy the authUrl and try opening it directly to see the exact error'
       ]
     });

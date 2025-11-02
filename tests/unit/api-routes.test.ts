@@ -6,7 +6,7 @@ vi.mock('server-only', () => ({}));
 
 // Import centralized mock utilities
 import { createMockNextRequest } from '../mocks/nextjs/server';
-import { clerkMocks } from '../mocks/auth/clerk';
+import { nextauthMocks } from '../mocks/auth/nextauth';
 import { databaseQueryMocks } from '../mocks/database/queries';
 
 // Route handlers will be imported dynamically in beforeAll
@@ -90,11 +90,11 @@ describe('API Routes', () => {
     vi.clearAllMocks();
     
     // Reset centralized mocks to default state
-    clerkMocks.resetAllMocks();
+    nextauthMocks.resetAllMocks();
     databaseQueryMocks.resetAllMocks();
     
     // Configure default authenticated user
-    clerkMocks.mockSignedInUser({
+    nextauthMocks.mockSignedInUser({
       id: 'test-user-id',
       emailAddress: 'test@example.com'
     });
@@ -179,7 +179,7 @@ describe('API Routes', () => {
     });
 
     it('should return 401 when not authenticated', async () => {
-      clerkMocks.auth.mockReturnValueOnce({ userId: null });
+      nextauthMocks.auth.mockReturnValueOnce({ userId: null });
 
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();
@@ -316,7 +316,7 @@ describe('API Routes', () => {
 
     it('should return 401 when not authenticated in production', async () => {
       process.env.NODE_ENV = 'production';
-      clerkMocks.currentUser.mockResolvedValueOnce(null);
+      nextauthMocks.currentUser.mockResolvedValueOnce(null);
 
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -330,7 +330,7 @@ describe('API Routes', () => {
 
     it('should allow unauthenticated access in development', async () => {
       process.env.NODE_ENV = 'development';
-      clerkMocks.currentUser.mockResolvedValueOnce(null);
+      nextauthMocks.currentUser.mockResolvedValueOnce(null);
 
       const response = await getIntelligence(mockRequest);
       const responseData = await response.json();
@@ -490,7 +490,7 @@ describe('API Routes', () => {
     it('should have consistent response format for errors', async () => {
       const mockRequest = createMockNextRequest('https://example.com/api/companies');
       
-      clerkMocks.auth.mockReturnValueOnce({ userId: null });
+      nextauthMocks.auth.mockReturnValueOnce({ userId: null });
 
       const response = await getCompanies(mockRequest);
       const responseData = await response.json();

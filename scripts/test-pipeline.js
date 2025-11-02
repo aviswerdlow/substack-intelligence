@@ -81,7 +81,7 @@ async function testPipeline() {
     }
     
     const webPackage = JSON.parse(fs.readFileSync('apps/web/package.json', 'utf8'));
-    if (!webPackage.dependencies.next || !webPackage.dependencies['@clerk/nextjs']) {
+    if (!webPackage.dependencies.next || !webPackage.dependencies['@nextauth/nextjs']) {
       throw new Error('Missing essential web dependencies');
     }
   })) {
@@ -125,7 +125,7 @@ async function testPipeline() {
       'SUPABASE_SERVICE_KEY',
       'ANTHROPIC_API_KEY',
       'OPENAI_API_KEY',
-      'CLERK_SECRET_KEY'
+      'NEXTAUTH_SECRET_KEY'
     ];
     
     requiredVars.forEach(varName => {

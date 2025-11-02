@@ -414,7 +414,7 @@ export async function checkReadiness(): Promise<{ ready: boolean; details: strin
   const criticalChecks = [
     await checkDatabase(),
     await checkAxiom(),
-    await checkClerk()
+    await checkAuthentication()
   ];
 
   for (const check of criticalChecks) {

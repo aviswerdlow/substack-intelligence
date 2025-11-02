@@ -142,16 +142,16 @@ export const mockCompanies = [
   },
   {
     id: 'comp_8',
-    name: 'Clerk',
+    name: 'NextAuth',
     description: 'Authentication and user management platform',
-    website: 'https://clerk.dev',
+    website: 'https://nextauth.dev',
     funding_status: 'series-a',
     totalMentions: 2,
     newsletterDiversity: 2,
     mentions: [
       {
         id: 'mention_9',
-        context: 'Clerk\'s developer experience for auth is unmatched in the market.',
+        context: 'NextAuth\'s developer experience for auth is unmatched in the market.',
         sentiment: 'positive',
         confidence: 0.89,
         newsletter_name: 'Auth Insider',

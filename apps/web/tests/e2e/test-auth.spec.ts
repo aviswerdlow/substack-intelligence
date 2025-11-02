@@ -1,8 +1,8 @@
 import { test, expect, Page } from '@playwright/test';
 
-// Test credentials for Clerk test mode
+// Test credentials for NextAuth test mode
 const TEST_CREDENTIALS = {
-  email: 'test+clerk_test@example.com',
+  email: 'test+nextauth_test@example.com',
   password: 'TestPassword123!',
   verificationCode: '424242'
 };
@@ -135,7 +135,7 @@ test.describe('Test Mode Authentication', () => {
       await expect(heading).toBeVisible();
       
       // Check for user button
-      const userButton = await page.locator('[data-clerk-user-button]');
+      const userButton = await page.locator('[data-nextauth-user-button]');
       await expect(userButton).toBeVisible();
       
       console.log('✅ Dashboard accessible with saved auth');
@@ -201,7 +201,7 @@ test.describe('Test User Creation', () => {
     if (url.includes('sign-up')) {
       // On sign-up page
       const timestamp = Date.now();
-      const testEmail = `test+clerk_test_${timestamp}@example.com`;
+      const testEmail = `test+nextauth_test_${timestamp}@example.com`;
       
       // Fill registration form
       const emailInput = await page.locator('input[name="emailAddress"], input[type="email"]').first();

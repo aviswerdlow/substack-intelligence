@@ -22,7 +22,7 @@ test.describe('Comprehensive Authentication Flow', () => {
       await expect(page).toHaveURL(/.*sign-up/);
       
       // Wait for form to load
-      await page.waitForSelector('[data-clerk-sign-up-form]', { timeout: 15000 });
+      await page.waitForSelector('[data-nextauth-sign-up-form]', { timeout: 15000 });
       
       // Fill out form
       await page.fill('input[name="firstName"]', 'Test');
@@ -39,7 +39,7 @@ test.describe('Comprehensive Authentication Flow', () => {
         await page.waitForURL('**/dashboard', { timeout: 30000 });
       } catch (error) {
         // Handle verification flow if needed
-        const verificationForm = page.locator('[data-clerk-verification-form]');
+        const verificationForm = page.locator('[data-nextauth-verification-form]');
         if (await verificationForm.isVisible()) {
           // Skip verification in test environment
           console.log('Email verification detected - handling in test mode');
@@ -53,7 +53,7 @@ test.describe('Comprehensive Authentication Flow', () => {
 
     test('should show validation errors for invalid data', async ({ page }) => {
       await page.goto('/sign-up');
-      await page.waitForSelector('[data-clerk-sign-up-form]', { timeout: 15000 });
+      await page.waitForSelector('[data-nextauth-sign-up-form]', { timeout: 15000 });
       
       // Try to submit with invalid email
       await page.fill('input[name="emailAddress"]', 'invalid-email');
@@ -81,7 +81,7 @@ test.describe('Comprehensive Authentication Flow', () => {
 
     test('should show error for invalid credentials', async ({ page }) => {
       await page.goto('/sign-in');
-      await page.waitForSelector('[data-clerk-sign-in-form]', { timeout: 15000 });
+      await page.waitForSelector('[data-nextauth-sign-in-form]', { timeout: 15000 });
       
       // Try invalid credentials
       await page.fill('input[name="identifier"]', 'invalid@test.com');
@@ -225,7 +225,7 @@ test.describe('Comprehensive Authentication Flow', () => {
       await authHelper.signIn(process.env.TEST_USER_EMAIL!, process.env.TEST_USER_PASSWORD!);
       
       // Look for user menu or profile information
-      const userButton = page.locator('[data-clerk-user-button]');
+      const userButton = page.locator('[data-nextauth-user-button]');
       if (await userButton.isVisible()) {
         await userButton.click();
         

@@ -6,7 +6,7 @@ vi.mock('server-only', () => ({}));
 
 // Import centralized mock utilities
 import { createMockNextRequest } from '../mocks/nextjs/server';
-import { clerkMocks } from '../mocks/auth/clerk';
+import { nextauthMocks } from '../mocks/auth/nextauth';
 import { databaseQueryMocks } from '../mocks/database/queries';
 
 // Mock NextResponse.json will be handled by centralized nextjs mocks
@@ -124,11 +124,11 @@ describe('API Routes - Improved Tests', () => {
     vi.clearAllMocks();
     
     // Reset centralized mocks to default state
-    clerkMocks.resetAllMocks();
+    nextauthMocks.resetAllMocks();
     databaseQueryMocks.resetAllMocks();
     
     // Configure default authenticated user
-    clerkMocks.mockSignedInUser({
+    nextauthMocks.mockSignedInUser({
       id: 'test-user-id',
       emailAddress: 'test@example.com'
     });
@@ -480,7 +480,7 @@ describe('API Routes - Improved Tests', () => {
 
     it('should handle auth errors in production mode', async () => {
       process.env.NODE_ENV = 'production';
-      clerkMocks.auth.mockReturnValueOnce({ userId: null });
+      nextauthMocks.auth.mockReturnValueOnce({ userId: null });
 
       const request = new NextRequest('https://example.com/api/companies');
       
@@ -542,7 +542,7 @@ describe('API Routes - Improved Tests', () => {
     });
 
     it('should not include meta in error responses', async () => {
-      clerkMocks.auth.mockReturnValueOnce({ userId: null });
+      nextauthMocks.auth.mockReturnValueOnce({ userId: null });
 
       const request = new NextRequest('https://example.com/api/companies');
       

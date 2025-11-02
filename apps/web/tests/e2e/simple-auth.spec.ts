@@ -53,7 +53,7 @@ test('debug sign-in flow', async ({ page }) => {
       const input = await page.$(selector);
       if (input && await input.isVisible()) {
         console.log(`Found email input with selector: ${selector}`);
-        await input.fill('test+clerk_test@example.com');
+        await input.fill('test+nextauth_test@example.com');
         emailFound = true;
         break;
       }

@@ -14,7 +14,7 @@ test.describe('Authentication Flow - Real Testing', () => {
     // Click on Sign In button
     await page.click('button:has-text("Sign In")');
     
-    // Wait for Clerk modal to appear
+    // Wait for NextAuth modal to appear
     await page.waitForTimeout(2000);
     
     // Take screenshot of sign-in modal
@@ -22,13 +22,13 @@ test.describe('Authentication Flow - Real Testing', () => {
     
     // Check if modal is visible
     const modalContent = await page.evaluate(() => {
-      // Check for Clerk elements
-      const clerkPortal = document.querySelector('[data-clerk-portal]');
+      // Check for NextAuth elements
+      const nextauthPortal = document.querySelector('[data-nextauth-portal]');
       const googleButton = document.querySelector('button:has-text("Continue with Google")');
       const signUpLink = document.querySelector('a[href*="sign-up"]');
       
       return {
-        hasClerkPortal: !!clerkPortal,
+        hasNextAuthPortal: !!nextauthPortal,
         hasGoogleButton: !!googleButton,
         hasSignUpLink: !!signUpLink,
         modalText: document.body.innerText.substring(0, 500)
@@ -89,10 +89,10 @@ test.describe('Authentication Flow - Real Testing', () => {
     const url = page.url();
     expect(url).toContain('sign-in');
     
-    // Check for Clerk sign-in component
-    await page.waitForSelector('[data-clerk-sign-in-form]', { timeout: 10000 });
+    // Check for NextAuth sign-in component
+    await page.waitForSelector('[data-nextauth-sign-in-form]', { timeout: 10000 });
     
-    const signInForm = await page.$('[data-clerk-sign-in-form]');
+    const signInForm = await page.$('[data-nextauth-sign-in-form]');
     expect(signInForm).toBeTruthy();
   });
 
@@ -126,8 +126,8 @@ test.describe('Authentication Flow - Real Testing', () => {
     
     // Test modal is open
     const modalState = await page.evaluate(() => {
-      const modal = document.querySelector('[data-clerk-portal]');
-      const backdrop = document.querySelector('[data-clerk-portal-backdrop]');
+      const modal = document.querySelector('[data-nextauth-portal]');
+      const backdrop = document.querySelector('[data-nextauth-portal-backdrop]');
       return {
         hasModal: !!modal,
         hasBackdrop: !!backdrop,
@@ -146,7 +146,7 @@ test.describe('Authentication Flow - Real Testing', () => {
     
     // Check modal is closed
     const modalClosed = await page.evaluate(() => {
-      const modal = document.querySelector('[data-clerk-portal]');
+      const modal = document.querySelector('[data-nextauth-portal]');
       return !modal || window.getComputedStyle(modal).display === 'none';
     });
     
@@ -157,8 +157,8 @@ test.describe('Authentication Flow - Real Testing', () => {
     test('should test authentication flow with mock data', async ({ page }) => {
       // Add mock authentication to localStorage
       await page.evaluateOnNewDocument(() => {
-        // Mock Clerk user session
-        localStorage.setItem('__clerk_db_jwt', JSON.stringify({
+        // Mock NextAuth user session
+        localStorage.setItem('__nextauth_db_jwt', JSON.stringify({
           exp: Date.now() + 3600000,
           iat: Date.now(),
           sess: 'sess_mock_123',

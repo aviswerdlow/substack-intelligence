@@ -107,8 +107,8 @@ describe('API Health Route', () => {
       NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',
       SUPABASE_SERVICE_KEY: 'test-service-key',
       ANTHROPIC_API_KEY: 'test-anthropic-key',
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'test-clerk-pub-key',
-      CLERK_SECRET_KEY: 'test-clerk-secret',
+      NEXT_PUBLIC_NEXTAUTH_PUBLISHABLE_KEY: 'test-nextauth-pub-key',
+      NEXTAUTH_SECRET_KEY: 'test-nextauth-secret',
       GOOGLE_CLIENT_ID: 'test-google-client-id',
       RESEND_API_KEY: 'test-resend-key'
     };
@@ -158,7 +158,7 @@ describe('API Health Route', () => {
       services: {
         supabase: true,
         anthropic: true,
-        clerk: true,
+        nextauth: true,
         gmail: true,
         resend: true
       }
@@ -168,13 +168,13 @@ describe('API Health Route', () => {
   it('should return unhealthy status when required environment variables are missing', async () => {
     // Remove some required environment variables
     delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.CLERK_SECRET_KEY;
+    delete process.env.NEXTAUTH_SECRET_KEY;
     
     // Mock environment validation showing missing vars
     mockValidateEnvironment.mockReturnValue({
       isValid: false,
       isDegraded: true,
-      missingRequired: ['ANTHROPIC_API_KEY', 'CLERK_SECRET_KEY'],
+      missingRequired: ['ANTHROPIC_API_KEY', 'NEXTAUTH_SECRET_KEY'],
       missingOptional: [],
       invalid: [],
       status: []
@@ -184,7 +184,7 @@ describe('API Health Route', () => {
       status: 'unhealthy',
       message: 'Critical environment variables are missing or invalid',
       issues: {
-        missing: ['ANTHROPIC_API_KEY', 'CLERK_SECRET_KEY']
+        missing: ['ANTHROPIC_API_KEY', 'NEXTAUTH_SECRET_KEY']
       }
     });
 
@@ -202,12 +202,12 @@ describe('API Health Route', () => {
       services: {
         supabase: true,
         anthropic: false,
-        clerk: false,
+        nextauth: false,
         gmail: true,
         resend: true
       },
       warnings: {
-        missingRequired: expect.arrayContaining(['ANTHROPIC_API_KEY', 'CLERK_SECRET_KEY'])
+        missingRequired: expect.arrayContaining(['ANTHROPIC_API_KEY', 'NEXTAUTH_SECRET_KEY'])
       }
     });
   });
@@ -279,8 +279,8 @@ describe('API Health Route', () => {
       'NEXT_PUBLIC_SUPABASE_ANON_KEY',
       'SUPABASE_SERVICE_KEY',
       'ANTHROPIC_API_KEY',
-      'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
-      'CLERK_SECRET_KEY'
+      'NEXT_PUBLIC_NEXTAUTH_PUBLISHABLE_KEY',
+      'NEXTAUTH_SECRET_KEY'
     ];
 
     requiredEnvVars.forEach(envVar => {

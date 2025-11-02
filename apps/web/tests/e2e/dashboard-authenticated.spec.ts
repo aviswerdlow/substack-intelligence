@@ -28,7 +28,7 @@ test.describe('Dashboard - Authenticated User Features', () => {
       
       // Check if we're on dashboard or if user button exists
       const url = page.url();
-      const userButton = await page.$('[data-clerk-user-button]');
+      const userButton = await page.$('[data-nextauth-user-button]');
       const dashboardElement = await page.$('[data-testid="dashboard-nav"]');
       
       if (url.includes('/dashboard') || userButton || dashboardElement) {
@@ -76,8 +76,8 @@ test.describe('Dashboard - Authenticated User Features', () => {
       const nav = await page.locator('[data-testid="dashboard-nav"], nav');
       await expect(nav.first()).toBeVisible();
       
-      // Check for user button (Clerk UserButton component)
-      const userButton = await page.locator('[data-clerk-user-button]');
+      // Check for user button (NextAuth UserButton component)
+      const userButton = await page.locator('[data-nextauth-user-button]');
       await expect(userButton).toBeVisible();
       
       // Take screenshot
@@ -153,7 +153,7 @@ test.describe('Dashboard - Authenticated User Features', () => {
       await page.waitForLoadState('networkidle');
       
       // Click on user button
-      const userButton = await page.locator('[data-clerk-user-button]');
+      const userButton = await page.locator('[data-nextauth-user-button]');
       if (await userButton.isVisible()) {
         await userButton.click();
         await page.waitForTimeout(1000);

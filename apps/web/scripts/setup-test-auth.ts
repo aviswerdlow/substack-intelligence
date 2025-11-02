@@ -34,7 +34,7 @@ async function setupTestAuth() {
     await page.click('button:has-text("Sign In")');
     console.log('📍 Clicked Sign In button');
     
-    // Wait for Clerk modal
+    // Wait for NextAuth UI
     await page.waitForTimeout(2000);
     
     // Check if we need to create an account
@@ -110,11 +110,11 @@ async function setupTestAuth() {
       // Save authentication state
       const authState = await context.storageState();
       fs.writeFileSync(
-        path.resolve(__dirname, '../clerk-auth-state.json'),
+        path.resolve(__dirname, '../nextauth-auth-state.json'),
         JSON.stringify(authState, null, 2)
       );
       
-      console.log('💾 Authentication state saved to clerk-auth-state.json');
+      console.log('💾 Authentication state saved to nextauth-auth-state.json');
       console.log('\n✅ Setup complete! You can now run tests with authentication.');
     } catch (error) {
       console.log('\n⚠️ Did not redirect to dashboard automatically.');
@@ -124,7 +124,7 @@ async function setupTestAuth() {
       // Save state anyway
       const authState = await context.storageState();
       fs.writeFileSync(
-        path.resolve(__dirname, '../clerk-auth-state.json'),
+        path.resolve(__dirname, '../nextauth-auth-state.json'),
         JSON.stringify(authState, null, 2)
       );
       
@@ -135,7 +135,7 @@ async function setupTestAuth() {
     console.error('\n❌ Setup failed:', error);
     console.log('\nTroubleshooting tips:');
     console.log('1. Make sure the app is running (npm run dev)');
-    console.log('2. Check that Clerk is properly configured');
+    console.log('2. Check that NextAuth is properly configured');
     console.log('3. Verify the test credentials in .env.test.local');
     console.log('4. Try creating the account manually first');
   } finally {

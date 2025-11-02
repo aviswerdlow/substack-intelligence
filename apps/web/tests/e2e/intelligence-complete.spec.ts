@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { TestUtils, ButtonTestResult } from './helpers/test-utils';
 
 // Use saved authentication state
-test.use({ storageState: 'clerk-auth-state.json' });
+test.use({ storageState: 'nextauth-auth-state.json' });
 
 test.describe('Intelligence Page - Complete Feature Testing', () => {
   let testUtils: TestUtils;

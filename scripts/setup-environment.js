@@ -43,8 +43,8 @@ const REQUIRED_VARS = {
     'SUPABASE_SERVICE_ROLE_KEY'
   ],
   auth: [
-    'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
-    'CLERK_SECRET_KEY'
+    'NEXT_PUBLIC_NEXTAUTH_PUBLISHABLE_KEY',
+    'NEXTAUTH_SECRET_KEY'
   ],
   ai: [
     'ANTHROPIC_API_KEY'
@@ -123,19 +123,16 @@ function generateEnvironmentFile(template, outputPath) {
 
   // Authentication
   content += `# ============================================================================\n`;
-  content += `# AUTHENTICATION (CLERK)\n`;
+  content += `# AUTHENTICATION (NEXTAUTH)\n`;
   content += `# ============================================================================\n\n`;
-  
-  content += `# Clerk authentication keys\n`;
-  content += `# Get these from your Clerk dashboard\n`;
+
+  content += `# NextAuth secret is used to sign JWTs and sessions\n`;
+  content += `# Generate with: openssl rand -base64 32\n`;
   if (template === 'production') {
-    content += `# ⚠️  PRODUCTION: Must use pk_live_ and sk_live_ keys\n`;
-    content += `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...\n`;
-    content += `CLERK_SECRET_KEY=sk_live_...\n\n`;
-  } else {
-    content += `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...\n`;
-    content += `CLERK_SECRET_KEY=sk_test_...\n\n`;
+    content += `# ⚠️  PRODUCTION: Secret must be at least 32 characters\n`;
   }
+  content += `NEXTAUTH_SECRET=super-secure-${template}-secret\n`;
+  content += `NEXTAUTH_URL=${template === 'production' ? 'https://your-production-domain.com' : 'http://localhost:3000'}\n\n`;
 
   // AI Services
   content += `# ============================================================================\n`;
@@ -301,12 +298,12 @@ function validateEnvironmentFile(filePath) {
   // Check for test keys in production-like environment
   const nodeEnv = variables.NODE_ENV;
   if (nodeEnv === 'production') {
-    if (variables.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.includes('test')) {
-      warnings.push('Using test Clerk key in production environment');
+    if (!variables.NEXTAUTH_SECRET || variables.NEXTAUTH_SECRET.length < 32) {
+      warnings.push('NEXTAUTH_SECRET should be at least 32 characters in production');
       hasErrors = true;
     }
-    if (variables.CLERK_SECRET_KEY?.includes('test')) {
-      warnings.push('Using test Clerk secret key in production environment');
+    if (variables.NEXTAUTH_URL?.includes('localhost')) {
+      warnings.push('NEXTAUTH_URL should not point to localhost in production');
       hasErrors = true;
     }
   }
