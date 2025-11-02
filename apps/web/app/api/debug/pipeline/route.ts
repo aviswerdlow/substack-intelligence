@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
+import { currentUser } from '@/lib/next-auth/session';
 import { UserSettingsService } from '@/lib/user-settings';
 
 export const dynamic = 'force-dynamic';
@@ -24,15 +24,9 @@ export async function GET(request: NextRequest) {
     const debugInfo: any = {
       user: {
         id: userId,
-        email: user?.emailAddresses?.[0]?.emailAddress,
-        externalAccounts: user?.externalAccounts?.map(account => ({
-          provider: account.provider,
-          email: account.emailAddress,
-          id: account.id
-        })),
-        hasGoogleOAuth: user?.externalAccounts?.some(
-          account => account.provider === 'google' || account.provider === 'oauth_google'
-        )
+        email: user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || null,
+        fullName: user?.fullName,
+        hasSession: Boolean(user)
       },
       environment: {
         hasGoogleClientId: !!process.env.GOOGLE_CLIENT_ID,
@@ -40,10 +34,11 @@ export async function GET(request: NextRequest) {
         nodeEnv: process.env.NODE_ENV,
         hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
         hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-        hasSupabaseKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY
+        hasSupabaseKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        hasNextAuthSecret: !!process.env.NEXTAUTH_SECRET
       }
     };
-    
+
     // Try to get user settings
     try {
       const userSettingsService = new UserSettingsService();
@@ -54,38 +49,32 @@ export async function GET(request: NextRequest) {
         has_refresh_token: !!settings?.gmail_refresh_token,
         gmail_email: settings?.gmail_email
       };
-      
-      // Check if refresh token is JSON (Clerk OAuth)
-      if (settings?.gmail_refresh_token) {
-        try {
-          const tokenData = JSON.parse(settings.gmail_refresh_token);
-          debugInfo.settings.useClerkOAuth = tokenData.useClerkOAuth === true;
-        } catch {
-          debugInfo.settings.useClerkOAuth = false;
-        }
-      }
-    } catch (error) {
-      debugInfo.settingsError = error instanceof Error ? error.message : 'Unknown error';
-    }
-    
-    // Try to test Clerk OAuth token fetch
-    if (debugInfo.user.hasGoogleOAuth) {
+
       try {
-        const { getClerkGmailTokens } = await import('@/lib/clerk-oauth');
-        const tokens = await getClerkGmailTokens(userId);
-        debugInfo.clerkOAuth = {
-          success: true,
-          hasAccessToken: !!tokens.accessToken,
-          email: tokens.email
-        };
+        const tokens = await userSettingsService.getGmailTokens(userId);
+        if (tokens) {
+          debugInfo.gmailOAuth = {
+            success: true,
+            hasRefreshToken: Boolean(tokens.refreshToken),
+            hasAccessToken: Boolean(tokens.accessToken),
+            email: tokens.email || settings?.gmail_email || null
+          };
+        } else {
+          debugInfo.gmailOAuth = {
+            success: false,
+            error: 'No Gmail tokens stored for this user'
+          };
+        }
       } catch (error) {
-        debugInfo.clerkOAuth = {
+        debugInfo.gmailOAuth = {
           success: false,
           error: error instanceof Error ? error.message : 'Unknown error'
         };
       }
+    } catch (error) {
+      debugInfo.settingsError = error instanceof Error ? error.message : 'Unknown error';
     }
-    
+
     return NextResponse.json({
       success: true,
       debug: debugInfo
