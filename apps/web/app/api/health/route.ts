@@ -55,7 +55,7 @@ export async function GET() {
       services: {
         supabase: dbConnected || (!!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
         anthropic: !!process.env.ANTHROPIC_API_KEY,
-        clerk: !!process.env.CLERK_SECRET_KEY && !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+        auth: !!process.env.NEXTAUTH_SECRET,
         gmail: !!process.env.GOOGLE_CLIENT_ID,
         resend: !!process.env.RESEND_API_KEY
       },

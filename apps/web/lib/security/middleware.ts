@@ -353,11 +353,11 @@ export function withSecureRoute(
 export function withCSP(response: NextResponse, nonce?: string): NextResponse {
   const cspDirectives = [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline' ${nonce ? `'nonce-${nonce}'` : ''} https://cdn.clerk.com https://js.clerk.com`,
+    `script-src 'self' 'unsafe-inline' ${nonce ? `'nonce-${nonce}'` : ''}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: https: blob:",
-    "connect-src 'self' https://api.clerk.com https://clerk.anthropic.com https://api.anthropic.com https://supabase.co wss:",
+    "connect-src 'self' https://api.anthropic.com https://*.supabase.co wss:",
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'self'",

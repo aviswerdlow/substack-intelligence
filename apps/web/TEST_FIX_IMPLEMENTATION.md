@@ -14,7 +14,7 @@
 
 ### 3. ✅ **Authentication Setup** - COMPLETE
 - **Created `playwright.setup.ts`** - Global authentication setup
-- **Implemented auth state management** - Saves to `clerk-auth-state.json`
+- **Implemented auth state management** - Saves to `nextauth-auth-state.json`
 - **Added test user configuration** - Uses TEST_USER_EMAIL and TEST_USER_PASSWORD
 - **Created setup script** - `npm run test:auth-setup` for manual setup
 
