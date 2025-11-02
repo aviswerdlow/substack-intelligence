@@ -53,15 +53,15 @@ const ENV_VAR_DEFINITIONS = {
   
   // Authentication - Required for user management
   auth: {
-    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: {
+    NEXTAUTH_SECRET: {
       required: true,
-      validate: (val: string) => val.startsWith('pk_'),
-      errorMessage: 'Must start with pk_'
+      validate: (val: string) => val.length >= 32,
+      errorMessage: 'Must be at least 32 characters long'
     },
-    CLERK_SECRET_KEY: {
-      required: true,
-      validate: (val: string) => val.startsWith('sk_'),
-      errorMessage: 'Must start with sk_'
+    NEXTAUTH_URL: {
+      required: false,
+      validate: (val: string) => val.startsWith('http://') || val.startsWith('https://'),
+      errorMessage: 'Must be a valid URL'
     }
   },
   

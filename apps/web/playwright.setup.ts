@@ -15,7 +15,7 @@ async function globalSetup(config: FullConfig) {
   const context = await browser.newContext();
   const page = await context.newPage();
   
-  const authFile = 'clerk-auth-state.json';
+  const authFile = 'nextauth-auth-state.json';
   
   try {
     // Check if we already have valid auth state

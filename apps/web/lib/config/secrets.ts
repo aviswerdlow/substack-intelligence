@@ -336,8 +336,6 @@ export class ConfigManager {
 export class APIKeyManager {
   private static readonly KEY_PREFIXES = {
     anthropic: 'sk-ant-api03-',
-    clerk_secret: 'sk_',
-    clerk_publishable: 'pk_',
     supabase_anon: 'eyJ',
     supabase_service: 'eyJ',
     resend: 're_',
@@ -377,8 +375,6 @@ export class APIKeyManager {
     
     const keysToCheck = [
       { service: 'anthropic', key: process.env.ANTHROPIC_API_KEY },
-      { service: 'clerk_secret', key: process.env.CLERK_SECRET_KEY },
-      { service: 'clerk_publishable', key: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY },
       { service: 'supabase_service', key: process.env.SUPABASE_SERVICE_ROLE_KEY },
       { service: 'resend', key: process.env.RESEND_API_KEY },
       { service: 'axiom', key: process.env.AXIOM_TOKEN }

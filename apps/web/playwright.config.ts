@@ -51,7 +51,7 @@ export default defineConfig({
     /* Global timeout for navigation */
     navigationTimeout: 30000,
     /* Use saved authentication state */
-    storageState: 'clerk-auth-state.json',
+    storageState: 'nextauth-auth-state.json',
     /* Emulate real user behavior */
     viewport: { width: 1920, height: 1080 },
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

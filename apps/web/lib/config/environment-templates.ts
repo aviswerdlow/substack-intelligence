@@ -438,7 +438,7 @@ export function generateEnvironmentFile(template: keyof typeof ENVIRONMENT_TEMPL
   const categories = {
     'Core Application': ['NODE_ENV', 'VERCEL_ENV', 'NEXT_PUBLIC_APP_URL'],
     'Database': ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'],
-    'Authentication': ['NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY'],
+    'Authentication': ['NEXTAUTH_SECRET', 'NEXTAUTH_URL'],
     'External APIs': ['ANTHROPIC_API_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'],
     'Monitoring': ['AXIOM_TOKEN', 'AXIOM_DATASET'],
     'Infrastructure': ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'RESEND_API_KEY'],
