@@ -1,14 +1,27 @@
 'use client';
 
-import { SessionProvider } from 'next-auth/react';
-import { MonitoringProvider } from '@/components/monitoring-provider';
-import { Toaster } from '@/components/ui/toaster';
+import type { ReactNode } from 'react';
 
-export function AppProviders({ children }: { children: React.ReactNode }) {
+import { SessionProvider } from 'next-auth/react';
+
+import { AnalyticsConsentBanner } from '@/components/analytics/AnalyticsConsentBanner';
+import { MonitoringProvider } from '@/components/monitoring-provider';
+import { Providers as QueryProviders } from '@/components/providers';
+import { Toaster } from '@/components/ui/toaster';
+import { AnalyticsProvider } from '@/lib/analytics';
+
+interface AppProvidersProps {
+  children: ReactNode;
+}
+
+export function AppProviders({ children }: AppProvidersProps) {
   return (
     <SessionProvider>
       <MonitoringProvider>
-        {children}
+        <AnalyticsProvider>
+          <QueryProviders>{children}</QueryProviders>
+          <AnalyticsConsentBanner />
+        </AnalyticsProvider>
         <Toaster />
       </MonitoringProvider>
     </SessionProvider>

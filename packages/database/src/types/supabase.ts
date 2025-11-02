@@ -12,6 +12,75 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      analytics_events: {
+        Row: {
+          id: string
+          user_id: string | null
+          session_id: string | null
+          event_name: string
+          event_category: string
+          conversion_stage: string | null
+          context_path: string | null
+          referrer: string | null
+          properties: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          session_id?: string | null
+          event_name: string
+          event_category: string
+          conversion_stage?: string | null
+          context_path?: string | null
+          referrer?: string | null
+          properties?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          session_id?: string | null
+          event_name?: string
+          event_category?: string
+          conversion_stage?: string | null
+          context_path?: string | null
+          referrer?: string | null
+          properties?: Json
+          created_at?: string
+        }
+        Relationships: []
+      }
+      analytics_page_views: {
+        Row: {
+          id: string
+          user_id: string | null
+          session_id: string | null
+          path: string
+          referrer: string | null
+          properties: Json
+          occurred_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          session_id?: string | null
+          path: string
+          referrer?: string | null
+          properties?: Json
+          occurred_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          session_id?: string | null
+          path?: string
+          referrer?: string | null
+          properties?: Json
+          occurred_at?: string
+        }
+        Relationships: []
+      }
       emails: {
         Row: {
           id: string

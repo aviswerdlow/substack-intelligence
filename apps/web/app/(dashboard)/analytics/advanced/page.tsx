@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import {
   Zap
 } from 'lucide-react';
 import { format, subDays } from 'date-fns';
+import { useAnalytics } from '@/lib/analytics';
 
 // Generate mock data
 const generateMockData = (days: number) => {
@@ -63,14 +64,17 @@ const generateCompanyData = () => [
 ];
 
 export default function AdvancedAnalyticsPage() {
+  const { trackEvent } = useAnalytics();
   const [timeSeriesData, setTimeSeriesData] = useState(generateMockData(30));
   const [categoryData, setCategoryData] = useState(generateCategoryData());
   const [companyData, setCompanyData] = useState(generateCompanyData());
   const [selectedMetric, setSelectedMetric] = useState('companies');
   const [isExporting, setIsExporting] = useState(false);
+  const lastMetricRef = useRef('companies');
 
   // Simulate real-time data updates
   useEffect(() => {
+    void trackEvent('analytics_advanced_view');
     const interval = setInterval(() => {
       // Add new data point and remove oldest
       setTimeSeriesData(prev => {
@@ -94,7 +98,7 @@ export default function AdvancedAnalyticsPage() {
     }, 10000); // Update every 10 seconds
     
     return () => clearInterval(interval);
-  }, []);
+  }, [trackEvent]);
 
   const handleExportData = async () => {
     setIsExporting(true);
@@ -113,8 +117,17 @@ export default function AdvancedAnalyticsPage() {
       a.download = `analytics-export-${format(new Date(), 'yyyy-MM-dd')}.json`;
       a.click();
       URL.revokeObjectURL(url);
+      void trackEvent('analytics_advanced_export', { format: 'json' });
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleMetricChange = (metric: string) => {
+    setSelectedMetric(metric);
+    if (lastMetricRef.current !== metric) {
+      lastMetricRef.current = metric;
+      void trackEvent('analytics_advanced_metric_focus', { metric });
     }
   };
 

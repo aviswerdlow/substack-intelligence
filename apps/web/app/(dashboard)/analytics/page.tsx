@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { 
-  TrendingUp, 
+import {
+  TrendingUp,
   Building2, 
   Mail, 
   BarChart3,
@@ -24,6 +24,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
+import { useAnalytics } from '@/lib/analytics';
 
 interface Metrics {
   totalCompanies: number;
@@ -34,6 +35,17 @@ interface Metrics {
   confidenceChange: number;
   newsletterCount: number;
   successRate: number;
+  pageViews: number;
+  pageViewChange: number;
+  uniqueVisitors: number;
+  totalEvents: number;
+  conversionRate: number;
+  activeExperiments: number;
+  realtime?: {
+    pageViews: number;
+    events: number;
+    lastEventAt: string | null;
+  };
 }
 
 interface TrendData {
@@ -72,6 +84,7 @@ interface TopCompany {
 }
 
 export default function AnalyticsPage() {
+  const { trackEvent, trackConversion } = useAnalytics();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [newsletterPerformance, setNewsletterPerformance] = useState<NewsletterPerformance[]>([]);
@@ -83,17 +96,84 @@ export default function AnalyticsPage() {
   // Filters
   const [timeRange, setTimeRange] = useState('7');
   const [view, setView] = useState('overview');
+  const lastTrackedRangeRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    fetchAllData();
-    // Set up auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchMetrics();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [timeRange]);
+  const trackFetchError = useCallback(async (resource: string, error: unknown) => {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    await trackEvent('analytics_fetch_error', {
+      resource,
+      message,
+    });
+  }, [trackEvent]);
 
-  const fetchAllData = async () => {
+  const fetchMetrics = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/analytics/metrics?days=${timeRange}`);
+      const data = await response.json();
+      if (data.success && data.metrics) {
+        setMetrics(data.metrics);
+      }
+    } catch (error) {
+      console.error('Failed to fetch metrics:', error);
+      await trackFetchError('metrics', error);
+    }
+  }, [timeRange, trackFetchError]);
+
+  const fetchTrendData = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/analytics/trends?days=${timeRange}`);
+      const data = await response.json();
+      if (data.success) {
+        setTrendData(data.trends || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch trend data:', error);
+      await trackFetchError('trends', error);
+    }
+  }, [timeRange, trackFetchError]);
+
+  const fetchNewsletterPerformance = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/analytics/newsletters?days=${timeRange}`);
+      const data = await response.json();
+      if (data.success) {
+        setNewsletterPerformance(data.newsletters || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch newsletter performance:', error);
+      await trackFetchError('newsletters', error);
+    }
+  }, [timeRange, trackFetchError]);
+
+  const fetchDistributions = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/analytics/distributions?days=${timeRange}`);
+      const data = await response.json();
+      if (data.success) {
+        const distributions = data.distributions || {};
+        setIndustryDistribution(distributions.industry || data.industries || []);
+        setFundingDistribution(distributions.funding || data.funding || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch distributions:', error);
+      await trackFetchError('distributions', error);
+    }
+  }, [timeRange, trackFetchError]);
+
+  const fetchTopCompanies = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/analytics/top-companies?days=${timeRange}`);
+      const data = await response.json();
+      if (data.success) {
+        setTopCompanies(data.companies || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch top companies:', error);
+      await trackFetchError('top_companies', error);
+    }
+  }, [timeRange, trackFetchError]);
+
+  const fetchAllData = useCallback(async () => {
     setLoading(true);
     await Promise.all([
       fetchMetrics(),
@@ -103,83 +183,62 @@ export default function AnalyticsPage() {
       fetchTopCompanies()
     ]);
     setLoading(false);
-  };
 
-  const fetchMetrics = async () => {
-    try {
-      const response = await fetch(`/api/analytics/metrics?days=${timeRange}`);
-      const data = await response.json();
-      if (data.success && data.metrics) {
-        setMetrics(data.metrics);
-      }
-    } catch (error) {
-      console.error('Failed to fetch metrics:', error);
-    }
-  };
+    const previousRange = lastTrackedRangeRef.current;
+    lastTrackedRangeRef.current = timeRange;
 
-  const fetchTrendData = async () => {
-    try {
-      const response = await fetch(`/api/analytics/trends?days=${timeRange}`);
-      const data = await response.json();
-      if (data.success) {
-        setTrendData(data.trends || []);
-      }
-    } catch (error) {
-      console.error('Failed to fetch trend data:', error);
-    }
-  };
+    await trackEvent(previousRange === timeRange ? 'analytics_dashboard_refresh' : 'analytics_dashboard_view', {
+      timeRange: Number(timeRange),
+    });
+  }, [
+    fetchDistributions,
+    fetchMetrics,
+    fetchNewsletterPerformance,
+    fetchTopCompanies,
+    fetchTrendData,
+    timeRange,
+    trackEvent,
+  ]);
 
-  const fetchNewsletterPerformance = async () => {
-    try {
-      const response = await fetch(`/api/analytics/newsletters?days=${timeRange}`);
-      const data = await response.json();
-      if (data.success) {
-        setNewsletterPerformance(data.newsletters || []);
-      }
-    } catch (error) {
-      console.error('Failed to fetch newsletter performance:', error);
-    }
-  };
+  useEffect(() => {
+    fetchAllData();
+    // Set up auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchMetrics();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchAllData, fetchMetrics]);
 
-  const fetchDistributions = async () => {
-    try {
-      const response = await fetch(`/api/analytics/distributions?days=${timeRange}`);
-      const data = await response.json();
-      if (data.success) {
-        setIndustryDistribution(data.industries || []);
-        setFundingDistribution(data.funding || []);
-      }
-    } catch (error) {
-      console.error('Failed to fetch distributions:', error);
-    }
-  };
-
-  const fetchTopCompanies = async () => {
-    try {
-      const response = await fetch(`/api/analytics/top-companies?days=${timeRange}`);
-      const data = await response.json();
-      if (data.success) {
-        setTopCompanies(data.companies || []);
-      }
-    } catch (error) {
-      console.error('Failed to fetch top companies:', error);
-    }
-  };
-
-  const handleExport = async () => {
+  const handleExport = useCallback(async () => {
     try {
       const response = await fetch(`/api/analytics/export?days=${timeRange}`);
       const blob = await response.blob();
-      
+
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `analytics-${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
+
+      await trackConversion('analytics_export', {
+        format: 'csv',
+        timeRange: Number(timeRange),
+      });
     } catch (error) {
       console.error('Failed to export analytics:', error);
+      await trackFetchError('export', error);
     }
-  };
+  }, [timeRange, trackConversion, trackFetchError]);
+
+  const handleTimeRangeChange = useCallback((value: string) => {
+    setTimeRange(value);
+    void trackEvent('analytics_time_range_change', { value: Number(value) });
+  }, [trackEvent]);
+
+  const handleViewChange = useCallback((value: string) => {
+    setView(value);
+    void trackEvent('analytics_view_change', { view: value });
+  }, [trackEvent]);
 
   const renderChange = (value: number) => {
     if (value === 0) return null;
@@ -238,7 +297,7 @@ export default function AnalyticsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Select value={timeRange} onValueChange={setTimeRange}>
+          <Select value={timeRange} onValueChange={handleTimeRangeChange}>
             <SelectTrigger className="w-[150px]">
               <SelectValue />
             </SelectTrigger>
@@ -344,6 +403,93 @@ export default function AnalyticsPage() {
         </div>
       )}
 
+      {/* Engagement Metrics */}
+      {metrics && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                Page Views
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-baseline justify-between">
+                <p className="text-2xl font-bold">{metrics.pageViews}</p>
+                {renderChange(metrics.pageViewChange)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Total over selected range
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Unique Visitors
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-baseline justify-between">
+                <p className="text-2xl font-bold">{metrics.uniqueVisitors}</p>
+                <Badge variant="outline" className="text-xs">
+                  {metrics.totalEvents} events
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Sessions captured
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" />
+                Conversion Rate
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-baseline justify-between">
+                <p className="text-2xl font-bold">{(metrics.conversionRate * 100).toFixed(1)}%</p>
+                <Badge variant="secondary" className="text-xs">
+                  {metrics.activeExperiments} experiments
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Across tracked funnels
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {metrics?.realtime && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Real-time Activity (last 15 min)
+            </CardTitle>
+            <CardDescription>
+              {metrics.realtime.lastEventAt ? `Last event at ${formatDateTime(metrics.realtime.lastEventAt)}` : 'No recent events recorded'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center gap-6">
+            <div>
+              <p className="text-xl font-semibold">{metrics.realtime.pageViews}</p>
+              <p className="text-xs text-muted-foreground">Page views</p>
+            </div>
+            <div>
+              <p className="text-xl font-semibold">{metrics.realtime.events}</p>
+              <p className="text-xs text-muted-foreground">Events captured</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* View Tabs */}
       <div className="flex gap-2">
         {['overview', 'newsletters', 'companies', 'trends'].map((v) => (
@@ -351,7 +497,7 @@ export default function AnalyticsPage() {
             key={v}
             variant={view === v ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setView(v)}
+            onClick={() => handleViewChange(v)}
             className="capitalize"
           >
             {v}
