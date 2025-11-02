@@ -16,3 +16,13 @@ build/
 *~
 .vercel
 VERCEL_ENV_SETUP.md
+
+# Test artifacts
+test-results/
+.playwright-artifacts*/
+*.webm
+*.zip
+coverage/
+.nyc_output/
+playwright-report/
+test-report/

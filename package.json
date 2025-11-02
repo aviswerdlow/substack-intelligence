@@ -35,7 +35,7 @@
     "db:reset": "supabase db reset",
     "db:migrate": "supabase db push",
     "db:seed": "supabase db seed",
-    "security:audit": "npm audit --audit-level moderate && pnpm audit --audit-level moderate",
+    "security:audit": "pnpm audit --audit-level moderate",
     "security:check": "node scripts/security-check.js",
     "security:validate-build": "node scripts/validate-build.js",
     "validate:api-routes": "node scripts/validate-api-routes.js",
