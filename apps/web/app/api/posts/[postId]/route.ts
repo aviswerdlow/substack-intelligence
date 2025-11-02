@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import {
   createServerComponentClient,
   getPostById,
@@ -9,6 +8,7 @@ import {
 } from '@substack-intelligence/database';
 import { withRateLimit } from '@/lib/security/rate-limiting';
 import { z } from 'zod';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -52,10 +52,11 @@ export async function GET(
   { params }: { params: { postId: string } }
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = session.user.id;
 
     const supabase = createServerComponentClient();
     const post = await getPostById(supabase, userId, params.postId);
@@ -81,10 +82,11 @@ export async function PUT(
       return rateLimitResponse;
     }
 
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = session.user.id;
 
     const body = await request.json();
     const parsed = UpdatePostSchema.safeParse(body);
@@ -135,10 +137,11 @@ export async function DELETE(
       return rateLimitResponse;
     }
 
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = session.user.id;
 
     const supabase = createServerComponentClient();
     await deletePost(supabase, userId, params.postId);

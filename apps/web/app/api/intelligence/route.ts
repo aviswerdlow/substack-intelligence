@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import { z } from 'zod';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -15,10 +15,10 @@ const GetIntelligenceSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     // Check authentication (skip in development for testing)
-    const user = await currentUser();
     const isDevelopment = process.env.NODE_ENV === 'development';
-    
-    if (!user && !isDevelopment) {
+    const session = await getServerSecuritySession();
+
+    if (!session && !isDevelopment) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get the user ID to filter data
-    const userId = user?.id || 'development-user';
+    const userId = session?.user.id || 'development-user';
 
     // Parse and validate query parameters
     const { searchParams } = new URL(request.url);

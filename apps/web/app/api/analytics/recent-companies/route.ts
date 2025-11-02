@@ -1,21 +1,21 @@
 import { NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import { buildMissingUserIdColumnResponse, isMissingUserIdColumnError } from '@/lib/supabase-errors';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 export async function GET() {
   try {
-    const user = await currentUser();
+    const session = await getServerSecuritySession();
     const isDevelopment = process.env.NODE_ENV === 'development';
-    
-    if (!user && !isDevelopment) {
-      return NextResponse.json({ 
+
+    if (!session && !isDevelopment) {
+      return NextResponse.json({
         error: 'Unauthorized',
         companies: []
       }, { status: 401 });
     }
-    
-    const userId = user?.id || 'development-user';
+
+    const userId = session?.user.id || 'development-user';
     const supabase = createServiceRoleClient();
     
     // Fetch recent companies - FILTER BY USER_ID

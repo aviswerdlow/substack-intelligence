@@ -1,17 +1,17 @@
 import { NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { UserSettingsService } from '@/lib/user-settings';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // GET - Check Gmail connection status
 export async function GET() {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const userSettingsService = new UserSettingsService();
-    const settings = await userSettingsService.getUserSettings(user.id);
+    const settings = await userSettingsService.getUserSettings(session.user.id);
     
     if (!settings) {
       return NextResponse.json({

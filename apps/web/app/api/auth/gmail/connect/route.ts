@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 /**
  * Redirects authenticated users to the Gmail setup page
- * This endpoint is called after successful Clerk authentication
+ * This endpoint is called after successful authentication
  */
 export async function GET(request: NextRequest) {
   try {
-    // Verify the user is authenticated with Clerk
-    const { userId } = await auth();
+    // Verify the user is authenticated via NextAuth
+    const session = await getServerSecuritySession();
 
-    if (!userId) {
+    if (!session) {
       // Redirect to sign-in if not authenticated
       return NextResponse.redirect(new URL('/sign-in', request.url));
     }

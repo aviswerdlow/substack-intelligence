@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { currentUser } from '@clerk/nextjs/server';
 import { UserSettingsService } from '@/lib/user-settings';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 export async function GET() {
   try {
-    const user = await currentUser();
-    if (!user) {
-      return NextResponse.json({ 
+    const session = await getServerSecuritySession();
+    if (!session) {
+      return NextResponse.json({
         error: 'Authentication required',
         message: 'Please sign in to test your Gmail connection'
       }, { status: 401 });
@@ -15,7 +15,7 @@ export async function GET() {
 
     // Get user's Gmail tokens from database
     const userSettingsService = new UserSettingsService();
-    const tokens = await userSettingsService.getGmailTokens(user.id);
+    const tokens = await userSettingsService.getGmailTokens(session.user.id);
     
     if (!tokens || !tokens.refreshToken) {
       return NextResponse.json({

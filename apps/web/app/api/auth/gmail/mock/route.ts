@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { UserSettingsService } from '@/lib/user-settings';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Mock OAuth endpoint for development/testing
 export async function POST() {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -14,12 +14,12 @@ export async function POST() {
     const userSettingsService = new UserSettingsService();
     
     // Mock tokens and email for testing
-    const mockEmail = user.emailAddresses?.[0]?.emailAddress || 'test@example.com';
+    const mockEmail = session.user.email || 'test@example.com';
     const mockRefreshToken = 'mock_refresh_token_' + Date.now();
     const mockAccessToken = 'mock_access_token_' + Date.now();
     
     const success = await userSettingsService.connectGmail(
-      user.id,
+      session.user.id,
       mockRefreshToken,
       mockAccessToken,
       mockEmail,

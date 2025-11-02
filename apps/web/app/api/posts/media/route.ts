@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import {
   createServerComponentClient,
   listMediaAssets,
@@ -8,6 +7,7 @@ import {
 } from '@substack-intelligence/database';
 import { withRateLimit } from '@/lib/security/rate-limiting';
 import { z } from 'zod';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -27,10 +27,11 @@ const CreateMediaSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = session.user.id;
 
     const { searchParams } = new URL(request.url);
     const parsed = GetMediaSchema.safeParse({
@@ -62,10 +63,11 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse;
     }
 
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = session.user.id;
 
     const body = await request.json();
     const parsed = CreateMediaSchema.safeParse(body);
@@ -100,10 +102,11 @@ export async function DELETE(request: NextRequest) {
       return rateLimitResponse;
     }
 
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = session.user.id;
 
     const { searchParams } = new URL(request.url);
     const assetId = searchParams.get('id');

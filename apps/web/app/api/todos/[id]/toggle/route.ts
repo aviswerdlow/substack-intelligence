@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { 
-  createServerComponentClient, 
-  getTodoById, 
-  toggleTodoCompletion 
+import {
+  createServerComponentClient,
+  getTodoById,
+  toggleTodoCompletion
 } from '@substack-intelligence/database';
 import { withRateLimit } from '@/lib/security/rate-limiting';
 import { z } from 'zod';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -30,8 +30,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check authentication
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -45,7 +45,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const supabase = createServerComponentClient();
     
     // First check if todo exists and belongs to user
-    const existingTodo = await getTodoById(supabase, userId, todoId);
+    const existingTodo = await getTodoById(supabase, session.user.id, todoId);
     if (!existingTodo) {
       return NextResponse.json({
         success: false,
@@ -53,7 +53,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }, { status: 404 });
     }
 
-    const updatedTodo = await toggleTodoCompletion(supabase, userId, todoId);
+    const updatedTodo = await toggleTodoCompletion(supabase, session.user.id, todoId);
 
     return NextResponse.json({
       success: true,

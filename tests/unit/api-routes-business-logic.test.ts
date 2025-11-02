@@ -39,15 +39,6 @@ const mockServiceRoleClient = {
   }))
 };
 
-// Set up mocks
-vi.mock('@clerk/nextjs', () => ({
-  auth: mockAuth
-}));
-
-vi.mock('@clerk/nextjs/server', () => ({
-  currentUser: mockCurrentUser
-}));
-
 vi.mock('@substack-intelligence/database', () => ({
   createServerComponentClient: mockCreateServerComponentClient,
   createServiceRoleClient: mockCreateServiceRoleClient,

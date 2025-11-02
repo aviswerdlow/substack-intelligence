@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 interface NewsletterMetrics {
   name: string;
@@ -12,14 +12,14 @@ interface NewsletterMetrics {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await currentUser();
+    const session = await getServerSecuritySession();
     const isDevelopment = process.env.NODE_ENV === 'development';
 
-    if (!user && !isDevelopment) {
+    if (!session && !isDevelopment) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = user?.id || 'development-user';
+    const userId = session?.user.id || 'development-user';
     const searchParams = request.nextUrl.searchParams;
     const days = Math.max(1, parseInt(searchParams.get('days') || '7', 10));
 

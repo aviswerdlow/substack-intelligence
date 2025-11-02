@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { UserSettingsService } from '@/lib/user-settings';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 export async function GET() {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -13,7 +13,7 @@ export async function GET() {
     }
 
     const settingsService = new UserSettingsService();
-    const settings = await settingsService.getComprehensiveSettings(user.id);
+    const settings = await settingsService.getComprehensiveSettings(session.user.id);
     
     if (!settings) {
       return NextResponse.json({
@@ -37,8 +37,8 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -47,8 +47,8 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json();
     const settingsService = new UserSettingsService();
-    
-    const success = await settingsService.updateComprehensiveSettings(user.id, body);
+
+    const success = await settingsService.updateComprehensiveSettings(session.user.id, body);
     
     if (!success) {
       return NextResponse.json({
@@ -58,7 +58,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Return updated settings
-    const updatedSettings = await settingsService.getComprehensiveSettings(user.id);
+    const updatedSettings = await settingsService.getComprehensiveSettings(session.user.id);
     
     return NextResponse.json({
       success: true,

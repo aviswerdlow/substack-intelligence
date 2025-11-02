@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { EmbeddingService } from '@substack-intelligence/ai';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 import { z } from 'zod';
 
 const SimilarCompaniesSchema = z.object({
@@ -15,8 +15,8 @@ export async function GET(
 ) {
   try {
     // Check authentication
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'

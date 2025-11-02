@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createServerComponentClient, recordPostView } from '@substack-intelligence/database';
 import { z } from 'zod';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -23,11 +23,11 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Invalid view payload' }, { status: 400 });
     }
 
-    const { userId } = await auth();
+    const session = await getServerSecuritySession();
     const supabase = createServerComponentClient();
 
     await recordPostView(supabase, params.postId, {
-      userId: userId ?? undefined,
+      userId: session?.user.id ?? undefined,
       referrer: parsed.data.referrer ?? undefined,
       device: parsed.data.device ?? undefined,
       location: parsed.data.location ?? undefined,

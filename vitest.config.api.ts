@@ -47,7 +47,6 @@ export default defineConfig({
     mainFields: ['module', 'main'],
     alias: {
       'server-only': false,
-      '@clerk/nextjs/server': path.resolve(__dirname, './tests/mocks/auth/clerk-server.ts'),
       '@': path.resolve(__dirname, './apps/web'),
       '@substack-intelligence/shared': path.resolve(__dirname, './packages/shared/src'),
       '@substack-intelligence/database': path.resolve(__dirname, './packages/database/src'),

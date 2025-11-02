@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { EmbeddingService } from '@substack-intelligence/ai';
 import { z } from 'zod';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 const SemanticSearchSchema = z.object({
   q: z.string().min(1).max(500), // query
@@ -13,8 +13,8 @@ const SemanticSearchSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     // Check authentication
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'

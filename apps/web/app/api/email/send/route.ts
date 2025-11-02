@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { z } from 'zod';
 import { EmailQueue } from '@substack-intelligence/lib/email/queue';
 import type { EmailMessage } from '@substack-intelligence/lib/email/provider';
@@ -11,6 +10,7 @@ import {
   renderSubscriptionConfirmationTemplate,
 } from '@substack-intelligence/lib/email/templates';
 import { logEmailEvent } from '@substack-intelligence/lib/email/analytics';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 const emailQueue = new EmailQueue({ concurrency: 5, retryAttempts: 2, retryDelayMs: 1500 });
 
@@ -52,8 +52,8 @@ const EMAIL_TYPES: Record<string, 'welcome' | 'password_reset' | 'newsletter' | 
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
         queuePromises.push(emailQueue.enqueue(message, scheduleOptions));
 
         logs.push(logEmailEvent({
-          userId: user.id,
+          userId: session.user.id,
           recipientEmail: recipient,
           emailType: EMAIL_TYPES[type] ?? 'transactional',
           status: scheduleAt ? 'queued' : 'sent',

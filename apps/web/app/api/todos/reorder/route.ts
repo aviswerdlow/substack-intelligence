@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createServerComponentClient, reorderTodos } from '@substack-intelligence/database';
 import { withRateLimit } from '@/lib/security/rate-limiting';
 import { z } from 'zod';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -27,8 +27,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Check authentication
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     // Reorder todos in database
     const supabase = createServerComponentClient();
-    await reorderTodos(supabase, userId, todoUpdates as { id: string; position: number }[]);
+    await reorderTodos(supabase, session.user.id, todoUpdates as { id: string; position: number }[]);
 
     return NextResponse.json({
       success: true,

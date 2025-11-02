@@ -1,7 +1,23 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+
+type RouteMatcher = (req: NextRequest) => boolean;
+
+const createRouteMatcher = (patterns: string[]): RouteMatcher => {
+  const matchers = patterns.map(pattern => {
+    const normalized = pattern
+      .replace(/\//g, '\\/')
+      .replace(/\./g, '\\.')
+      .replace(/\*/g, '.*')
+      .replace(/\(\.\*\)/g, '.*');
+    return new RegExp(`^${normalized}$`);
+  });
+
+  return (req: NextRequest) => {
+    const pathname = req.nextUrl.pathname;
+    return matchers.some(regex => regex.test(pathname));
+  };
+};
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -20,34 +36,43 @@ const isPublicRoute = createRouteMatcher([
   '/api/setup/(.*)',
   '/api/auth/gmail',
   '/api/auth/gmail/(.*)',
-  '/api/auth/(.*)',
-  '/api/debug-clerk'  // Add debug endpoint as public for testing
+  '/api/auth/(.*)'
 ]);
 
 /**
  * Enhanced security middleware with debug mode protection
  */
-export default clerkMiddleware(async (auth, req: NextRequest) => {
-  // Apply security checks before authentication
+export async function middleware(req: NextRequest) {
   const securityResponse = applySecurityPolicies(req);
   if (securityResponse) {
     return securityResponse;
   }
 
-  // Standard authentication check
   if (!isPublicRoute(req)) {
-    const nextAuthToken = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
-    if (!nextAuthToken) {
-      await auth.protect();
+    if (!token) {
+      if (req.nextUrl.pathname.startsWith('/api')) {
+        const response = NextResponse.json(
+          { error: 'Unauthorized', message: 'Authentication is required to access this resource.' },
+          { status: 401 }
+        );
+        applySecurityHeaders(response, req);
+        return response;
+      }
+
+      const signInUrl = new URL('/sign-in', req.url);
+      signInUrl.searchParams.set('redirect_url', req.url);
+      const response = NextResponse.redirect(signInUrl);
+      applySecurityHeaders(response, req);
+      return response;
     }
   }
 
-  // Apply security headers to all responses
   const response = NextResponse.next();
   applySecurityHeaders(response, req);
   return response;
-});
+}
 
 /**
  * Apply security policies including debug mode prevention
@@ -55,12 +80,10 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
 function applySecurityPolicies(request: NextRequest): NextResponse | null {
   const isProduction = process.env.NODE_ENV === 'production';
   const vercelEnv = process.env.VERCEL_ENV;
-  
-  // CRITICAL: Block debug mode in production
+
   if ((isProduction || vercelEnv === 'production') && process.env.APP_DEBUG_MODE === 'true') {
     console.error('[SECURITY] DEBUG mode detected in production - BLOCKING REQUEST');
-    
-    // Log security incident
+
     logSecurityIncident({
       type: 'DEBUG_MODE_BLOCKED',
       environment: vercelEnv || 'production',
@@ -69,23 +92,23 @@ function applySecurityPolicies(request: NextRequest): NextResponse | null {
       ip: request.ip || request.headers.get('x-forwarded-for') || 'unknown',
       userAgent: request.headers.get('user-agent') || 'unknown'
     });
-    
-    // Return error response
-    return NextResponse.json(
-      { 
+
+    const response = NextResponse.json(
+      {
         error: 'Security Policy Violation',
         message: 'Debug mode cannot be enabled in production',
         code: 'SECURITY_DEBUG_MODE_BLOCKED'
       },
       { status: 403 }
     );
+    applySecurityHeaders(response, request);
+    return response;
   }
-  
-  // For staging environment, check if debug mode should auto-disable
+
   if (vercelEnv === 'preview' && process.env.APP_DEBUG_MODE === 'true') {
     checkDebugModeTimeout();
   }
-  
+
   return null;
 }
 
@@ -98,12 +121,10 @@ function checkDebugModeTimeout() {
     const enabledTime = new Date(debugEnabledAt).getTime();
     const currentTime = new Date().getTime();
     const hourInMs = 60 * 60 * 1000;
-    
+
     if (currentTime - enabledTime > hourInMs) {
       console.log('[SECURITY] Auto-disabling debug mode in staging (1-hour timeout)');
-      // Note: Cannot modify process.env in Edge Runtime
-      // This would need to be handled server-side
-      
+
       logSecurityIncident({
         type: 'DEBUG_MODE_AUTO_DISABLED',
         environment: 'staging',
@@ -114,7 +135,6 @@ function checkDebugModeTimeout() {
       });
     }
   } else {
-    // Note: Cannot set process.env in Edge Runtime
     console.log('[SECURITY] Debug mode detected in staging environment');
   }
 }
@@ -125,50 +145,38 @@ function checkDebugModeTimeout() {
 function applySecurityHeaders(response: NextResponse, request: NextRequest) {
   const isProduction = process.env.NODE_ENV === 'production';
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  
-  // Content Security Policy
+
   const cspPolicy = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.clerk.dev https://*.clerk.accounts.dev",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: https: blob:",
-    "connect-src 'self' https://api.anthropic.com https://*.supabase.co https://*.clerk.accounts.dev https://*.inngest.net https://clerk-telemetry.com",
-    "frame-src 'self' https://*.clerk.accounts.dev",
+    `connect-src 'self' ${appUrl} https://api.anthropic.com https://api.openai.com https://*.supabase.co https://*.inngest.net https://www.googleapis.com https://accounts.google.com`,
+    "frame-src 'self' https://accounts.google.com",
     "worker-src 'self' blob:",
-    isProduction ? "upgrade-insecure-requests" : ""
-  ].filter(Boolean).join('; ');
-  
-  // Apply security headers
+    isProduction ? 'upgrade-insecure-requests' : ''
+  ]
+    .filter(Boolean)
+    .join('; ');
+
   const headers = {
-    // Content Security Policy
     'Content-Security-Policy': cspPolicy,
-    
-    // XSS Protection
     'X-XSS-Protection': '1; mode=block',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
-    
-    // HSTS (only in production)
     ...(isProduction && {
       'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload'
     }),
-    
-    // Referrer Policy
     'Referrer-Policy': 'strict-origin-when-cross-origin',
-    
-    // Permissions Policy
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-    
-    // Cache Control for sensitive pages
     ...(request.nextUrl.pathname.startsWith('/dashboard') && {
       'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0'
+      Pragma: 'no-cache',
+      Expires: '0'
     })
-  };
-  
-  // Set headers
+  } as Record<string, string>;
+
   Object.entries(headers).forEach(([key, value]) => {
     response.headers.set(key, value);
   });
@@ -187,11 +195,8 @@ async function logSecurityIncident(incident: {
 }) {
   try {
     console.error('[SECURITY INCIDENT]', JSON.stringify(incident));
-    
-    // Send to monitoring if configured
+
     if (process.env.AXIOM_TOKEN && process.env.AXIOM_DATASET) {
-      // In production, this would send to Axiom
-      // For now, we log for visibility
       console.log('[MONITORING] Security incident logged:', incident.type);
     }
   } catch (error) {
@@ -201,7 +206,6 @@ async function logSecurityIncident(incident: {
 
 export const config = {
   matcher: [
-    // Skip all internal paths and static files
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|css|js)).*)',
     '/',
     '/(api|trpc)(.*)'

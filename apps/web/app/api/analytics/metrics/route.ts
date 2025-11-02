@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 type SupabaseClient = ReturnType<typeof createServiceRoleClient>;
 
@@ -44,17 +44,17 @@ const DEFAULT_DAYS = 7;
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await currentUser();
+    const session = await getServerSecuritySession();
     const isDevelopment = process.env.NODE_ENV === 'development';
 
-    if (!user && !isDevelopment) {
+    if (!session && !isDevelopment) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized',
       }, { status: 401 });
     }
 
-    const userId = user?.id || 'development-user';
+    const userId = session?.user.id || 'development-user';
     const { searchParams } = new URL(request.url);
     const daysParam = searchParams.get('days') ?? searchParams.get('period') ?? `${DEFAULT_DAYS}`;
     const period = Math.max(1, parseInt(daysParam, 10) || DEFAULT_DAYS);

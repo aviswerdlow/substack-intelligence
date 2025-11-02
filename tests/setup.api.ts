@@ -4,18 +4,29 @@ import { TextEncoder, TextDecoder } from 'util';
 // Mock server-only module first to prevent import errors
 vi.mock('server-only', () => ({}));
 
-// Mock Clerk modules to prevent server-only imports
-vi.mock('@clerk/nextjs/server', () => ({
-  currentUser: vi.fn(() => Promise.resolve({
-    id: 'test-user-id',
-    emailAddress: 'test@example.com'
-  })),
-  auth: vi.fn(() => ({ userId: 'test-user-id' }))
-}));
+// Mock security session helper to avoid network calls during tests
+vi.mock('@substack-intelligence/lib/security/session', async () => {
+  const actual = await vi.importActual<typeof import('@substack-intelligence/lib/security/session')>(
+    '@substack-intelligence/lib/security/session'
+  );
+  const { securitySessionController } = await import('./mocks/auth/security-session-controller');
 
-vi.mock('@clerk/nextjs', () => ({
-  auth: vi.fn(() => ({ userId: 'test-user-id' }))
-}));
+  return {
+    ...actual,
+    getServerSecuritySession: vi.fn(async () => securitySessionController.getSession()),
+    fetchUserAccessProfile: vi.fn(async (userId: string) => {
+      const session = securitySessionController.getSession();
+      const baseUser = session?.user ?? securitySessionController.getDefaultUser();
+      return {
+        id: userId,
+        role: baseUser.role,
+        permissions: baseUser.permissions,
+        isVerified: baseUser.isVerified,
+        organizationId: baseUser.organizationId
+      };
+    })
+  };
+});
 
 // Polyfill for Node.js environment
 global.TextEncoder = TextEncoder;

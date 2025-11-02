@@ -37,14 +37,22 @@ vi.mock('googleapis', () => ({
   }
 }));
 
-// Mock Clerk authentication
-const mockCurrentUser = vi.fn(() => Promise.resolve({ 
-  id: 'test-user-id', 
-  emailAddress: 'test@example.com' 
+// Mock session helper
+const mockGetServerSecuritySession = vi.fn(() => Promise.resolve({
+  session: { user: { id: 'test-user-id' } } as any,
+  user: {
+    id: 'test-user-id',
+    email: 'test@example.com',
+    role: 'viewer',
+    permissions: [],
+    isVerified: true
+  },
+  rememberMe: false,
+  sessionId: 'test-session'
 }));
 
-vi.mock('@clerk/nextjs/server', () => ({
-  currentUser: mockCurrentUser
+vi.mock('@substack-intelligence/lib/security/session', () => ({
+  getServerSecuritySession: mockGetServerSecuritySession
 }));
 
 // Mock database
@@ -78,9 +86,17 @@ describe('API Gmail Auth Route', () => {
     };
 
     // Reset current user to authenticated by default
-    mockCurrentUser.mockResolvedValue({ 
-      id: 'test-user-id', 
-      emailAddress: 'test@example.com' 
+    mockGetServerSecuritySession.mockResolvedValue({
+      session: { user: { id: 'test-user-id' } } as any,
+      user: {
+        id: 'test-user-id',
+        email: 'test@example.com',
+        role: 'viewer',
+        permissions: [],
+        isVerified: true
+      },
+      rememberMe: false,
+      sessionId: 'test-session'
     });
   });
 
@@ -120,7 +136,7 @@ describe('API Gmail Auth Route', () => {
     });
 
     it('should return 401 when user is not authenticated', async () => {
-      mockCurrentUser.mockResolvedValue(null);
+      mockGetServerSecuritySession.mockResolvedValue(null);
 
       const request = new NextRequest('https://example.com/api/auth/gmail');
       const response = await getGmailAuthHandler(request);
@@ -270,7 +286,7 @@ describe('API Gmail Auth Route', () => {
     });
 
     it('should return 401 when user is not authenticated', async () => {
-      mockCurrentUser.mockResolvedValue(null);
+      mockGetServerSecuritySession.mockResolvedValue(null);
 
       const response = await deleteGmailAuthHandler();
 
