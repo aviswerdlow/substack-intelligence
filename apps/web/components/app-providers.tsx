@@ -21,8 +21,8 @@ export function AppProviders({ children }: AppProvidersProps) {
         <AnalyticsProvider>
           <QueryProviders>{children}</QueryProviders>
           <AnalyticsConsentBanner />
-          <Toaster />
         </AnalyticsProvider>
+        <Toaster />
       </MonitoringProvider>
     </SessionProvider>
   );
