@@ -1,12 +1,13 @@
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { SupabaseAdapter } from '@auth/supabase-adapter';
 import type { Adapter } from 'next-auth/adapters';
-import type { NextAuthOptions, User as NextAuthUser } from 'next-auth';
+import type { Account, NextAuthOptions, User as NextAuthUser } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import GitHubProvider from 'next-auth/providers/github';
 import type { Provider } from 'next-auth/providers';
 import { NextRequest } from 'next/server';
+import { persistGmailTokens } from '@substack-intelligence/lib/gmail-tokens';
 import { checkRateLimit } from '@/lib/security/rate-limiting';
 import { z } from 'zod';
 
@@ -86,6 +87,37 @@ function parseRememberValue(value: unknown): boolean {
   return false;
 }
 
+async function persistGmailTokensFromAccount(user: NextAuthUser, account?: Account | null): Promise<void> {
+  if (!account || account.provider !== 'google') {
+    return;
+  }
+
+  const userId = user.id;
+  if (!userId) {
+    return;
+  }
+
+  const refreshToken = account.refresh_token ?? null;
+  const accessToken = account.access_token ?? null;
+  const expiresAt = account.expires_at ?? null;
+
+  if (!refreshToken && !accessToken) {
+    return;
+  }
+
+  try {
+    await persistGmailTokens(userId, {
+      refreshToken,
+      accessToken,
+      expiresAt,
+      email: user.email ?? null,
+      connected: true,
+    });
+  } catch (error) {
+    console.error('[auth] Failed to persist Gmail OAuth tokens', error);
+  }
+}
+
 async function enforceAuthRateLimit(request?: Request, endpoint: string = 'auth/signin') {
   if (!request) {
     return;
@@ -145,6 +177,14 @@ const buildSocialProviders = (): Provider[] => {
             prompt: 'consent',
             access_type: 'offline',
             response_type: 'code',
+            scope: [
+              'openid',
+              'email',
+              'profile',
+              'https://www.googleapis.com/auth/gmail.readonly',
+              'https://www.googleapis.com/auth/gmail.modify',
+            ].join(' '),
+            include_granted_scopes: 'true',
           },
         },
       }),
@@ -277,6 +317,8 @@ export const authOptions: NextAuthOptions = {
         userId: user.id,
         provider: account?.provider,
       });
+
+      await persistGmailTokensFromAccount(user, account);
     },
     async signOut({ token }) {
       console.log('[auth] User signed out', {

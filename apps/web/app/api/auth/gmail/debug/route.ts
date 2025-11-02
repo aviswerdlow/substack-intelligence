@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`;
+  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`;
   
   return NextResponse.json({
     message: 'Gmail OAuth Debug Info',
@@ -12,7 +12,7 @@ export async function GET() {
     },
     computed: {
       redirectUri,
-      expectedRedirectUri: 'http://localhost:3000/api/auth/gmail/callback'
+      expectedRedirectUri: 'http://localhost:3000/api/auth/callback/google'
     },
     instructions: {
       step1: 'Copy the redirectUri value above',

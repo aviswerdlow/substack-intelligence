@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { signIn } from 'next-auth/react';
 import {
   Dialog,
   DialogContent,
@@ -78,88 +79,96 @@ export function GmailConnectionModal({
     setConnectionError(null);
 
     try {
-      const response = await fetch('/api/auth/gmail');
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || data.message || 'Failed to initiate Gmail authentication');
+      const result = await signIn(
+        'google',
+        {
+          redirect: false,
+          callbackUrl: `${window.location.origin}/auth/gmail-setup?autoClose=1`,
+        },
+        {
+          prompt: 'consent',
+          access_type: 'offline',
+          include_granted_scopes: 'true',
+        }
+      );
+
+      if (!result?.url) {
+        throw new Error(result?.error || 'Failed to initiate Gmail authentication');
       }
 
-      const data = await response.json();
-      if (data.authUrl) {
-        // Open OAuth flow in popup window
-        const width = 600;
-        const height = 700;
-        const left = (screen.width / 2) - (width / 2);
-        const top = (screen.height / 2) - (height / 2);
-        
-        const popup = window.open(
-          data.authUrl,
-          'gmail-auth',
-          `width=${width},height=${height},left=${left},top=${top},status=yes,scrollbars=yes,resizable=yes`
-        );
+      // Open OAuth flow in popup window
+      const width = 600;
+      const height = 700;
+      const left = (screen.width / 2) - (width / 2);
+      const top = (screen.height / 2) - (height / 2);
 
-        if (!popup) {
-          toast({
-            title: 'Popup Blocked',
-            description: 'Please allow popups for this site to connect Gmail.',
-            variant: 'destructive',
-          });
-          setIsConnecting(false);
-          return;
-        }
+      const popup = window.open(
+        result.url,
+        'gmail-auth',
+        `width=${width},height=${height},left=${left},top=${top},status=yes,scrollbars=yes,resizable=yes`
+      );
 
-        setAuthWindow(popup);
+      if (!popup) {
+        toast({
+          title: 'Popup Blocked',
+          description: 'Please allow popups for this site to connect Gmail.',
+          variant: 'destructive',
+        });
+        setIsConnecting(false);
+        return;
+      }
 
-        const verifyConnection = async () => {
-          try {
-            const status = await refreshStatus();
+      setAuthWindow(popup);
 
-            if (status?.connected) {
-              toast({
-                title: 'Gmail Connected!',
-                description: status.email ? `Connected as ${status.email}` : undefined,
-              });
+      const verifyConnection = async () => {
+        try {
+          const status = await refreshStatus();
 
-              setIsConnecting(false);
-              onConnectionSuccess?.();
-              onOpenChange(false);
-            } else {
-              setConnectionError('Gmail connection was not completed. Please try again.');
-              setIsConnecting(false);
-            }
-          } catch (error) {
-            console.error('Failed to verify Gmail connection:', error);
-            setConnectionError('Failed to verify Gmail connection. Please try again.');
+          if (status?.connected) {
+            toast({
+              title: 'Gmail Connected!',
+              description: status.email ? `Connected as ${status.email}` : undefined,
+            });
+
+            setIsConnecting(false);
+            onConnectionSuccess?.();
+            onOpenChange(false);
+          } else {
+            setConnectionError('Gmail connection was not completed. Please try again.');
             setIsConnecting(false);
           }
-          setAuthWindow(null);
-        };
-
-        // Check for completion
-        const checkInterval = setInterval(() => {
-          try {
-            if (!popup || popup.closed) {
-              clearInterval(checkInterval);
-              clearTimeout(timeoutId);
-              setAuthWindow(null);
-              verifyConnection();
-            }
-          } catch {
-            // Ignore cross-origin access errors while popup is open
-          }
-        }, 1000);
-
-        // Timeout after 5 minutes
-        const timeoutId = window.setTimeout(() => {
-          clearInterval(checkInterval);
-          if (popup && !popup.closed) {
-            popup.close();
-          }
-          setAuthWindow(null);
-          setConnectionError('Connection timeout - please try again');
+        } catch (error) {
+          console.error('Failed to verify Gmail connection:', error);
+          setConnectionError('Failed to verify Gmail connection. Please try again.');
           setIsConnecting(false);
-        }, 5 * 60 * 1000);
-      }
+        }
+        setAuthWindow(null);
+      };
+
+      // Check for completion
+      const checkInterval = setInterval(() => {
+        try {
+          if (!popup || popup.closed) {
+            clearInterval(checkInterval);
+            clearTimeout(timeoutId);
+            setAuthWindow(null);
+            verifyConnection();
+          }
+        } catch {
+          // Ignore cross-origin access errors while popup is open
+        }
+      }, 1000);
+
+      // Timeout after 5 minutes
+      const timeoutId = window.setTimeout(() => {
+        clearInterval(checkInterval);
+        if (popup && !popup.closed) {
+          popup.close();
+        }
+        setAuthWindow(null);
+        setConnectionError('Connection timeout - please try again');
+        setIsConnecting(false);
+      }, 5 * 60 * 1000);
     } catch (error) {
       console.error('Gmail connection error:', error);
       setConnectionError(error instanceof Error ? error.message : 'Unknown error occurred');

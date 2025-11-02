@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { google } from 'googleapis';
+import { fetchGmailTokenState, clearGmailTokens } from '@substack-intelligence/lib/gmail-tokens';
 import { validateOAuthConfig } from '@/lib/oauth-health-check';
 import { logOAuthInitiated, logOAuthFailure } from '@/lib/oauth-monitoring';
 import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
-import { UserSettingsService } from '@/lib/user-settings';
 
 // Environment variable validation
 function validateEnvironment() {
@@ -24,20 +23,7 @@ function validateEnvironment() {
   return errors;
 }
 
-function createOAuth2Client() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
-  const redirectUri = appUrl.startsWith('http') 
-    ? `${appUrl}/api/auth/gmail/callback`
-    : `https://${appUrl}/api/auth/gmail/callback`;
-  
-  return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    redirectUri
-  );
-}
-
-// GET - Initiate OAuth flow
+// GET - Return Gmail OAuth configuration & status
 export async function GET(request: NextRequest) {
   try {
     // Enhanced OAuth configuration validation
@@ -73,34 +59,17 @@ export async function GET(request: NextRequest) {
       referer: request.headers.get('referer') || 'unknown'
     });
 
-    const oauth2Client = createOAuth2Client();
-    
-    // Generate OAuth URL with proper scopes
-    const scopes = [
-      'https://www.googleapis.com/auth/gmail.readonly',
-      'https://www.googleapis.com/auth/gmail.modify'
-    ];
+    const tokenState = await fetchGmailTokenState(session.user.id);
 
-    const authUrl = oauth2Client.generateAuthUrl({
-      access_type: 'offline',
-      scope: scopes,
-      state: session.user.id, // Pass user ID in state for callback security
-      prompt: 'consent', // Force consent to get refresh token
-      include_granted_scopes: true
-    });
-
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
-    const finalRedirectUri = appUrl.startsWith('http') 
-      ? `${appUrl}/api/auth/gmail/callback`
-      : `https://${appUrl}/api/auth/gmail/callback`;
-      
-    return NextResponse.json({ 
-      authUrl,
-      redirectUri: finalRedirectUri
+    return NextResponse.json({
+      connected: Boolean(tokenState?.connected),
+      email: tokenState?.email ?? null,
+      provider: 'google',
+      signInPath: '/api/auth/signin/google'
     });
   } catch (error) {
     console.error('Gmail OAuth initiation failed:', error);
-    
+
     // Check for specific error types
     if (error instanceof Error) {
       if (error.message.includes('Gmail API')) {
@@ -136,23 +105,22 @@ export async function DELETE() {
       }, { status: 401 });
     }
 
-    // Disconnect Gmail in database
-    const userSettingsService = new UserSettingsService();
-    const success = await userSettingsService.disconnectGmail(session.user.id);
-    
-    if (success) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Gmail account disconnected successfully',
-        userId: session.user.id
-      });
-    } else {
+    try {
+      await clearGmailTokens(session.user.id);
+    } catch (error) {
+      console.error('Failed to clear Gmail tokens:', error);
       return NextResponse.json({
         error: 'Disconnection Failed',
         message: 'Unable to disconnect Gmail account. Please try again.',
         userId: session.user.id
       }, { status: 500 });
     }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Gmail account disconnected successfully',
+      userId: session.user.id
+    });
   } catch (error) {
     console.error('Gmail disconnection failed:', error);
     return NextResponse.json({

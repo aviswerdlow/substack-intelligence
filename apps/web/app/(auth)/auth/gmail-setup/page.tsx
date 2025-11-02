@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle2, Loader2, Mail, AlertCircle } from 'lucide-react';
@@ -54,6 +55,43 @@ export default function GmailSetupPage() {
     }
   }, [sessionLoading, isAuthenticated, router]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('autoClose') !== '1') {
+      return;
+    }
+
+    const finalizePopup = async () => {
+      try {
+        const response = await fetch('/api/auth/gmail/status');
+        const data = await response.json();
+
+        if (data.connected && window.opener) {
+          window.opener.postMessage({ type: 'gmail-connected' }, window.location.origin);
+          window.close();
+        }
+      } catch (error) {
+        console.error('Failed to finalize Gmail popup:', error);
+      }
+
+      if (window.opener) {
+        setTimeout(() => {
+          try {
+            window.close();
+          } catch (error) {
+            console.error('Failed to close Gmail popup window:', error);
+          }
+        }, 1500);
+      }
+    };
+
+    void finalizePopup();
+  }, []);
+
   const connectGmail = async () => {
     if (!userId) {
       setError('You must be signed in to connect Gmail');
@@ -64,18 +102,22 @@ export default function GmailSetupPage() {
     setError(null);
 
     try {
-      // Get the Gmail OAuth URL
-      const response = await fetch('/api/auth/gmail', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      });
+      const result = await signIn(
+        'google',
+        {
+          redirect: false,
+          callbackUrl: `${window.location.origin}/auth/gmail-setup?autoClose=1`,
+        },
+        {
+          prompt: 'consent',
+          access_type: 'offline',
+          include_granted_scopes: 'true',
+        }
+      );
 
-      if (!response.ok) {
-        throw new Error('Failed to get Gmail authorization URL');
+      if (!result?.url) {
+        throw new Error(result?.error || 'Failed to start Gmail authentication');
       }
-
-      const { url } = await response.json();
 
       // Open Gmail OAuth in a popup window
       const width = 500;
@@ -84,7 +126,7 @@ export default function GmailSetupPage() {
       const top = window.screen.height / 2 - height / 2;
 
       const popup = window.open(
-        url,
+        result.url,
         'gmail-oauth',
         `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
       );

@@ -1,4 +1,5 @@
 import { createServiceRoleClient } from '@substack-intelligence/database';
+import { clearGmailTokens, fetchGmailTokenState, persistGmailTokens } from '@substack-intelligence/lib/gmail-tokens';
 import { mapToMissingUserIdColumnError, MissingUserIdColumnError } from './supabase-errors';
 
 export interface UserSettings {
@@ -496,15 +497,15 @@ export class UserSettingsService {
     expiryDate?: Date
   ): Promise<boolean> {
     try {
-      const settings = await this.createOrUpdateUserSettings(userId, {
-        gmail_connected: true,
-        gmail_refresh_token: refreshToken,
-        gmail_access_token: accessToken,
-        gmail_email: email,
-        gmail_token_expiry: expiryDate?.toISOString() || null
+      await persistGmailTokens(userId, {
+        refreshToken,
+        accessToken,
+        email,
+        expiresAt: expiryDate ?? null,
+        connected: true
       });
 
-      return settings !== null;
+      return true;
     } catch (error) {
       const schemaError =
         error instanceof MissingUserIdColumnError
@@ -520,15 +521,8 @@ export class UserSettingsService {
 
   async disconnectGmail(userId: string): Promise<boolean> {
     try {
-      const settings = await this.createOrUpdateUserSettings(userId, {
-        gmail_connected: false,
-        gmail_refresh_token: null,
-        gmail_access_token: null,
-        gmail_email: null,
-        gmail_token_expiry: null
-      });
-
-      return settings !== null;
+      await clearGmailTokens(userId);
+      return true;
     } catch (error) {
       const schemaError =
         error instanceof MissingUserIdColumnError
@@ -548,16 +542,16 @@ export class UserSettingsService {
     email: string | null;
   } | null> {
     try {
-      const settings = await this.getUserSettings(userId);
-      
-      if (!settings || !settings.gmail_connected) {
+      const state = await fetchGmailTokenState(userId);
+
+      if (!state || !state.connected) {
         return null;
       }
 
       return {
-        refreshToken: settings.gmail_refresh_token || null,
-        accessToken: settings.gmail_access_token || null,
-        email: settings.gmail_email || null
+        refreshToken: state.refreshToken,
+        accessToken: state.accessToken,
+        email: state.email
       };
     } catch (error) {
       const schemaError =

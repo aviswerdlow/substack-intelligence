@@ -102,7 +102,7 @@ async function testEnvironmentVariables() {
     test.details = {
       allPresent: true,
       warnings,
-      redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`
+      redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`
     };
 
     return test;
@@ -194,7 +194,7 @@ async function testAuthUrlGeneration() {
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`
+      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`
     );
 
     const authUrl = oauth2Client.generateAuthUrl({
@@ -221,7 +221,7 @@ async function testAuthUrlGeneration() {
     test.details = {
       urlGenerated: true,
       clientId: params.client_id === process.env.GOOGLE_CLIENT_ID,
-      redirectUri: params.redirect_uri === `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`,
+      redirectUri: params.redirect_uri === `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`,
       scopes: params.scope?.includes('gmail.readonly'),
       state: params.state === 'test-user-id',
       authUrl: authUrl.substring(0, 150) + '...'
@@ -278,7 +278,7 @@ async function generateTestAuthUrl(userId: string) {
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`
+      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`
     );
 
     const authUrl = oauth2Client.generateAuthUrl({
@@ -312,7 +312,7 @@ async function generateTestAuthUrl(userId: string) {
 }
 
 async function validateRedirectUri(uri: string) {
-  const expected = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`;
+  const expected = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`;
   
   return NextResponse.json({
     provided: uri,

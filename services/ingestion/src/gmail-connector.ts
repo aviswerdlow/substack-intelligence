@@ -1,5 +1,6 @@
 import { google, gmail_v1 } from 'googleapis';
 import { createServiceRoleClient } from '@substack-intelligence/database';
+import { fetchGmailTokenState } from '@substack-intelligence/lib/gmail-tokens';
 import { z } from 'zod';
 import { parseNewsletterHTML } from './utils/html-parser';
 import pMap from 'p-map';
@@ -88,31 +89,23 @@ export class GmailConnector {
   }
 
   private async loadUserGmailCredentials(userId: string): Promise<GmailCredentials | null> {
-    if (!this.supabase) {
-      return null;
-    }
+    try {
+      const state = await fetchGmailTokenState(userId);
 
-    const { data, error } = await this.supabase
-      .from('user_settings')
-      .select('gmail_access_token, gmail_refresh_token, gmail_token_expiry, gmail_email')
-      .eq('user_id', userId)
-      .maybeSingle();
+      if (!state) {
+        return null;
+      }
 
-    if (error) {
+      return {
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        expiresAt: state.tokenExpiry,
+        email: state.email
+      };
+    } catch (error) {
       console.error('[GmailConnector] Failed to load Gmail credentials from Supabase:', error);
       throw new Error(`Unable to load Gmail credentials for user ${userId}`);
     }
-
-    if (!data) {
-      return null;
-    }
-
-    return {
-      accessToken: data.gmail_access_token ?? null,
-      refreshToken: data.gmail_refresh_token ?? null,
-      expiresAt: data.gmail_token_expiry ?? null,
-      email: data.gmail_email ?? null
-    };
   }
 
   private async getGmailClient(): Promise<gmail_v1.Gmail> {

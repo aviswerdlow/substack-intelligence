@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { UserSettingsService } from '@/lib/user-settings';
+import { persistGmailTokens } from '@substack-intelligence/lib/gmail-tokens';
 import { buildMissingUserIdColumnResponse, isMissingUserIdColumnError, MissingUserIdColumnError } from '@/lib/supabase-errors';
 import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
@@ -18,21 +18,10 @@ export async function POST(request: NextRequest) {
 
     const { email } = await request.json();
 
-    // Mark user as having Gmail connected using UserSettingsService
-    const userSettingsService = new UserSettingsService();
-    
-    // Update settings to mark Gmail as connected via Supabase-managed OAuth
-    const updated = await userSettingsService.createOrUpdateUserSettings(session.user.id, {
-      gmail_connected: true,
-      gmail_email: email
+    await persistGmailTokens(session.user.id, {
+      email: email ?? null,
+      connected: true
     });
-
-    if (!updated) {
-      console.error('Failed to mark Gmail as connected');
-      return NextResponse.json({
-        error: 'Failed to save connection status'
-      }, { status: 500 });
-    }
 
     return NextResponse.json({
       success: true,
