@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { getToken } from 'next-auth/jwt';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
@@ -6,6 +7,9 @@ const isPublicRoute = createRouteMatcher([
   '/',
   '/sign-in(.*)',
   '/sign-up(.*)',
+  '/login',
+  '/register',
+  '/forgot-password',
   '/api/health',
   '/api/monitoring/(.*)',
   '/api/analytics/(.*)',
@@ -16,6 +20,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/setup/(.*)',
   '/api/auth/gmail',
   '/api/auth/gmail/(.*)',
+  '/api/auth/(.*)',
   '/api/debug-clerk'  // Add debug endpoint as public for testing
 ]);
 
@@ -31,7 +36,11 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
 
   // Standard authentication check
   if (!isPublicRoute(req)) {
-    await auth.protect();
+    const nextAuthToken = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+
+    if (!nextAuthToken) {
+      await auth.protect();
+    }
   }
 
   // Apply security headers to all responses

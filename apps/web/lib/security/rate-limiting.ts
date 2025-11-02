@@ -31,6 +31,8 @@ const getProductionLimits = () => {
     // Authentication endpoints (stricter in production)
     'auth/signin': { requests: Math.floor(5 * multiplier), window: '1m' },
     'auth/signup': { requests: Math.floor(3 * multiplier), window: '5m' },
+    'auth/password-request': { requests: Math.floor(3 * multiplier), window: '10m' },
+    'auth/password-reset': { requests: Math.floor(5 * multiplier), window: '10m' },
     
     // API endpoints
     'api/companies': { requests: Math.floor(100 * multiplier), window: '1h' },
