@@ -113,12 +113,26 @@ export function SkeletonDashboard() {
           </div>
         ))}
       </div>
-      
+
       {/* Main Content */}
       <div className="grid md:grid-cols-2 gap-6">
         <SkeletonCard />
         <SkeletonCard />
       </div>
+    </div>
+  );
+}
+
+interface SkeletonLoaderProps extends React.HTMLAttributes<HTMLDivElement> {
+  count?: number;
+}
+
+export function SkeletonLoader({ count = 1, className, ...props }: SkeletonLoaderProps) {
+  return (
+    <div className={cn('space-y-2', className)} {...props}>
+      {Array.from({ length: count }).map((_, index) => (
+        <Skeleton key={index} variant="text" />
+      ))}
     </div>
   );
 }

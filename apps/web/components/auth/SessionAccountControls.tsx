@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { signOut } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
-import { LogOut, UserRound } from 'lucide-react';
+import { LogOut, UserCircle } from 'lucide-react';
 
 interface SessionAccountControlsProps {
   user?: {
@@ -33,7 +33,7 @@ export function SessionAccountControls({ user }: SessionAccountControlsProps) {
   return (
     <div className="flex items-center gap-3">
       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
-        {user?.name || user?.email ? initials : <UserRound className="h-4 w-4" />}
+        {user?.name || user?.email ? initials : <UserCircle className="h-4 w-4" />}
       </div>
       <div className="text-right text-sm">
         <p className="font-medium leading-tight">{displayName}</p>

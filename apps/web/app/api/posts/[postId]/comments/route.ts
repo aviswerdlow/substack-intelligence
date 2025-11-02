@@ -4,6 +4,7 @@ import {
   listPostComments,
   addPostComment,
 } from '@substack-intelligence/database';
+import type { Json } from '@substack-intelligence/database';
 import { withRateLimit } from '@/lib/security/rate-limiting';
 import { z } from 'zod';
 import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
@@ -65,10 +66,12 @@ export async function POST(
     }
 
     const supabase = createServerComponentClient();
+    const metadata = parsed.data.metadata as Json | undefined;
+
     const comment = await addPostComment(supabase, userId, params.postId, {
       content: parsed.data.content,
       parentId: parsed.data.parentId ?? undefined,
-      metadata: parsed.data.metadata ?? undefined,
+      metadata,
     });
 
     return NextResponse.json({ success: true, data: { comment } }, { status: 201 });

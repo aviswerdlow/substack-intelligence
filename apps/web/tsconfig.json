@@ -7,6 +7,7 @@
     "strict": false,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
+    "baseUrl": ".",
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "node",
@@ -21,6 +22,16 @@
     ],
     "paths": {
       "@/*": ["./*"],
+      "@substack-intelligence/database": ["../../packages/database/src"],
+      "@substack-intelligence/ingestion": ["../../services/ingestion/src"],
+      "@substack-intelligence/ingestion/src": ["../../services/ingestion/src"],
+      "@substack-intelligence/ingestion/src/utils/html-parser": [
+        "../../services/ingestion/src/utils/html-parser"
+      ],
+      "@substack-intelligence/ai": ["../../packages/ai/src"],
+      "@substack-intelligence/shared": ["../../packages/shared/src"],
+      "@substack-intelligence/email": ["../../apps/email/src"],
+      "@substack-intelligence/lib": ["../../lib"],
       "@substack-intelligence/lib/*": ["../../lib/*"]
     }
   },

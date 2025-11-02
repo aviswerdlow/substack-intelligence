@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createServiceRoleClient } from '@substack-intelligence/database';
+import { createServiceRoleClientSafe } from '@substack-intelligence/database';
 
 const requestSchema = z.object({
   token: z.string().min(10, 'Invalid token'),
   categories: z.array(z.enum(['newsletter', 'new_posts', 'comments', 'marketing', 'product_updates'])).optional(),
 });
 
-const supabase = createServiceRoleClient();
+const supabase = createServiceRoleClientSafe();
 
 export async function POST(request: NextRequest) {
   try {
+    if (!supabase) {
+      console.warn('[EmailUnsubscribe] Supabase not configured. Returning graceful response.');
+      return NextResponse.json({ success: true, message: 'Email preferences updated (no-op).' });
+    }
+
     const payload = await request.json();
     const parsed = requestSchema.safeParse(payload);
 

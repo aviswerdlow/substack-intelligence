@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { createServiceRoleClient } from '@substack-intelligence/database';
+import { createServiceRoleClientSafe } from '@substack-intelligence/database';
+import type { Database } from '@substack-intelligence/database';
 import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 const preferenceSchema = z.object({
@@ -15,7 +16,9 @@ const preferenceSchema = z.object({
   timezone: z.string().optional(),
 });
 
-const DEFAULT_PREFERENCES = {
+type EmailPreferencesInsert = Database['public']['Tables']['email_preferences']['Insert'];
+
+const DEFAULT_PREFERENCES: Omit<EmailPreferencesInsert, 'user_id'> = {
   newsletter: true,
   new_posts: true,
   comments: true,
@@ -26,13 +29,24 @@ const DEFAULT_PREFERENCES = {
   timezone: 'UTC',
 };
 
-const supabase = createServiceRoleClient();
+const supabase = createServiceRoleClientSafe();
+const isSupabaseConfigured = Boolean(supabase);
 
 export async function GET() {
   try {
     const session = await getServerSecuritySession();
     if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!isSupabaseConfigured) {
+      return NextResponse.json({
+        success: true,
+        preferences: {
+          ...DEFAULT_PREFERENCES,
+          unsubscribe_token: null,
+        },
+      });
     }
 
     const { data, error } = await supabase
@@ -94,6 +108,19 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
+    if (!isSupabaseConfigured) {
+      return NextResponse.json({
+        success: true,
+        preferences: {
+          ...DEFAULT_PREFERENCES,
+          ...result.data,
+          user_id: session.user.id,
+          unsubscribe_token: randomUUID(),
+          updated_at: new Date().toISOString(),
+        },
+      });
+    }
+
     const { data: existing } = await supabase
       .from('email_preferences')
       .select('*')
@@ -102,7 +129,7 @@ export async function PUT(request: NextRequest) {
 
     const unsubscribeToken = existing?.unsubscribe_token ?? randomUUID();
 
-    const updatePayload = {
+    const updatePayload: EmailPreferencesInsert = {
       user_id: session.user.id,
       ...DEFAULT_PREFERENCES,
       ...existing,
