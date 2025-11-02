@@ -1,7 +1,7 @@
 'use client';
 
-import { useAuth, useUser } from '@clerk/nextjs';
 import { useEffect, useState } from 'react';
+import { useSessionUser } from './use-session-user';
 
 interface GoogleOAuthStatus {
   isConnected: boolean;
@@ -11,8 +11,7 @@ interface GoogleOAuthStatus {
 }
 
 export function useGoogleOAuth(): GoogleOAuthStatus {
-  const { isLoaded, isSignedIn, user } = useUser();
-  const { getToken } = useAuth();
+  const { isLoading, isAuthenticated, user, userId } = useSessionUser();
   const [status, setStatus] = useState<GoogleOAuthStatus>({
     isConnected: false,
     hasGmailScopes: false,
@@ -20,69 +19,60 @@ export function useGoogleOAuth(): GoogleOAuthStatus {
   });
 
   useEffect(() => {
+    let cancelled = false;
+
     async function checkGoogleOAuth() {
-      if (!isLoaded || !isSignedIn || !user) {
-        setStatus({
-          isConnected: false,
-          hasGmailScopes: false,
-          isLoading: false,
-        });
+      if (isLoading) {
         return;
       }
 
-      // Check if user signed in with Google
-      const googleAccount = user.externalAccounts?.find(
-        account => account.provider === 'google'
-      );
-
-      if (googleAccount) {
-        // User signed in with Google
-        // Now we need to check if we have Gmail scopes
-        
-        try {
-          // Try to get an OAuth token from Clerk
-          // This requires proper configuration in Clerk dashboard
-          const token = await getToken({ template: 'google_oauth' });
-          
-          if (token) {
-            // We have a token! Check if it includes Gmail scopes
-            // In production, you'd validate this token and check scopes
-            setStatus({
-              isConnected: true,
-              email: googleAccount.emailAddress || undefined,
-              hasGmailScopes: true, // You'd verify this by checking token scopes
-              isLoading: false,
-            });
-          } else {
-            // No token available - user needs to authorize Gmail access
-            setStatus({
-              isConnected: true,
-              email: googleAccount.emailAddress || undefined,
-              hasGmailScopes: false,
-              isLoading: false,
-            });
-          }
-        } catch (error) {
-          console.error('Failed to get Google OAuth token:', error);
+      if (!isAuthenticated || !userId) {
+        if (!cancelled) {
           setStatus({
-            isConnected: true,
-            email: googleAccount.emailAddress || undefined,
+            isConnected: false,
             hasGmailScopes: false,
             isLoading: false,
           });
         }
-      } else {
-        // User didn't sign in with Google
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/auth/gmail/status');
+        if (!response.ok) {
+          throw new Error('Failed to fetch Gmail status');
+        }
+
+        const data = await response.json();
+        if (cancelled) {
+          return;
+        }
+
         setStatus({
-          isConnected: false,
-          hasGmailScopes: false,
+          isConnected: Boolean(data.connected),
+          email: (data.email as string | undefined) ?? user?.email ?? undefined,
+          hasGmailScopes: Boolean(data.connected),
           isLoading: false,
         });
+      } catch (error) {
+        console.error('Failed to check Google OAuth status:', error);
+        if (!cancelled) {
+          setStatus({
+            isConnected: false,
+            email: user?.email ?? undefined,
+            hasGmailScopes: false,
+            isLoading: false,
+          });
+        }
       }
     }
 
-    checkGoogleOAuth();
-  }, [isLoaded, isSignedIn, user, getToken]);
+    void checkGoogleOAuth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoading, isAuthenticated, userId, user]);
 
   return status;
 }

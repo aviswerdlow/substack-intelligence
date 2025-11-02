@@ -1,16 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useAuth, useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle2, Loader2, Mail, AlertCircle } from 'lucide-react';
+import { useSessionUser } from '@/hooks/use-session-user';
 
 export default function GmailSetupPage() {
-  const { isLoaded, userId } = useAuth();
-  const { user } = useUser();
   const router = useRouter();
+  const { isLoading: sessionLoading, isAuthenticated, user: sessionUser, userId } = useSessionUser();
   const [isConnecting, setIsConnecting] = useState(false);
   const [gmailConnected, setGmailConnected] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(true);
@@ -19,8 +18,6 @@ export default function GmailSetupPage() {
   // Check if Gmail is already connected
   useEffect(() => {
     const checkGmailStatus = async () => {
-      if (!userId) return;
-
       try {
         const response = await fetch('/api/auth/gmail/status');
         const data = await response.json();
@@ -39,10 +36,23 @@ export default function GmailSetupPage() {
       }
     };
 
-    if (isLoaded && userId) {
-      checkGmailStatus();
+    if (sessionLoading) {
+      return;
     }
-  }, [isLoaded, userId, router]);
+
+    if (!isAuthenticated || !userId) {
+      setCheckingStatus(false);
+      return;
+    }
+
+    void checkGmailStatus();
+  }, [sessionLoading, isAuthenticated, userId, router]);
+
+  useEffect(() => {
+    if (!sessionLoading && !isAuthenticated) {
+      router.replace('/login');
+    }
+  }, [sessionLoading, isAuthenticated, router]);
 
   const connectGmail = async () => {
     if (!userId) {
@@ -113,7 +123,7 @@ export default function GmailSetupPage() {
     router.push('/dashboard');
   };
 
-  if (!isLoaded || checkingStatus) {
+  if (sessionLoading || checkingStatus) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -146,9 +156,9 @@ export default function GmailSetupPage() {
             <CardTitle>Connect Your Gmail</CardTitle>
           </div>
           <CardDescription>
-            {user?.primaryEmailAddress && (
+            {sessionUser?.email && (
               <div className="mt-2">
-                Signed in as: <strong>{user.primaryEmailAddress.emailAddress}</strong>
+                Signed in as: <strong>{sessionUser.email}</strong>
               </div>
             )}
           </CardDescription>

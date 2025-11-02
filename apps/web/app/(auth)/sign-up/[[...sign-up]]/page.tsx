@@ -1,35 +1,12 @@
-import { SignUp } from '@clerk/nextjs';
+import { redirect } from 'next/navigation';
 
-export default function Page() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold">Get Started</h1>
-          <p className="text-muted-foreground mt-2">
-            Sign up with Google to automatically connect your Gmail for newsletter analysis
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            We only read your newsletters - your personal emails remain private
-          </p>
-        </div>
-        <SignUp
-          appearance={{
-            elements: {
-              formButtonPrimary: 'bg-primary hover:bg-primary/90',
-              card: 'shadow-lg',
-              socialButtonsBlockButton: 'bg-blue-600 hover:bg-blue-700 text-white',
-              socialButtonsBlockButtonText: 'font-medium',
-            },
-            layout: {
-              socialButtonsPlacement: 'top',
-              socialButtonsVariant: 'blockButton',
-            }
-          }}
-          routing="hash"
-          fallbackRedirectUrl="/dashboard"
-        />
-      </div>
-    </div>
-  );
+interface SignUpPageProps {
+  searchParams?: Record<string, string | string[] | undefined>;
+}
+
+export default function SignUpPage({ searchParams }: SignUpPageProps) {
+  const redirectUrl = typeof searchParams?.redirect_url === 'string' ? searchParams.redirect_url : undefined;
+  const target = redirectUrl ? `/register?callbackUrl=${encodeURIComponent(redirectUrl)}` : '/register';
+
+  redirect(target);
 }

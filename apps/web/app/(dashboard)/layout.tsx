@@ -1,6 +1,4 @@
 import type { ReactNode } from 'react';
-import { auth } from '@clerk/nextjs/server';
-import { UserButton } from '@clerk/nextjs';
 import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { DashboardNav } from '@/components/dashboard/nav';
@@ -18,20 +16,8 @@ export default async function DashboardLayout({
 }: {
   children: ReactNode;
 }) {
-  let clerkUserId: string | null = null;
-
-  try {
-    const clerkAuth = await auth();
-    clerkUserId = clerkAuth.userId ?? null;
-  } catch (error) {
-    console.warn('[auth] Clerk authentication unavailable', error);
-  }
-
   const session = await getServerSession(authOptions);
-  const hasClerkSession = Boolean(clerkUserId);
-  const hasNextAuthSession = Boolean(session?.user);
-
-  if (!hasClerkSession && !hasNextAuthSession) {
+  if (!session?.user) {
     redirect('/login');
   }
 
@@ -47,17 +33,7 @@ export default async function DashboardLayout({
                   <DashboardNav />
                 </div>
                 <div className="flex items-center space-x-4">
-                  {hasClerkSession ? (
-                    <UserButton
-                      appearance={{
-                        elements: {
-                          avatarBox: 'w-8 h-8',
-                        },
-                      }}
-                    />
-                  ) : (
-                    <SessionAccountControls user={session?.user} />
-                  )}
+                  <SessionAccountControls user={session.user} />
                 </div>
               </div>
             </header>
