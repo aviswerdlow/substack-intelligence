@@ -10,24 +10,14 @@ import {
 import { withRateLimit } from '@/lib/security/rate-limiting';
 import { z } from 'zod';
 import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
+import {
+  postCreationSchema,
+  sanitizePostPayload,
+  type PostCreationInput,
+} from '@substack-intelligence/lib/validation';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-const taxonomySchema = z.union([
-  z.string().min(1),
-  z.object({
-    name: z.string().min(1),
-    slug: z.string().min(1).optional(),
-    description: z.string().optional(),
-  }),
-]);
-
-const ContentSchema = z.object({
-  html: z.string().optional(),
-  text: z.string().optional(),
-  json: z.unknown().optional(),
-});
 
 const GetPostsSchema = z.object({
   limit: z.string().optional(),
@@ -44,24 +34,7 @@ const GetPostsSchema = z.object({
   scheduledBefore: z.string().optional(),
 });
 
-const CreatePostSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  slug: z.string().optional(),
-  excerpt: z.string().max(500).optional().nullable(),
-  content: ContentSchema.optional(),
-  status: z.enum(['draft', 'published', 'scheduled', 'archived']).optional(),
-  subscriptionRequired: z.boolean().optional(),
-  allowComments: z.boolean().optional(),
-  seoTitle: z.string().optional().nullable(),
-  seoDescription: z.string().optional().nullable(),
-  seoKeywords: z.array(z.string()).optional(),
-  categories: z.array(taxonomySchema).optional(),
-  tags: z.array(taxonomySchema).optional(),
-  mediaAssetIds: z.array(z.string()).optional(),
-  featuredMediaId: z.string().optional().nullable(),
-  publishedAt: z.string().optional().nullable(),
-  scheduledFor: z.string().optional().nullable(),
-});
+const CreatePostSchema = postCreationSchema;
 
 export async function GET(request: NextRequest) {
   try {
@@ -161,24 +134,26 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    const sanitizedInput: PostCreationInput = sanitizePostPayload(parsed.data);
+
     const supabase = createServerComponentClient();
     const payload: PostInput = {
-      title: parsed.data.title,
-      slug: parsed.data.slug ?? undefined,
-      excerpt: parsed.data.excerpt ?? undefined,
-      content: parsed.data.content ?? undefined,
-      status: parsed.data.status ?? undefined,
-      subscriptionRequired: parsed.data.subscriptionRequired,
-      allowComments: parsed.data.allowComments,
-      seoTitle: parsed.data.seoTitle ?? undefined,
-      seoDescription: parsed.data.seoDescription ?? undefined,
-      seoKeywords: parsed.data.seoKeywords ?? undefined,
-      categories: parsed.data.categories as PostInput['categories'],
-      tags: parsed.data.tags as PostInput['tags'],
-      mediaAssetIds: parsed.data.mediaAssetIds ?? undefined,
-      featuredMediaId: parsed.data.featuredMediaId ?? undefined,
-      publishedAt: parsed.data.publishedAt ?? undefined,
-      scheduledFor: parsed.data.scheduledFor ?? undefined,
+      title: sanitizedInput.title,
+      slug: sanitizedInput.slug ?? undefined,
+      excerpt: sanitizedInput.excerpt ?? undefined,
+      content: sanitizedInput.content as PostInput['content'],
+      status: sanitizedInput.status ?? undefined,
+      subscriptionRequired: sanitizedInput.subscriptionRequired,
+      allowComments: sanitizedInput.allowComments,
+      seoTitle: sanitizedInput.seoTitle ?? undefined,
+      seoDescription: sanitizedInput.seoDescription ?? undefined,
+      seoKeywords: sanitizedInput.seoKeywords ?? undefined,
+      categories: sanitizedInput.categories as PostInput['categories'],
+      tags: sanitizedInput.tags as PostInput['tags'],
+      mediaAssetIds: sanitizedInput.mediaAssetIds ?? undefined,
+      featuredMediaId: sanitizedInput.featuredMediaId ?? undefined,
+      publishedAt: sanitizedInput.publishedAt ?? undefined,
+      scheduledFor: sanitizedInput.scheduledFor ?? undefined,
     };
 
     const post = await createPost(supabase, userId, payload);
