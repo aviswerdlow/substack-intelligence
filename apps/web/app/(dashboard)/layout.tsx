@@ -1,23 +1,38 @@
+import type { ReactNode } from 'react';
 import { auth } from '@clerk/nextjs/server';
+import { UserButton } from '@clerk/nextjs';
+import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { DashboardNav } from '@/components/dashboard/nav';
-import { UserButton } from '@clerk/nextjs';
 import { Providers } from '@/components/providers';
 import { OnboardingProvider } from '@/components/onboarding/OnboardingProvider';
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
 import { KeyboardShortcuts } from '@/components/keyboard/KeyboardShortcuts';
 import { IntelligenceProvider } from '@/contexts/IntelligenceContext';
+import { authOptions } from '@/lib/auth';
+import { SessionAccountControls } from '@/components/auth/SessionAccountControls';
 
 export default async function DashboardLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
-  const { userId } = await auth();
+  let clerkUserId: string | null = null;
 
-  if (!userId) {
-    redirect('/sign-in');
+  try {
+    const clerkAuth = await auth();
+    clerkUserId = clerkAuth.userId ?? null;
+  } catch (error) {
+    console.warn('[auth] Clerk authentication unavailable', error);
+  }
+
+  const session = await getServerSession(authOptions);
+  const hasClerkSession = Boolean(clerkUserId);
+  const hasNextAuthSession = Boolean(session?.user);
+
+  if (!hasClerkSession && !hasNextAuthSession) {
+    redirect('/login');
   }
 
   return (
@@ -32,13 +47,17 @@ export default async function DashboardLayout({
                   <DashboardNav />
                 </div>
                 <div className="flex items-center space-x-4">
-                  <UserButton 
-                    appearance={{
-                      elements: {
-                        avatarBox: 'w-8 h-8'
-                      }
-                    }}
-                  />
+                  {hasClerkSession ? (
+                    <UserButton
+                      appearance={{
+                        elements: {
+                          avatarBox: 'w-8 h-8',
+                        },
+                      }}
+                    />
+                  ) : (
+                    <SessionAccountControls user={session?.user} />
+                  )}
                 </div>
               </div>
             </header>
