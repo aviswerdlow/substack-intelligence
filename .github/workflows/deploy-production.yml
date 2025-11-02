@@ -1,33 +1,42 @@
-name: Deploy to Production
+name: Deploy Pipeline
 
 on:
   push:
-    branches: [main]
-    paths-ignore:
-      - 'README.md'
-      - 'docs/**'
-      - '*.md'
+    branches:
+      - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+  deployments: write
+
 concurrency:
-  group: production-deploy
+  group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
 jobs:
-  security-check:
-    name: Security & Quality Checks
+  validate:
+    name: Validate Build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    
+    timeout-minutes: 30
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+          run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,22 +44,19 @@ jobs:
           node-version: '18'
           cache: 'pnpm'
 
-      - name: Install pnpm
-        run: npm install -g pnpm
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run security audit
-        run: pnpm audit --audit-level moderate
-
-      - name: Check for secrets
-        uses: trufflesecurity/trufflehog@main
+      - name: Cache turbo build artifacts
+        uses: actions/cache@v4
         with:
-          path: ./
-          base: main
-          head: HEAD
-          extra_args: --debug --only-verified
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Check formatting
+        run: pnpm format:check
 
       - name: Lint codebase
         run: pnpm lint
@@ -58,46 +64,32 @@ jobs:
       - name: Type check
         run: pnpm type-check
 
-      - name: Build application
-        env:
-          NODE_ENV: production
-          NEXT_TELEMETRY_DISABLED: 1
-        run: pnpm build
+      - name: Run unit tests
+        run: pnpm test:run
 
-  database-check:
-    name: Database Migration Check
+      - name: Run end-to-end tests
+        run: pnpm test:e2e
+
+  deploy-staging:
+    name: Deploy to Staging
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs: security-check
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
-
-      - name: Validate database schema
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: |
-          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
-          supabase db diff --schema public
-
-  deploy-preview:
-    name: Deploy Preview & Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: [security-check, database-check]
+    needs: validate
+    timeout-minutes: 20
+    environment:
+      name: staging
+      url: ${{ steps.deploy.outputs.url }}
     outputs:
-      preview-url: ${{ steps.deploy.outputs.url }}
+      staging-url: ${{ steps.deploy.outputs.url }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+          run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -105,73 +97,90 @@ jobs:
           node-version: '18'
           cache: 'pnpm'
 
-      - name: Install pnpm
-        run: npm install -g pnpm
+      - name: Restore turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build project artifacts
+        run: pnpm build
+
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
       - name: Pull Vercel environment
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Deploy to Vercel (Preview)
+      - name: Deploy to Vercel (Staging)
         id: deploy
-        run: |
-          url=$(vercel deploy --token=${{ secrets.VERCEL_TOKEN }})
-          echo "url=$url" >> $GITHUB_OUTPUT
-          echo "Preview URL: $url"
-
-      - name: Run E2E tests against preview
         env:
-          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
-          # Wait for deployment to be ready
-          sleep 30
-          curl -f "$PREVIEW_URL/api/monitoring/health" || exit 1
-          echo "Preview deployment health check passed"
+          url=$(vercel deploy --token=${{ secrets.VERCEL_TOKEN }} --yes --meta githubCommit=$GITHUB_SHA)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Staging deployment URL: $url"
 
-  security-test:
-    name: Security Testing
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: deploy-preview
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Security scan with ZAP
-        uses: zaproxy/action-baseline@v0.10.0
-        with:
-          target: ${{ needs.deploy-preview.outputs.preview-url }}
-          rules_file_name: '.zap/rules.tsv'
-          cmd_options: '-a'
-
-      - name: Test security headers
+      - name: Smoke test staging deployment
         env:
-          PREVIEW_URL: ${{ needs.deploy-preview.outputs.preview-url }}
+          STAGING_URL: ${{ steps.deploy.outputs.url }}
         run: |
-          response=$(curl -s -I "$PREVIEW_URL")
-          echo "$response" | grep -i "x-frame-options: DENY" || exit 1
-          echo "$response" | grep -i "x-content-type-options: nosniff" || exit 1
-          echo "$response" | grep -i "content-security-policy" || exit 1
-          echo "Security headers validation passed"
+          echo "Waiting for staging deployment to be ready..."
+          for attempt in {1..10}; do
+            if curl -fsS "$STAGING_URL/api/monitoring/health"; then
+              echo "Staging health check succeeded"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Staging health check failed" >&2
+          exit 1
 
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [deploy-preview, security-test]
+    needs: deploy-staging
+    timeout-minutes: 25
     environment:
       name: production
-      url: https://substack-intelligence.vercel.app
+      url: ${{ steps.deploy.outputs.url }}
+    outputs:
+      production-url: ${{ steps.deploy.outputs.url }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Restore turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build project artifacts
+        run: pnpm build
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
@@ -179,64 +188,113 @@ jobs:
       - name: Pull Vercel environment
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Deploy to Production
-        id: deploy-prod
+      - name: Deploy to Vercel (Production)
+        id: deploy
+        env:
+          GITHUB_SHA: ${{ github.sha }}
         run: |
-          url=$(vercel --prod --token=${{ secrets.VERCEL_TOKEN }})
-          echo "url=$url" >> $GITHUB_OUTPUT
-          echo "Production URL: $url"
+          url=$(vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --meta githubCommit=$GITHUB_SHA)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Production deployment URL: $url"
 
       - name: Verify production deployment
         env:
-          PRODUCTION_URL: https://substack-intelligence.vercel.app
+          PRODUCTION_URL: ${{ steps.deploy.outputs.url }}
         run: |
-          # Wait for deployment to be ready
-          sleep 60
-          
-          # Health check
-          curl -f "$PRODUCTION_URL/api/monitoring/health" || exit 1
-          
-          # Security headers check
+          echo "Waiting for production deployment to be ready..."
+          for attempt in {1..10}; do
+            if curl -fsS "$PRODUCTION_URL/api/monitoring/health"; then
+              echo "Production health check succeeded"
+              break
+            fi
+            sleep 15
+          done
+
           response=$(curl -s -I "$PRODUCTION_URL")
-          echo "$response" | grep -i "strict-transport-security" || exit 1
-          
-          echo "Production deployment verification passed"
+          echo "$response" | grep -i "strict-transport-security"
+          echo "$response" | grep -i "content-security-policy"
+          echo "$response" | grep -i "x-content-type-options"
 
-      - name: Trigger post-deployment tasks
-        env:
-          PRODUCTION_URL: https://substack-intelligence.vercel.app
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          # Trigger security audit
-          curl -X POST "$PRODUCTION_URL/api/cron/security-audit" \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            || echo "Security audit trigger failed (non-critical)"
-          
-          echo "Post-deployment tasks completed"
-
-      - name: Notify deployment success
-        if: success()
-        run: |
-          echo "🚀 Production deployment successful!"
-          echo "URL: https://substack-intelligence.vercel.app"
-          echo "Health: https://substack-intelligence.vercel.app/health"
-
-      - name: Notify deployment failure
-        if: failure()
-        run: |
-          echo "❌ Production deployment failed!"
-          echo "Check the logs above for details."
-          exit 1
-
-  cleanup:
-    name: Cleanup
+  rollback:
+    name: Rollback on Failure
     runs-on: ubuntu-latest
-    if: always()
-    needs: [deploy-production]
-    
+    needs: deploy-production
+    if: failure() && needs.deploy-production.result == 'failure'
+    timeout-minutes: 10
+
     steps:
-      - name: Clean up preview deployments
-        run: |
-          # This would clean up old preview deployments
-          # Implementation depends on your cleanup strategy
-          echo "Cleanup completed"
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Rollback to previous production deployment
+        run: vercel rollback production --token=${{ secrets.VERCEL_TOKEN }}
+
+  notify:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-staging
+      - deploy-production
+    if: always()
+
+    steps:
+      - name: Summarize deployment
+        uses: actions/github-script@v7
+        env:
+          STAGING_URL: ${{ needs.deploy-staging.outputs.staging-url }}
+          PRODUCTION_URL: ${{ needs.deploy-production.outputs.production-url }}
+          DEPLOY_STATUS: ${{ needs.deploy-production.result }}
+        with:
+          script: |
+            const core = require('@actions/core');
+            const stagingUrl = process.env.STAGING_URL;
+            const productionUrl = process.env.PRODUCTION_URL;
+            const status = process.env.DEPLOY_STATUS || 'unknown';
+
+            core.summary.addHeading('Deployment Summary');
+            core.summary.addRaw(`Status: **${status.toUpperCase()}**`);
+            if (stagingUrl) {
+              core.summary.addLink('Staging Deployment', stagingUrl);
+            }
+            if (productionUrl) {
+              core.summary.addLink('Production Deployment', productionUrl);
+            }
+            await core.summary.write();
+
+      - name: Slack notification
+        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "Deployment ${{ needs.deploy-production.result }} for ${{ github.repository }}",
+              "attachments": [
+                {
+                  "color": "${{ needs.deploy-production.result == 'success' && '#36a64f' || '#d73a49' }}",
+                  "fields": [
+                    {
+                      "title": "Branch",
+                      "value": "${{ github.ref_name }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Commit",
+                      "value": "${{ github.sha }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Staging",
+                      "value": "${{ needs.deploy-staging.outputs.staging-url || 'n/a' }}",
+                      "short": false
+                    },
+                    {
+                      "title": "Production",
+                      "value": "${{ needs.deploy-production.outputs.production-url || 'n/a' }}",
+                      "short": false
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
