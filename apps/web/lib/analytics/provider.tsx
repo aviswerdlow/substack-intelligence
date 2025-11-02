@@ -10,7 +10,7 @@ import {
   useState,
 } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useUser } from '@clerk/nextjs';
+import { useSessionUser } from '@/hooks/use-session-user';
 
 import { CONSENT_STORAGE_KEY, getAnalyticsConsent, setAnalyticsConsent } from './consent';
 import { getOrCreateSessionId } from './session';
@@ -31,14 +31,14 @@ interface AnalyticsProviderProps {
 }
 
 export function AnalyticsProvider({ children }: AnalyticsProviderProps) {
-  const { user } = useUser();
+  const { userId: sessionUserId } = useSessionUser();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [consentStatus, setConsentStatus] = useState<ConsentStatus>('unset');
   const sessionIdRef = useRef<string | undefined>();
   const lastTrackedPathRef = useRef<string | undefined>();
 
-  const userId = user?.id ?? (process.env.NODE_ENV === 'development' ? 'development-user' : null);
+  const userId = sessionUserId ?? (process.env.NODE_ENV === 'development' ? 'development-user' : null);
 
   const send = useCallback(
     async (payload: AnalyticsEventPayload, options?: { force?: boolean }) => {

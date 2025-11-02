@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import { ClerkProvider } from '@clerk/nextjs'
 import { AppProviders } from '@/components/app-providers'
 import { ErrorBoundary } from '@/lib/monitoring/error-boundary'
 
@@ -59,18 +58,16 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <ClerkProvider>
-      <html lang="en" suppressHydrationWarning>
-        <body className={inter.className}>
-          <ErrorBoundary>
-            <AppProviders>
-              <main className="min-h-screen bg-background">
-                {children}
-              </main>
-            </AppProviders>
-          </ErrorBoundary>
-        </body>
-      </html>
-    </ClerkProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        <ErrorBoundary>
+          <AppProviders>
+            <main className="min-h-screen bg-background">
+              {children}
+            </main>
+          </AppProviders>
+        </ErrorBoundary>
+      </body>
+    </html>
   )
 }

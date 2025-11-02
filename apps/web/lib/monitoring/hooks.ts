@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
-import { useAuth } from '@clerk/nextjs';
+import { useEffect, useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
+import { useSessionUser } from '@/hooks/use-session-user';
 
 // Enhanced error tracking hook
 export function useErrorTracking() {
-  const { userId } = useAuth();
+  const { userId: sessionUserId } = useSessionUser();
+  const userId = useMemo(() => sessionUserId ?? undefined, [sessionUserId]);
   
   useEffect(() => {
     // Global error handler for JavaScript errors
@@ -20,7 +21,7 @@ export function useErrorTracking() {
         lineno: event.lineno,
         colno: event.colno,
         stack: event.error?.stack,
-        userId: userId || undefined,
+        userId,
         url: window.location.href,
         timestamp: new Date().toISOString(),
         severity: 'medium' as const,
@@ -49,7 +50,7 @@ export function useErrorTracking() {
       const errorData = {
         type: 'unhandled_promise_rejection',
         error: String(event.reason),
-        userId: userId || undefined,
+        userId,
         url: window.location.href,
         timestamp: new Date().toISOString(),
         severity: 'high' as const,
@@ -83,7 +84,7 @@ export function useErrorTracking() {
       type: 'manual_error',
       message: error.message,
       stack: error.stack,
-      userId: userId || undefined,
+      userId,
       url: window.location.href,
       timestamp: new Date().toISOString(),
       severity: 'medium' as const,
@@ -102,7 +103,8 @@ export function useErrorTracking() {
 
 // Page view tracking hook
 export function usePageTracking() {
-  const { userId } = useAuth();
+  const { userId: sessionUserId } = useSessionUser();
+  const userId = useMemo(() => sessionUserId ?? undefined, [sessionUserId]);
   const pathname = usePathname();
   
   useEffect(() => {
@@ -113,7 +115,7 @@ export function usePageTracking() {
         body: JSON.stringify({
           url: window.location.href,
           path: pathname,
-          userId: userId || undefined,
+          userId,
           timestamp: new Date().toISOString(),
           referrer: document.referrer,
           userAgent: navigator.userAgent
@@ -130,7 +132,8 @@ export function usePageTracking() {
 
 // Performance monitoring hook
 export function usePerformanceTracking() {
-  const { userId } = useAuth();
+  const { userId: sessionUserId } = useSessionUser();
+  const userId = useMemo(() => sessionUserId ?? undefined, [sessionUserId]);
   
   useEffect(() => {
     const trackPerformance = () => {
@@ -158,7 +161,7 @@ export function usePerformanceTracking() {
                   body: JSON.stringify({
                     metric: name,
                     value,
-                    userId: userId || undefined,
+                    userId,
                     url: window.location.href,
                     timestamp: new Date().toISOString()
                   })
@@ -185,7 +188,7 @@ export function usePerformanceTracking() {
                 body: JSON.stringify({
                   metric: 'first_contentful_paint',
                   value: fcp.startTime,
-                  userId: userId || undefined,
+                  userId,
                   url: window.location.href,
                   timestamp: new Date().toISOString()
                 })
@@ -209,7 +212,7 @@ export function usePerformanceTracking() {
                 body: JSON.stringify({
                   metric: 'largest_contentful_paint',
                   value: lastEntry.startTime,
-                  userId: userId || undefined,
+                  userId,
                   url: window.location.href,
                   timestamp: new Date().toISOString()
                 })
@@ -229,7 +232,8 @@ export function usePerformanceTracking() {
 
 // Custom hook for tracking user interactions
 export function useInteractionTracking() {
-  const { userId } = useAuth();
+  const { userId: sessionUserId } = useSessionUser();
+  const userId = useMemo(() => sessionUserId ?? undefined, [sessionUserId]);
 
   return useCallback((action: string, data?: Record<string, any>) => {
     fetch('/api/monitoring/interaction', {
@@ -238,7 +242,7 @@ export function useInteractionTracking() {
       body: JSON.stringify({
         action,
         data,
-        userId: userId || undefined,
+        userId,
         url: window.location.href,
         timestamp: new Date().toISOString()
       })
