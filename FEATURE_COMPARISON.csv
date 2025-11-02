@@ -1,0 +1,107 @@
+Feature Category,Feature Name,Current Status,Priority,Completeness,User Impact,Technical Complexity,Dependencies,Migration Risk,Preservation Required,Notes
+Core Features,Email Intelligence Pipeline,Production Ready,Critical,100%,High,High,Gmail API + Claude AI,Low,Yes,Automated pipeline for fetching and processing Substack emails
+Core Features,Gmail API Integration,Production Ready,Critical,100%,High,High,Google OAuth + Clerk,Low,Yes,OAuth 2.0 flow with token management and refresh
+Core Features,Email Processing,Production Ready,Critical,100%,High,Medium,None,Low,Yes,HTML to text conversion with search indexing
+Core Features,Rate Limiting & Protection,Production Ready,Critical,100%,Medium,Medium,Upstash Redis,Low,Yes,Burst protection and request throttling
+Core Features,AI Company Extraction,Production Ready,Critical,100%,High,High,Claude API,Medium,Yes,95%+ accuracy target with confidence scoring
+Core Features,Claude Integration,Production Ready,Critical,100%,High,High,Anthropic API,Medium,Yes,Structured output with retry logic and caching
+Core Features,Extraction Quality Assurance,Production Ready,Critical,100%,High,Medium,None,Low,Yes,Two-stage verification and deduplication
+Core Features,Caching & Performance,Production Ready,High,100%,Medium,Medium,Redis,Low,Yes,Content-based caching with rate limiting
+Core Features,Company Management System,Production Ready,Critical,100%,High,High,PostgreSQL + pgvector,Medium,Yes,Comprehensive company database with analytics
+Core Features,Company Database,Production Ready,Critical,100%,High,Medium,Supabase,Low,Yes,Unique storage with normalized names
+Core Features,Vector Embeddings,Production Ready,High,100%,High,High,OpenAI + pgvector,Medium,Yes,Semantic search with 1536-dim vectors
+Core Features,Company Analytics,Production Ready,High,100%,High,Medium,Database triggers,Low,Yes,Automatic mention count and diversity tracking
+Core Features,Company Enrichment,Production Ready,Medium,100%,Medium,Medium,HTTP requests,Low,Yes,Website validation and metadata extraction
+Core Features,Real-time Dashboard,Production Ready,High,100%,High,High,Next.js + Supabase Realtime,Medium,Yes,Interactive dashboard with customizable widgets
+Core Features,Dashboard Widgets,Production Ready,High,100%,High,Medium,React components,Low,Yes,8 widgets including stats recent companies and quick actions
+Core Features,Widget Management,Production Ready,Medium,100%,Medium,Medium,Local storage,Low,Yes,Drag-and-drop with persistence
+Core Features,Real-time Updates,Production Ready,High,100%,High,High,Supabase subscriptions,Low,Yes,WebSocket connections for live data
+Core Features,Quick Start Onboarding,Production Ready,Medium,100%,High,Low,None,Low,Yes,Guided setup for new users
+Analytics & Reporting,Analytics Dashboard,Production Ready,High,100%,High,Medium,Recharts,Low,Yes,Comprehensive analytics with trends and distributions
+Analytics & Reporting,Core Metrics,Production Ready,High,100%,High,Low,Database queries,Low,Yes,Total emails companies mentions newsletters
+Analytics & Reporting,Trend Analysis,Production Ready,High,100%,High,Medium,Time-series queries,Low,Yes,Mention volume and discovery trends
+Analytics & Reporting,Distributions,Production Ready,High,100%,Medium,Low,Aggregation queries,Low,Yes,Sentiment funding and industry breakdowns
+Analytics & Reporting,Top Lists,Production Ready,High,100%,Medium,Low,Sorted queries,Low,Yes,Most mentioned and trending companies
+Analytics & Reporting,Report Generation,Production Ready,High,100%,High,High,Puppeteer + React Email,Medium,Yes,Daily weekly monthly PDF reports
+Analytics & Reporting,Report Formats,Production Ready,High,100%,High,High,PDF generation,Low,Yes,Professional PDF and HTML email
+Analytics & Reporting,Report Delivery,Production Ready,High,100%,High,Medium,Resend,Low,Yes,Email delivery with multiple recipients
+Analytics & Reporting,Report Scheduling,Production Ready,High,100%,High,Medium,Vercel Cron,Low,Yes,Timezone-aware scheduling
+Analytics & Reporting,Report History,Production Ready,Medium,100%,Medium,Low,Database storage,Low,Yes,Track all generated reports with download
+User Features,Email Management,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,Browse search and manage processed emails
+User Features,Email Listing,Production Ready,Medium,100%,Medium,Low,Pagination,Low,Yes,Filterable and searchable email table
+User Features,Email Operations,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,Reprocess and export functionality
+User Features,Todo Management,Production Ready,Medium,100%,Medium,Medium,None,Low,Yes,Full CRUD with priorities and organization
+User Features,Todo CRUD,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,Create update delete toggle completion
+User Features,Todo Organization,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,Priorities categories tags due dates
+User Features,Todo Views,Production Ready,Medium,100%,Medium,Low,Database views,Low,Yes,Active completed overdue upcoming
+User Features,Settings & Customization,Production Ready,Medium,100%,High,Medium,JSONB storage,Low,Yes,Comprehensive user preferences
+User Features,Account Settings,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,Profile and preferences
+User Features,Newsletter Settings,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,Manage and exclude newsletters
+User Features,Company Settings,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,Confidence threshold and tracking
+User Features,AI Settings,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,Model configuration
+User Features,Report Settings,Production Ready,Medium,100%,High,Medium,None,Low,Yes,Delivery frequency and timezone
+User Features,API Key Management,Production Ready,Medium,100%,Medium,Medium,Bcrypt,Low,Yes,Create and manage API keys
+User Features,Webhook Management,Production Ready,Medium,100%,Medium,Medium,HMAC signatures,Low,Yes,Configure event webhooks
+Authentication & Security,Clerk Authentication,Production Ready,Critical,100%,High,High,Clerk SDK,Low,Yes,Enterprise-grade auth with OAuth
+Authentication & Security,Gmail OAuth,Production Ready,Critical,100%,High,High,Google OAuth + Clerk,Medium,Yes,Dedicated flow with token encryption
+Authentication & Security,Row Level Security,Production Ready,Critical,100%,High,High,Supabase RLS,Low,Yes,User data isolation via policies
+Authentication & Security,Data Encryption,Production Ready,Critical,100%,High,High,AES-256,Low,Yes,At-rest and in-transit encryption
+Authentication & Security,Security Monitoring,Production Ready,High,100%,Medium,Medium,Axiom,Low,Yes,Audit trails and activity detection
+Search & Discovery,Semantic Search,Production Ready,Medium,100%,High,High,Vector similarity,Low,Yes,Natural language company search
+Search & Discovery,Full-text Search,Production Ready,Medium,100%,Medium,Medium,PostgreSQL tsvector,Low,Yes,Search across email content
+Search & Discovery,Filters & Facets,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,Multi-dimensional filtering
+Admin Features,Pipeline Management,Production Ready,High,100%,High,Medium,State management,Low,Yes,Manual triggers and monitoring
+Admin Features,Pipeline Controls,Production Ready,High,100%,High,Medium,Redis state,Low,Yes,Trigger status unlock
+Admin Features,Health Checks,Production Ready,High,100%,Medium,Medium,Service pings,Low,Yes,System-wide health monitoring
+Admin Features,Error Management,Production Ready,High,100%,Medium,Low,Logging,Low,Yes,Error logs and retry
+Monitoring & Ops,Structured Logging,Production Ready,High,100%,Medium,Medium,Axiom,Low,Yes,Comprehensive logging
+Monitoring & Ops,System Metrics,Production Ready,High,100%,Medium,Medium,Axiom,Low,Yes,Performance tracking
+Monitoring & Ops,Error Tracking,Production Ready,High,100%,Medium,Medium,Axiom,Low,Yes,Client and server errors
+Monitoring & Ops,Performance Monitoring,Production Ready,Medium,100%,Medium,Medium,Axiom,Low,Yes,Latency and response times
+Monitoring & Ops,User Analytics,Production Ready,Low,100%,Low,Low,Axiom,Low,Optional,Usage metrics and events
+Automation,Cron Jobs,Production Ready,High,100%,High,Medium,Vercel Cron,Low,Yes,Scheduled tasks
+Automation,Daily Intelligence,Production Ready,High,100%,High,High,Multiple services,Low,Yes,6 AM daily processing
+Automation,Email Processing Cron,Production Ready,High,100%,High,Medium,Pipeline,Low,Yes,Process pending emails
+Automation,Database Cleanup,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,Retention policy enforcement
+Automation,Security Audit,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,Daily security logging
+Technical Infrastructure,Database & Data Layer,Production Ready,Critical,100%,High,High,Supabase,Low,Yes,PostgreSQL with extensions
+Technical Infrastructure,Schema Management,Production Ready,Critical,100%,High,Medium,Migrations,Low,Yes,Version-controlled schema
+Technical Infrastructure,Vector Support,Production Ready,High,100%,High,High,pgvector,Medium,Yes,IVFFLAT indexing
+Technical Infrastructure,Full-text Search Index,Production Ready,Medium,100%,Medium,Medium,tsvector,Low,Yes,Ranked search results
+Technical Infrastructure,Database Views,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,Materialized views for analytics
+Technical Infrastructure,Caching & Performance,Production Ready,High,100%,High,High,Redis + Next.js,Low,Yes,Multi-layer caching
+Technical Infrastructure,Redis Caching,Production Ready,High,100%,High,Medium,Upstash,Low,Yes,Distributed cache
+Technical Infrastructure,React Query Caching,Production Ready,Medium,100%,Medium,Medium,TanStack Query,Low,Yes,Client-side cache
+Technical Infrastructure,Next.js Caching,Production Ready,Medium,100%,Medium,Medium,Next.js,Low,Yes,SSR and ISR
+API & Integrations,REST API,Production Ready,High,100%,High,Medium,Next.js API routes,Low,Yes,40+ endpoints
+API & Integrations,API Authentication,Production Ready,High,100%,High,Medium,API keys,Low,Yes,Key-based auth with scoping
+API & Integrations,Webhooks,Production Ready,Medium,100%,Medium,High,HMAC,Low,Yes,Event-based notifications
+API & Integrations,Export Capabilities,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,JSON and CSV export
+Error Handling,Retry Logic,Production Ready,High,100%,High,Medium,None,Low,Yes,Exponential backoff
+Error Handling,Error Types,Production Ready,High,100%,Medium,Low,None,Low,Yes,Categorized errors
+Error Handling,Error Reporting,Production Ready,High,100%,Medium,Medium,Axiom,Low,Yes,Structured logging
+Error Handling,Graceful Degradation,Production Ready,Medium,100%,Medium,Medium,None,Low,Yes,Fallback mechanisms
+External Integrations,Gmail API,Production Ready,Critical,100%,High,High,Google APIs,Medium,Yes,OAuth 2.0 integration
+External Integrations,Anthropic Claude,Production Ready,Critical,100%,High,High,Anthropic SDK,Medium,Yes,AI extraction service
+External Integrations,OpenAI Embeddings,Production Ready,Medium,100%,High,High,OpenAI SDK,Medium,Yes,Vector generation
+External Integrations,Resend Email,Production Ready,High,100%,High,Medium,Resend SDK,Low,Yes,Report delivery
+External Integrations,Axiom Logging,Production Ready,Medium,100%,Medium,Medium,Axiom SDK,Low,Yes,Structured logging
+External Integrations,Upstash Redis,Production Ready,High,100%,High,Medium,Upstash SDK,Low,Yes,Rate limiting and cache
+Rate Limiting,Gmail API Limits,Production Ready,Critical,100%,High,Medium,Redis,Low,Yes,5 fetches per hour per user
+Rate Limiting,Claude AI Limits,Production Ready,Critical,100%,High,Medium,Redis,Low,Yes,100 requests per minute
+Rate Limiting,Embedding Limits,Production Ready,Medium,100%,Medium,Medium,Redis,Low,Yes,100 per minute
+Rate Limiting,Email Processing,Production Ready,High,100%,High,Medium,None,Low,Yes,10 emails per minute
+Rate Limiting,API Endpoint Limits,Production Ready,High,100%,Medium,Medium,Redis,Low,Yes,Per-endpoint limits
+Rate Limiting,Webhook Delivery,Production Ready,Medium,100%,Medium,Medium,Queue,Low,Yes,100 per hour
+Data Quality,Minimum Extraction Quality,Production Ready,Critical,100%,High,High,Manual QA,Low,Yes,95% recall target
+Data Quality,Duplicate Prevention,Production Ready,Critical,100%,High,Medium,Database constraints,Low,Yes,Unique constraints
+Data Quality,Data Validation,Production Ready,High,100%,High,Medium,Zod schemas,Low,Yes,Schema validation
+Data Quality,Embedding Quality,Production Ready,High,100%,High,High,Vector validation,Low,Yes,1536-dim verification
+Business Logic,Email Processing Rules,Production Ready,Critical,100%,High,Medium,None,Low,Yes,Comprehensive email handling
+Business Logic,Company Extraction Rules,Production Ready,Critical,100%,High,High,AI prompts,Medium,Yes,Investment-focused extraction
+Business Logic,Data Quality Rules,Production Ready,High,100%,High,Medium,None,Low,Yes,Quality assurance
+Business Logic,User Access Rules,Production Ready,Critical,100%,High,High,RLS,Low,Yes,Permission management
+Business Logic,Report Generation Rules,Production Ready,High,100%,High,Medium,None,Low,Yes,Scheduling and content
+Business Logic,Notification Rules,Production Ready,Medium,100%,Medium,Medium,None,Low,Yes,Alert triggers
+Business Logic,Data Retention Rules,Production Ready,Medium,100%,Medium,Low,Cron,Low,Yes,Cleanup policies
+Business Logic,Security Rules,Production Ready,Critical,100%,High,High,Multiple systems,Low,Yes,Encryption and compliance
