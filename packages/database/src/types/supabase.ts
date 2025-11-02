@@ -304,6 +304,75 @@ export interface Database {
           }
         ]
       }
+      user_settings: {
+        Row: {
+          id: string
+          user_id: string
+          gmail_connected: boolean
+          gmail_refresh_token: string | null
+          gmail_access_token: string | null
+          gmail_token_expiry: string | null
+          gmail_email: string | null
+          notifications_enabled: boolean
+          digest_frequency: string
+          account_settings: Json | null
+          newsletter_settings: Json | null
+          company_settings: Json | null
+          ai_settings: Json | null
+          email_settings: Json | null
+          report_settings: Json | null
+          notification_settings: Json | null
+          privacy_settings: Json | null
+          appearance_settings: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          gmail_connected?: boolean
+          gmail_refresh_token?: string | null
+          gmail_access_token?: string | null
+          gmail_token_expiry?: string | null
+          gmail_email?: string | null
+          notifications_enabled?: boolean
+          digest_frequency?: string
+          account_settings?: Json | null
+          newsletter_settings?: Json | null
+          company_settings?: Json | null
+          ai_settings?: Json | null
+          email_settings?: Json | null
+          report_settings?: Json | null
+          notification_settings?: Json | null
+          privacy_settings?: Json | null
+          appearance_settings?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          gmail_connected?: boolean
+          gmail_refresh_token?: string | null
+          gmail_access_token?: string | null
+          gmail_token_expiry?: string | null
+          gmail_email?: string | null
+          notifications_enabled?: boolean
+          digest_frequency?: string
+          account_settings?: Json | null
+          newsletter_settings?: Json | null
+          company_settings?: Json | null
+          ai_settings?: Json | null
+          email_settings?: Json | null
+          report_settings?: Json | null
+          notification_settings?: Json | null
+          privacy_settings?: Json | null
+          appearance_settings?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       companies: {
         Row: {
           id: string
