@@ -4,12 +4,13 @@ import { z } from 'zod';
 import {
   Permission,
   ROLE_PERMISSIONS,
-  UserRole,
   fetchUserAccessProfile,
   getServerSecuritySession
 } from '@substack-intelligence/lib/security/session';
+import type { UserRole } from '@substack-intelligence/lib/security/session';
 
-export { Permission, ROLE_PERMISSIONS, UserRole } from '@substack-intelligence/lib/security/session';
+export { Permission, ROLE_PERMISSIONS } from '@substack-intelligence/lib/security/session';
+export type { UserRole } from '@substack-intelligence/lib/security/session';
 
 export interface SecurityContext {
   userId: string;

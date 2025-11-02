@@ -27,9 +27,32 @@ export interface EmailAnalyticsSummary {
   complaintRate: number;
 }
 
-const supabase = createServiceRoleClient();
+const isSupabaseConfigured = Boolean(
+  process.env.NEXT_PUBLIC_SUPABASE_URL &&
+  (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)
+);
+
+const supabase = isSupabaseConfigured ? createServiceRoleClient() : null;
+
+const EMPTY_ANALYTICS: EmailAnalyticsSummary = {
+  totalSent: 0,
+  totalDelivered: 0,
+  totalOpened: 0,
+  totalClicked: 0,
+  totalBounced: 0,
+  totalComplained: 0,
+  openRate: 0,
+  clickRate: 0,
+  bounceRate: 0,
+  complaintRate: 0,
+};
 
 export async function logEmailEvent(input: LogEmailEventInput) {
+  if (!supabase) {
+    console.warn('[EmailAnalytics] Supabase not configured. Skipping logEmailEvent.');
+    return null;
+  }
+
   const { error, data } = await supabase
     .from('email_logs')
     .insert({
@@ -58,6 +81,11 @@ export async function updateEmailEventStatus(
   status: EmailLogStatus,
   timestamps?: Partial<Pick<Database['public']['Tables']['email_logs']['Row'], 'opened_at' | 'clicked_at' | 'bounced_at' | 'complained_at'>>
 ) {
+  if (!supabase) {
+    console.warn('[EmailAnalytics] Supabase not configured. Skipping updateEmailEventStatus.');
+    return null;
+  }
+
   const { error, data } = await supabase
     .from('email_logs')
     .update({
@@ -78,6 +106,11 @@ export async function updateEmailEventStatus(
 }
 
 export async function getEmailAnalytics(userId: string, days = 30): Promise<EmailAnalyticsSummary> {
+  if (!supabase) {
+    console.warn('[EmailAnalytics] Supabase not configured. Returning empty analytics.');
+    return EMPTY_ANALYTICS;
+  }
+
   const since = new Date();
   since.setDate(since.getDate() - days);
 
@@ -141,6 +174,11 @@ export async function getEmailAnalytics(userId: string, days = 30): Promise<Emai
 }
 
 export async function handleBounceOrComplaint(recipientEmail: string, type: 'bounce' | 'complaint') {
+  if (!supabase) {
+    console.warn('[EmailAnalytics] Supabase not configured. Skipping bounce/complaint handling.');
+    return;
+  }
+
   try {
     const { data: gmailMatch, error: gmailError } = await supabase
       .from('user_settings')

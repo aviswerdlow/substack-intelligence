@@ -6,6 +6,7 @@ import {
   deletePost,
   PostInput,
 } from '@substack-intelligence/database';
+import type { Json } from '@substack-intelligence/database';
 import { withRateLimit } from '@/lib/security/rate-limiting';
 import { z } from 'zod';
 import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
@@ -104,7 +105,14 @@ export async function PUT(
     if (parsed.data.title !== undefined) payload.title = parsed.data.title;
     if (parsed.data.slug !== undefined) payload.slug = parsed.data.slug;
     if (parsed.data.excerpt !== undefined) payload.excerpt = parsed.data.excerpt ?? undefined;
-    if (parsed.data.content !== undefined) payload.content = parsed.data.content ?? undefined;
+    if (parsed.data.content !== undefined) {
+      const contentValue = parsed.data.content;
+      const contentPayload: Record<string, Json> = {};
+      if (contentValue?.html !== undefined) contentPayload.html = contentValue.html;
+      if (contentValue?.text !== undefined) contentPayload.text = contentValue.text;
+      if (contentValue?.json !== undefined) contentPayload.json = contentValue.json as Json;
+      payload.content = Object.keys(contentPayload).length > 0 ? contentPayload : undefined;
+    }
     if (parsed.data.status !== undefined) payload.status = parsed.data.status;
     if (parsed.data.subscriptionRequired !== undefined) payload.subscriptionRequired = parsed.data.subscriptionRequired;
     if (parsed.data.allowComments !== undefined) payload.allowComments = parsed.data.allowComments;

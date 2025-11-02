@@ -597,7 +597,10 @@ export async function POST(request: NextRequest) {
         console.warn('[Pipeline Sync] Failed to compute incremental start date', incrementalError);
       }
       console.log('[Pipeline Sync] Initializing GmailConnector with stored OAuth credentials');
-      connector = new GmailConnector(gmailTokens.refreshToken, userId);
+      connector = new GmailConnector({
+        refreshToken: gmailTokens?.refreshToken ?? undefined,
+        userId,
+      });
       const fetchStartTime = Date.now();
 
       // Add timeout to Gmail fetch to prevent hanging (40 seconds max)
