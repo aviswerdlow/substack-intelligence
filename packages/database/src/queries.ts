@@ -13,7 +13,7 @@ try {
   cache = <T extends (...args: any[]) => any>(fn: T): T => fn;
 }
 
-import type { Database } from './types/supabase';
+import type { Database, Json } from './types/supabase';
 import type { SupabaseClient } from './client';
 
 type Tables = Database['public']['Tables'];
@@ -22,6 +22,231 @@ type Company = Tables['companies']['Row'];
 type CompanyMention = Tables['company_mentions']['Row'];
 type UserTodo = Tables['user_todos']['Row'];
 type DailyIntelligence = Database['public']['Views']['daily_intelligence']['Row'];
+type Post = Tables['posts']['Row'];
+type ContentCategory = Tables['content_categories']['Row'];
+type ContentTag = Tables['content_tags']['Row'];
+type MediaAsset = Tables['media_assets']['Row'];
+type PostRevision = Tables['post_revisions']['Row'];
+type PostComment = Tables['post_comments']['Row'];
+type PostAnalyticsRow = Database['public']['Views']['post_analytics_view']['Row'];
+
+export type HydratedPost = Post & {
+  categories: ContentCategory[];
+  tags: ContentTag[];
+  mediaAssets: MediaAsset[];
+};
+
+const slugify = (value: string) => {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120);
+};
+
+const uniqueStrings = (values?: (string | null | undefined)[]) => {
+  return Array.from(new Set((values || []).filter((v): v is string => typeof v === 'string' && v.trim().length > 0))).map(v => v.trim());
+};
+
+const getContentText = (content: any): string => {
+  if (!content) return '';
+  if (typeof content === 'string') return content;
+  if (typeof content === 'object') {
+    if (typeof content.text === 'string') return content.text;
+    if (typeof content.html === 'string') {
+      return content.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+  }
+  return '';
+};
+
+const calculateReadingTime = (content: any) => {
+  const text = getContentText(content);
+  if (!text) return 0;
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+};
+
+type TaxonomyInput =
+  | string
+  | {
+      name: string;
+      slug?: string;
+      description?: string | null;
+    };
+
+const normalizeTaxonomyInput = (value: TaxonomyInput): { name: string; slug: string; description?: string | null } => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return { name: trimmed, slug: slugify(trimmed) };
+  }
+  const name = value.name.trim();
+  return {
+    name,
+    slug: slugify(value.slug || name),
+    description: value.description,
+  };
+};
+
+const upsertTaxonomy = async (
+  supabase: SupabaseClient,
+  table: 'content_tags' | 'content_categories',
+  userId: string,
+  items?: TaxonomyInput[]
+) => {
+  if (!items || items.length === 0) return [] as (ContentTag | ContentCategory)[];
+
+  const normalized = items.map(normalizeTaxonomyInput);
+  const { data: existing } = await supabase
+    .from(table)
+    .select('*')
+    .eq('user_id', userId)
+    .in('slug', normalized.map(item => item.slug));
+
+  const existingMap = new Map((existing || []).map(item => [item.slug, item]));
+  const toInsert = normalized.filter(item => !existingMap.has(item.slug));
+
+  if (toInsert.length > 0) {
+    const { error: insertError } = await supabase.from(table).insert(
+      toInsert.map(item => ({
+        user_id: userId,
+        name: item.name,
+        slug: item.slug,
+        description: item.description || null,
+      }))
+    );
+    if (insertError) throw insertError;
+  }
+
+  const { data: refreshed, error: refreshError } = await supabase
+    .from(table)
+    .select('*')
+    .eq('user_id', userId)
+    .in('slug', normalized.map(item => item.slug));
+
+  if (refreshError) throw refreshError;
+  return refreshed || [];
+};
+
+const hydratePosts = async (
+  supabase: SupabaseClient,
+  userId: string,
+  posts: Post[]
+): Promise<HydratedPost[]> => {
+  if (posts.length === 0) return [];
+
+  const categorySlugs = uniqueStrings(posts.flatMap(post => post.category_slugs || []));
+  const tagSlugs = uniqueStrings(posts.flatMap(post => post.tag_slugs || []));
+  const mediaIds = uniqueStrings(posts.flatMap(post => post.media_asset_ids || []));
+
+  const [categoriesResult, tagsResult, mediaResult] = await Promise.all([
+    categorySlugs.length
+      ? supabase
+          .from('content_categories')
+          .select('*')
+          .eq('user_id', userId)
+          .in('slug', categorySlugs)
+      : Promise.resolve({ data: [] as ContentCategory[] }),
+    tagSlugs.length
+      ? supabase
+          .from('content_tags')
+          .select('*')
+          .eq('user_id', userId)
+          .in('slug', tagSlugs)
+      : Promise.resolve({ data: [] as ContentTag[] }),
+    mediaIds.length
+      ? supabase
+          .from('media_assets')
+          .select('*')
+          .in('id', mediaIds)
+          .eq('user_id', userId)
+      : Promise.resolve({ data: [] as MediaAsset[] }),
+  ]);
+
+  const categoriesMap = new Map((categoriesResult.data || []).map(category => [category.slug, category]));
+  const tagsMap = new Map((tagsResult.data || []).map(tag => [tag.slug, tag]));
+  const mediaMap = new Map((mediaResult.data || []).map(asset => [asset.id, asset]));
+
+  return posts.map(post => ({
+    ...post,
+    categories: (post.category_slugs || []).map(slug => categoriesMap.get(slug)).filter(Boolean) as ContentCategory[],
+    tags: (post.tag_slugs || []).map(slug => tagsMap.get(slug)).filter(Boolean) as ContentTag[],
+    mediaAssets: (post.media_asset_ids || []).map(id => mediaMap.get(id)).filter(Boolean) as MediaAsset[],
+  }));
+};
+
+const assertPostOwnership = async (
+  supabase: SupabaseClient,
+  userId: string,
+  postId: string
+) => {
+  const { data, error } = await supabase
+    .from('posts')
+    .select('id')
+    .eq('id', postId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) {
+    throw new Error('Post not found');
+  }
+};
+
+const snapshotRevision = async (
+  supabase: SupabaseClient,
+  post: Post,
+  editorId: string,
+  summary?: string
+) => {
+  await supabase.from('post_revisions').insert({
+    post_id: post.id,
+    editor_id: editorId,
+    title: post.title,
+    excerpt: post.excerpt || null,
+    content: post.content as Json,
+    summary: summary || null,
+  });
+};
+
+const updateDailyMetrics = async (
+  supabase: SupabaseClient,
+  postId: string,
+  date: string,
+  deltas: { views?: number; uniqueViews?: number; comments?: number }
+) => {
+  const { data: existing } = await supabase
+    .from('post_metrics_daily')
+    .select('*')
+    .eq('post_id', postId)
+    .eq('metric_date', date)
+    .maybeSingle();
+
+  if (!existing) {
+    const { error: insertError } = await supabase.from('post_metrics_daily').insert({
+      post_id: postId,
+      metric_date: date,
+      views: deltas.views || 0,
+      unique_views: deltas.uniqueViews || 0,
+      comments: deltas.comments || 0,
+    });
+    if (insertError) throw insertError;
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from('post_metrics_daily')
+    .update({
+      views: (existing.views || 0) + (deltas.views || 0),
+      unique_views: (existing.unique_views || 0) + (deltas.uniqueViews || 0),
+      comments: (existing.comments || 0) + (deltas.comments || 0),
+    })
+    .eq('post_id', postId)
+    .eq('metric_date', date);
+
+  if (updateError) throw updateError;
+};
 
 // Cached queries for React Server Components
 export const getCompanyById = cache(async (supabase: SupabaseClient, id: string, userId?: string) => {
@@ -198,6 +423,621 @@ export const getTopNewsletters = cache(async (supabase: SupabaseClient) => {
     .sort((a: any, b: any) => b.count - a.count)
     .slice(0, 10);
 });
+
+// Content management queries
+export interface PostFilters {
+  status?: Post['status'] | 'all';
+  search?: string;
+  tags?: TaxonomyInput[] | string[];
+  categories?: TaxonomyInput[] | string[];
+  publishedAfter?: string;
+  publishedBefore?: string;
+  scheduledAfter?: string;
+  scheduledBefore?: string;
+}
+
+export interface PostListOptions {
+  limit?: number;
+  offset?: number;
+  sortBy?: 'created_at' | 'updated_at' | 'published_at' | 'scheduled_for' | 'title';
+  sortDirection?: 'asc' | 'desc';
+  filters?: PostFilters;
+}
+
+const buildTaxonomySlugs = (items?: TaxonomyInput[] | string[]) => {
+  if (!items) return [] as string[];
+  return uniqueStrings(items.map(item => (typeof item === 'string' ? slugify(item) : slugify(item.slug || item.name))));
+};
+
+export const getPosts = cache(async (
+  supabase: SupabaseClient,
+  userId: string,
+  options: PostListOptions = {}
+) => {
+  const {
+    limit = 20,
+    offset = 0,
+    sortBy = 'updated_at',
+    sortDirection = 'desc',
+    filters = {},
+  } = options;
+
+  const query = supabase
+    .from('posts')
+    .select('*', { count: 'exact' })
+    .eq('user_id', userId)
+    .range(offset, offset + limit - 1)
+    .order(sortBy, { ascending: sortDirection === 'asc', nullsFirst: sortBy === 'scheduled_for' });
+
+  if (filters.status && filters.status !== 'all') {
+    query.eq('status', filters.status);
+  }
+
+  if (filters.search) {
+    query.textSearch('search_vector', filters.search, { type: 'websearch' });
+  }
+
+  if (filters.tags && filters.tags.length > 0) {
+    const tagSlugs = buildTaxonomySlugs(filters.tags);
+    if (tagSlugs.length > 0) {
+      query.contains('tag_slugs', tagSlugs);
+    }
+  }
+
+  if (filters.categories && filters.categories.length > 0) {
+    const categorySlugs = buildTaxonomySlugs(filters.categories);
+    if (categorySlugs.length > 0) {
+      query.contains('category_slugs', categorySlugs);
+    }
+  }
+
+  if (filters.publishedAfter) {
+    query.gte('published_at', filters.publishedAfter);
+  }
+
+  if (filters.publishedBefore) {
+    query.lte('published_at', filters.publishedBefore);
+  }
+
+  if (filters.scheduledAfter) {
+    query.gte('scheduled_for', filters.scheduledAfter);
+  }
+
+  if (filters.scheduledBefore) {
+    query.lte('scheduled_for', filters.scheduledBefore);
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+
+  const hydrated = await hydratePosts(supabase, userId, data || []);
+
+  return {
+    posts: hydrated,
+    total: count || 0,
+    hasMore: offset + limit < (count || 0),
+  };
+});
+
+export const getPostById = cache(async (
+  supabase: SupabaseClient,
+  userId: string,
+  postId: string
+) => {
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('id', postId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+  const [hydrated] = await hydratePosts(supabase, userId, [data]);
+  return hydrated;
+});
+
+export const getPostBySlug = cache(async (
+  supabase: SupabaseClient,
+  userId: string,
+  slug: string
+) => {
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('slug', slug)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+  const [hydrated] = await hydratePosts(supabase, userId, [data]);
+  return hydrated;
+});
+
+export interface PostInput {
+  title: string;
+  slug?: string;
+  excerpt?: string | null;
+  content?: Json;
+  status?: Post['status'];
+  subscriptionRequired?: boolean;
+  allowComments?: boolean;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  seoKeywords?: string[];
+  categories?: TaxonomyInput[];
+  tags?: TaxonomyInput[];
+  mediaAssetIds?: string[];
+  featuredMediaId?: string | null;
+  publishedAt?: string | null;
+  scheduledFor?: string | null;
+}
+
+const normalizePostPayload = async (
+  supabase: SupabaseClient,
+  userId: string,
+  payload: PostInput
+) => {
+  const categories = await upsertTaxonomy(supabase, 'content_categories', userId, payload.categories);
+  const tags = await upsertTaxonomy(supabase, 'content_tags', userId, payload.tags);
+
+  const content = payload.content ?? { text: '', html: '' };
+  const readingTime = calculateReadingTime(content);
+
+  return {
+    payload,
+    categories,
+    tags,
+    readingTime,
+    content,
+  };
+};
+
+export const createPost = async (
+  supabase: SupabaseClient,
+  userId: string,
+  payload: PostInput
+) => {
+  const { payload: normalized, categories, tags, readingTime, content } = await normalizePostPayload(
+    supabase,
+    userId,
+    payload
+  );
+
+  const slug = slugify(normalized.slug || normalized.title);
+  const nowIso = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('posts')
+    .insert({
+      user_id: userId,
+      title: normalized.title,
+      slug,
+      excerpt: normalized.excerpt || null,
+      content,
+      status: normalized.status || 'draft',
+      subscription_required: normalized.subscriptionRequired ?? null,
+      allow_comments: normalized.allowComments ?? null,
+      seo_title: normalized.seoTitle || null,
+      seo_description: normalized.seoDescription || null,
+      seo_keywords: normalized.seoKeywords || null,
+      category_slugs: categories.map(category => category.slug),
+      tag_slugs: tags.map(tag => tag.slug),
+      media_asset_ids: normalized.mediaAssetIds || null,
+      featured_media_id: normalized.featuredMediaId || null,
+      published_at: normalized.publishedAt || null,
+      scheduled_for: normalized.scheduledFor || null,
+      reading_time: readingTime,
+      created_at: nowIso,
+      updated_at: nowIso,
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+
+  await snapshotRevision(supabase, data, userId, 'Initial draft');
+  const [hydrated] = await hydratePosts(supabase, userId, [data]);
+  return hydrated;
+};
+
+export const updatePost = async (
+  supabase: SupabaseClient,
+  userId: string,
+  postId: string,
+  payload: Partial<PostInput>
+) => {
+  const existing = await getPostById(supabase, userId, postId);
+  if (!existing) {
+    throw new Error('Post not found');
+  }
+
+  const mergedPayload: PostInput = {
+    title: payload.title || existing.title,
+    slug: payload.slug || existing.slug,
+    excerpt: payload.excerpt ?? existing.excerpt,
+    content: (payload.content as Json | undefined) ?? (existing.content as Json),
+    status: payload.status || existing.status,
+    subscriptionRequired:
+      payload.subscriptionRequired !== undefined ? payload.subscriptionRequired : existing.subscription_required ?? false,
+    allowComments: payload.allowComments !== undefined ? payload.allowComments : existing.allow_comments ?? true,
+    seoTitle: payload.seoTitle ?? existing.seo_title ?? undefined,
+    seoDescription: payload.seoDescription ?? existing.seo_description ?? undefined,
+    seoKeywords: payload.seoKeywords ?? existing.seo_keywords ?? undefined,
+    categories: payload.categories || existing.categories,
+    tags: payload.tags || existing.tags,
+    mediaAssetIds: payload.mediaAssetIds || existing.media_asset_ids || undefined,
+    featuredMediaId: payload.featuredMediaId ?? existing.featured_media_id ?? undefined,
+    publishedAt: payload.publishedAt ?? existing.published_at ?? undefined,
+    scheduledFor: payload.scheduledFor ?? existing.scheduled_for ?? undefined,
+  };
+
+  const { payload: normalized, categories, tags, readingTime, content } = await normalizePostPayload(
+    supabase,
+    userId,
+    mergedPayload
+  );
+
+  const { data, error } = await supabase
+    .from('posts')
+    .update({
+      title: normalized.title,
+      slug: slugify(normalized.slug || normalized.title),
+      excerpt: normalized.excerpt || null,
+      content,
+      status: normalized.status || existing.status,
+      subscription_required: normalized.subscriptionRequired ?? existing.subscription_required ?? null,
+      allow_comments: normalized.allowComments ?? existing.allow_comments ?? null,
+      seo_title: normalized.seoTitle || null,
+      seo_description: normalized.seoDescription || null,
+      seo_keywords: normalized.seoKeywords || null,
+      category_slugs: categories.map(category => category.slug),
+      tag_slugs: tags.map(tag => tag.slug),
+      media_asset_ids: normalized.mediaAssetIds || null,
+      featured_media_id: normalized.featuredMediaId || null,
+      published_at: normalized.publishedAt || null,
+      scheduled_for: normalized.scheduledFor || null,
+      reading_time: readingTime,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', postId)
+    .eq('user_id', userId)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+
+  await snapshotRevision(supabase, data, userId, 'Post updated');
+  const [hydrated] = await hydratePosts(supabase, userId, [data]);
+  return hydrated;
+};
+
+export const deletePost = async (
+  supabase: SupabaseClient,
+  userId: string,
+  postId: string
+) => {
+  const { error } = await supabase
+    .from('posts')
+    .delete()
+    .eq('id', postId)
+    .eq('user_id', userId);
+
+  if (error) throw error;
+  return true;
+};
+
+export const publishPost = async (
+  supabase: SupabaseClient,
+  userId: string,
+  postId: string,
+  options: { publishedAt?: string } = {}
+) => {
+  const publishedAt = options.publishedAt || new Date().toISOString();
+  const { data, error } = await supabase
+    .from('posts')
+    .update({
+      status: 'published',
+      published_at: publishedAt,
+      scheduled_for: null,
+      updated_at: publishedAt,
+    })
+    .eq('id', postId)
+    .eq('user_id', userId)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  await snapshotRevision(supabase, data, userId, 'Post published');
+  const [hydrated] = await hydratePosts(supabase, userId, [data]);
+  return hydrated;
+};
+
+export const schedulePost = async (
+  supabase: SupabaseClient,
+  userId: string,
+  postId: string,
+  schedule: { scheduledFor: string }
+) => {
+  const { data, error } = await supabase
+    .from('posts')
+    .update({
+      status: 'scheduled',
+      scheduled_for: schedule.scheduledFor,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', postId)
+    .eq('user_id', userId)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  await snapshotRevision(supabase, data, userId, 'Post scheduled');
+  const [hydrated] = await hydratePosts(supabase, userId, [data]);
+  return hydrated;
+};
+
+export const recordPostView = async (
+  supabase: SupabaseClient,
+  postId: string,
+  options: { userId?: string; referrer?: string; device?: string; location?: Json }
+) => {
+  const viewedAt = new Date();
+  const { error: insertError } = await supabase.from('post_view_events').insert({
+    post_id: postId,
+    user_id: options.userId || null,
+    referrer: options.referrer || null,
+    device: options.device || null,
+    location: options.location || null,
+    viewed_at: viewedAt.toISOString(),
+  });
+
+  if (insertError) throw insertError;
+
+  const { data: postData } = await supabase
+    .from('posts')
+    .select('view_count')
+    .eq('id', postId)
+    .maybeSingle();
+
+  const currentViews = postData?.view_count || 0;
+
+  await supabase
+    .from('posts')
+    .update({ view_count: currentViews + 1, updated_at: viewedAt.toISOString() })
+    .eq('id', postId);
+
+  const isoDate = viewedAt.toISOString().slice(0, 10);
+  await updateDailyMetrics(supabase, postId, isoDate, {
+    views: 1,
+    uniqueViews: options.userId ? 1 : 0,
+  });
+
+  return true;
+};
+
+export const listPostComments = async (
+  supabase: SupabaseClient,
+  userId: string,
+  postId: string,
+  options: { status?: PostComment['status'] | 'all' } = {}
+) => {
+  await assertPostOwnership(supabase, userId, postId);
+
+  const query = supabase
+    .from('post_comments')
+    .select('*')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: false });
+
+  if (options.status && options.status !== 'all') {
+    query.eq('status', options.status);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+};
+
+export const addPostComment = async (
+  supabase: SupabaseClient,
+  userId: string,
+  postId: string,
+  comment: { content: string; parentId?: string | null; metadata?: Json | null }
+) => {
+  await assertPostOwnership(supabase, userId, postId);
+
+  const { data, error } = await supabase
+    .from('post_comments')
+    .insert({
+      post_id: postId,
+      user_id: userId,
+      parent_id: comment.parentId || null,
+      content: comment.content,
+      metadata: comment.metadata || null,
+      status: 'pending',
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+
+  const { data: postData } = await supabase
+    .from('posts')
+    .select('comment_count')
+    .eq('id', postId)
+    .maybeSingle();
+
+  const newCount = (postData?.comment_count || 0) + 1;
+  await supabase
+    .from('posts')
+    .update({ comment_count: newCount, updated_at: new Date().toISOString() })
+    .eq('id', postId);
+
+  await updateDailyMetrics(supabase, postId, new Date().toISOString().slice(0, 10), {
+    comments: 1,
+  });
+
+  return data;
+};
+
+export const updateCommentStatus = async (
+  supabase: SupabaseClient,
+  userId: string,
+  commentId: string,
+  status: PostComment['status']
+) => {
+  const { data: comment, error: fetchError } = await supabase
+    .from('post_comments')
+    .select('post_id')
+    .eq('id', commentId)
+    .maybeSingle();
+
+  if (fetchError) throw fetchError;
+  if (!comment) throw new Error('Comment not found');
+
+  await assertPostOwnership(supabase, userId, comment.post_id);
+
+  const { data, error } = await supabase
+    .from('post_comments')
+    .update({ status })
+    .eq('id', commentId)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const listPostRevisions = cache(async (
+  supabase: SupabaseClient,
+  postId: string
+) => {
+  const { data, error } = await supabase
+    .from('post_revisions')
+    .select('*')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data;
+});
+
+export const listMediaAssets = async (
+  supabase: SupabaseClient,
+  userId: string,
+  options: { limit?: number; offset?: number } = {}
+) => {
+  const { limit = 50, offset = 0 } = options;
+  const { data, error, count } = await supabase
+    .from('media_assets')
+    .select('*', { count: 'exact' })
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (error) throw error;
+  return {
+    assets: data || [],
+    total: count || 0,
+    hasMore: offset + limit < (count || 0),
+  };
+};
+
+export const createMediaAsset = async (
+  supabase: SupabaseClient,
+  userId: string,
+  asset: { filename?: string; url: string; mimeType?: string; sizeBytes?: number; metadata?: Json | null }
+) => {
+  const { data, error } = await supabase
+    .from('media_assets')
+    .insert({
+      user_id: userId,
+      filename: asset.filename || null,
+      url: asset.url,
+      mime_type: asset.mimeType || null,
+      size_bytes: asset.sizeBytes || null,
+      metadata: asset.metadata || null,
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const deleteMediaAsset = async (
+  supabase: SupabaseClient,
+  userId: string,
+  assetId: string
+) => {
+  const { error } = await supabase
+    .from('media_assets')
+    .delete()
+    .eq('id', assetId)
+    .eq('user_id', userId);
+
+  if (error) throw error;
+
+  // Remove references from posts
+  const { data: posts } = await supabase
+    .from('posts')
+    .select('id, media_asset_ids')
+    .eq('user_id', userId)
+    .contains('media_asset_ids', [assetId]);
+
+  if (posts && posts.length > 0) {
+    for (const post of posts) {
+      const filtered = (post.media_asset_ids || []).filter((id: string) => id !== assetId);
+      await supabase
+        .from('posts')
+        .update({ media_asset_ids: filtered, updated_at: new Date().toISOString() })
+        .eq('id', post.id);
+    }
+  }
+
+  return true;
+};
+
+export const getPostAnalytics = cache(async (
+  supabase: SupabaseClient,
+  userId: string,
+  options: { limit?: number; status?: Post['status'] | 'all' } = {}
+) => {
+  const { limit = 50, status } = options;
+  const query = supabase
+    .from('post_analytics_view')
+    .select('*')
+    .eq('user_id', userId)
+    .order('published_at', { ascending: false, nullsFirst: true })
+    .limit(limit);
+
+  if (status && status !== 'all') {
+    query.eq('status', status);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const totalViews = (data || []).reduce((sum, item) => sum + (item.total_views || 0), 0);
+  const totalUniqueViews = (data || []).reduce((sum, item) => sum + (item.total_unique_views || 0), 0);
+  const totalComments = (data || []).reduce((sum, item) => sum + (item.total_comments || 0), 0);
+
+  return {
+    posts: data || [],
+    totals: {
+      views: totalViews,
+      uniqueViews: totalUniqueViews,
+      comments: totalComments,
+    },
+  };
+});
+
+export type PostWithRelations = HydratedPost;
+export type PostCommentList = PostComment[];
+export type PostRevisionList = PostRevision[];
+export type PostAnalytics = Awaited<ReturnType<typeof getPostAnalytics>>;
 
 export const searchCompanies = async (
   supabase: SupabaseClient,

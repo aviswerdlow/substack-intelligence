@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { 
-  BarChart3, 
-  Building2, 
-  Home, 
-  Mail, 
+import {
+  BarChart3,
+  Building2,
+  Home,
+  Mail,
   Settings,
-  FileText
+  FileText,
+  PenSquare
 } from 'lucide-react';
 
 const navigation = [
@@ -36,6 +37,12 @@ const navigation = [
     href: '/reports',
     icon: FileText,
     dataTour: 'reports-nav'
+  },
+  {
+    name: 'Content',
+    href: '/content',
+    icon: PenSquare,
+    dataTour: 'content-nav'
   },
   {
     name: 'Analytics',

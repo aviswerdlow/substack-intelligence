@@ -454,6 +454,332 @@ export interface Database {
         }
         Relationships: []
       }
+      posts: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          slug: string
+          excerpt: string | null
+          content: Json
+          status: 'draft' | 'published' | 'scheduled' | 'archived'
+          published_at: string | null
+          scheduled_for: string | null
+          subscription_required: boolean | null
+          seo_title: string | null
+          seo_description: string | null
+          seo_keywords: string[] | null
+          category_slugs: string[] | null
+          tag_slugs: string[] | null
+          media_asset_ids: string[] | null
+          featured_media_id: string | null
+          allow_comments: boolean | null
+          comment_count: number | null
+          view_count: number | null
+          reading_time: number | null
+          search_vector: unknown | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          slug: string
+          excerpt?: string | null
+          content?: Json
+          status?: 'draft' | 'published' | 'scheduled' | 'archived'
+          published_at?: string | null
+          scheduled_for?: string | null
+          subscription_required?: boolean | null
+          seo_title?: string | null
+          seo_description?: string | null
+          seo_keywords?: string[] | null
+          category_slugs?: string[] | null
+          tag_slugs?: string[] | null
+          media_asset_ids?: string[] | null
+          featured_media_id?: string | null
+          allow_comments?: boolean | null
+          comment_count?: number | null
+          view_count?: number | null
+          reading_time?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          slug?: string
+          excerpt?: string | null
+          content?: Json
+          status?: 'draft' | 'published' | 'scheduled' | 'archived'
+          published_at?: string | null
+          scheduled_for?: string | null
+          subscription_required?: boolean | null
+          seo_title?: string | null
+          seo_description?: string | null
+          seo_keywords?: string[] | null
+          category_slugs?: string[] | null
+          tag_slugs?: string[] | null
+          media_asset_ids?: string[] | null
+          featured_media_id?: string | null
+          allow_comments?: boolean | null
+          comment_count?: number | null
+          view_count?: number | null
+          reading_time?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      content_categories: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          slug: string
+          description: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          slug: string
+          description?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          slug?: string
+          description?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      content_tags: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          slug: string
+          description: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          slug: string
+          description?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          slug?: string
+          description?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      media_assets: {
+        Row: {
+          id: string
+          user_id: string
+          filename: string | null
+          url: string
+          mime_type: string | null
+          size_bytes: number | null
+          metadata: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          filename?: string | null
+          url: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          metadata?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          filename?: string | null
+          url?: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          metadata?: Json | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      post_revisions: {
+        Row: {
+          id: string
+          post_id: string
+          editor_id: string
+          title: string
+          excerpt: string | null
+          content: Json
+          summary: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          editor_id: string
+          title: string
+          excerpt?: string | null
+          content: Json
+          summary?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          editor_id?: string
+          title?: string
+          excerpt?: string | null
+          content?: Json
+          summary?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_revisions_post_id_fkey"
+            columns: ["post_id"]
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      post_comments: {
+        Row: {
+          id: string
+          post_id: string
+          user_id: string
+          parent_id: string | null
+          content: string
+          status: 'pending' | 'approved' | 'rejected' | 'spam'
+          metadata: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          user_id: string
+          parent_id?: string | null
+          content: string
+          status?: 'pending' | 'approved' | 'rejected' | 'spam'
+          metadata?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          user_id?: string
+          parent_id?: string | null
+          content?: string
+          status?: 'pending' | 'approved' | 'rejected' | 'spam'
+          metadata?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_comments_post_id_fkey"
+            columns: ["post_id"]
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            referencedRelation: "post_comments"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      post_view_events: {
+        Row: {
+          id: string
+          post_id: string
+          user_id: string | null
+          viewed_at: string
+          referrer: string | null
+          device: string | null
+          location: Json | null
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          user_id?: string | null
+          viewed_at?: string
+          referrer?: string | null
+          device?: string | null
+          location?: Json | null
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          user_id?: string | null
+          viewed_at?: string
+          referrer?: string | null
+          device?: string | null
+          location?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_view_events_post_id_fkey"
+            columns: ["post_id"]
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      post_metrics_daily: {
+        Row: {
+          post_id: string
+          metric_date: string
+          views: number | null
+          unique_views: number | null
+          comments: number | null
+        }
+        Insert: {
+          post_id: string
+          metric_date: string
+          views?: number | null
+          unique_views?: number | null
+          comments?: number | null
+        }
+        Update: {
+          post_id?: string
+          metric_date?: string
+          views?: number | null
+          unique_views?: number | null
+          comments?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_metrics_daily_post_id_fkey"
+            columns: ["post_id"]
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       report_history: {
         Row: {
           id: string
@@ -591,6 +917,23 @@ export interface Database {
           received_at: string
           mention_count: number
           newsletter_diversity: number
+        }
+        Relationships: []
+      }
+      post_analytics_view: {
+        Row: {
+          post_id: string
+          user_id: string
+          title: string
+          slug: string
+          status: 'draft' | 'published' | 'scheduled' | 'archived'
+          published_at: string | null
+          scheduled_for: string | null
+          view_count: number | null
+          comment_count: number | null
+          total_views: number | null
+          total_unique_views: number | null
+          total_comments: number | null
         }
         Relationships: []
       }
