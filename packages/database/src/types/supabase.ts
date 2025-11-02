@@ -141,6 +141,169 @@ export interface Database {
         }
         Relationships: []
       }
+      email_preferences: {
+        Row: {
+          user_id: string
+          newsletter: boolean | null
+          new_posts: boolean | null
+          comments: boolean | null
+          marketing: boolean | null
+          product_updates: boolean | null
+          digest_frequency: string | null
+          preferred_format: 'html' | 'text' | 'both' | null
+          timezone: string | null
+          unsubscribe_token: string | null
+          unsubscribed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          newsletter?: boolean | null
+          new_posts?: boolean | null
+          comments?: boolean | null
+          marketing?: boolean | null
+          product_updates?: boolean | null
+          digest_frequency?: string | null
+          preferred_format?: 'html' | 'text' | 'both' | null
+          timezone?: string | null
+          unsubscribe_token?: string | null
+          unsubscribed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          newsletter?: boolean | null
+          new_posts?: boolean | null
+          comments?: boolean | null
+          marketing?: boolean | null
+          product_updates?: boolean | null
+          digest_frequency?: string | null
+          preferred_format?: 'html' | 'text' | 'both' | null
+          timezone?: string | null
+          unsubscribe_token?: string | null
+          unsubscribed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'email_preferences_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: true
+            referencedRelation: 'user_settings'
+            referencedColumns: ['user_id']
+          }
+        ]
+      }
+      email_logs: {
+        Row: {
+          id: string
+          user_id: string | null
+          recipient_email: string
+          email_type:
+            | 'welcome'
+            | 'password_reset'
+            | 'newsletter'
+            | 'new_post'
+            | 'subscription_confirmation'
+            | 'transactional'
+            | 'test'
+          subject: string | null
+          status:
+            | 'queued'
+            | 'sent'
+            | 'delivered'
+            | 'opened'
+            | 'clicked'
+            | 'bounced'
+            | 'complained'
+            | 'failed'
+          provider: string | null
+          metadata: Json | null
+          sent_at: string | null
+          opened_at: string | null
+          clicked_at: string | null
+          bounced_at: string | null
+          complained_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          recipient_email: string
+          email_type:
+            | 'welcome'
+            | 'password_reset'
+            | 'newsletter'
+            | 'new_post'
+            | 'subscription_confirmation'
+            | 'transactional'
+            | 'test'
+          subject?: string | null
+          status:
+            | 'queued'
+            | 'sent'
+            | 'delivered'
+            | 'opened'
+            | 'clicked'
+            | 'bounced'
+            | 'complained'
+            | 'failed'
+          provider?: string | null
+          metadata?: Json | null
+          sent_at?: string | null
+          opened_at?: string | null
+          clicked_at?: string | null
+          bounced_at?: string | null
+          complained_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          recipient_email?: string
+          email_type?:
+            | 'welcome'
+            | 'password_reset'
+            | 'newsletter'
+            | 'new_post'
+            | 'subscription_confirmation'
+            | 'transactional'
+            | 'test'
+          subject?: string | null
+          status?:
+            | 'queued'
+            | 'sent'
+            | 'delivered'
+            | 'opened'
+            | 'clicked'
+            | 'bounced'
+            | 'complained'
+            | 'failed'
+          provider?: string | null
+          metadata?: Json | null
+          sent_at?: string | null
+          opened_at?: string | null
+          clicked_at?: string | null
+          bounced_at?: string | null
+          complained_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'email_logs_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_settings'
+            referencedColumns: ['user_id']
+          }
+        ]
+      }
       companies: {
         Row: {
           id: string
