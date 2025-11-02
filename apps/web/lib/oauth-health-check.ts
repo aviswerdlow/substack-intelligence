@@ -158,8 +158,8 @@ export class OAuthHealthChecker {
       };
     }
 
-    const redirectUri = `${appUrl}/api/auth/gmail/callback`;
-    const expectedLocal = 'http://localhost:3000/api/auth/gmail/callback';
+    const redirectUri = `${appUrl}/api/auth/callback/google`;
+    const expectedLocal = 'http://localhost:3000/api/auth/callback/google';
     
     // Check if using localhost in production
     if (process.env.NODE_ENV === 'production' && appUrl.includes('localhost')) {
@@ -198,13 +198,16 @@ export class OAuthHealthChecker {
       const oauth2Client = new google.auth.OAuth2(
         process.env.GOOGLE_CLIENT_ID,
         process.env.GOOGLE_CLIENT_SECRET,
-        `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`
+        `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`
       );
 
       // Try to generate an auth URL to validate the client config
       const authUrl = oauth2Client.generateAuthUrl({
         access_type: 'offline',
-        scope: ['https://www.googleapis.com/auth/gmail.readonly'],
+        scope: [
+          'https://www.googleapis.com/auth/gmail.readonly',
+          'https://www.googleapis.com/auth/gmail.modify',
+        ],
         prompt: 'consent'
       });
 

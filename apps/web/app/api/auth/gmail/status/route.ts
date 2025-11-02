@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { UserSettingsService } from '@/lib/user-settings';
+import { fetchGmailTokenState } from '@substack-intelligence/lib/gmail-tokens';
 import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // GET - Check Gmail connection status
@@ -10,10 +10,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userSettingsService = new UserSettingsService();
-    const settings = await userSettingsService.getUserSettings(session.user.id);
-    
-    if (!settings) {
+    const state = await fetchGmailTokenState(session.user.id);
+
+    if (!state) {
       return NextResponse.json({
         connected: false,
         email: null
@@ -21,8 +20,8 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      connected: settings.gmail_connected || false,
-      email: settings.gmail_email || null
+      connected: Boolean(state.connected),
+      email: state.email || null
     });
     
   } catch (error) {

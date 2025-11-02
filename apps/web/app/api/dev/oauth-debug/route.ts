@@ -34,7 +34,7 @@ export async function GET() {
         NEXT_PUBLIC_APP_URL: {
           value: process.env.NEXT_PUBLIC_APP_URL,
           isLocalhost: process.env.NEXT_PUBLIC_APP_URL?.includes('localhost'),
-          redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`
+          redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`
         },
         
         // Optional monitoring variables
@@ -65,7 +65,7 @@ export async function GET() {
           '2. Create a new project or select existing one',
           '3. Enable Gmail API in APIs & Services > Library',
           '4. Create OAuth 2.0 credentials in APIs & Services > Credentials',
-          '5. Add authorized redirect URI: ' + process.env.NEXT_PUBLIC_APP_URL + '/api/auth/gmail/callback',
+          '5. Add authorized redirect URI: ' + process.env.NEXT_PUBLIC_APP_URL + '/api/auth/callback/google',
           '6. Copy Client ID and Client Secret to .env.local',
           '7. Test connection using this debug endpoint'
         ],
@@ -114,7 +114,7 @@ async function testOAuthClient() {
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`
+      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`
     );
 
     // Test generating auth URL

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { signIn } from 'next-auth/react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -243,17 +244,23 @@ function SettingsPageContent() {
         return;
       }
 
-      const response = await fetch('/api/auth/gmail');
-      const data = await response.json();
+      const result = await signIn(
+        'google',
+        {
+          redirect: false,
+          callbackUrl: `${window.location.origin}/auth/gmail-setup?autoClose=1`,
+        },
+        {
+          prompt: 'consent',
+          access_type: 'offline',
+          include_granted_scopes: 'true',
+        }
+      );
 
-      if (!response.ok) {
-        handleConnectionError(data.error || data.message || 'oauth_initiation_failed');
+      if (!result?.url) {
+        handleConnectionError(result?.error || 'oauth_initiation_failed');
         setConnectingEmail(false);
         return;
-      }
-
-      if (!data.authUrl) {
-        throw new Error('Missing Gmail authorization URL');
       }
 
       const width = 600;
@@ -262,7 +269,7 @@ function SettingsPageContent() {
       const top = (window.screen.height / 2) - (height / 2);
 
       const popup = window.open(
-        data.authUrl,
+        result.url,
         'gmail-auth',
         `width=${width},height=${height},left=${left},top=${top},status=yes,scrollbars=yes,resizable=yes`
       );

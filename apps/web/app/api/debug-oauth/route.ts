@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
       GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID?.substring(0, 20) + '...',
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? '***configured***' : 'missing',
-      redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`,
+      redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`,
       user: user ? { id: user.id, email: user.email } : null,
       auth: user ? 'authenticated' : 'not authenticated',
       headers: {
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`
+      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`
     );
 
     const authUrl = oauth2Client.generateAuthUrl({
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       debug: config,
       authUrl,
-      expectedRedirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`,
+      expectedRedirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`,
       instructions: [
         '1. Check that NEXT_PUBLIC_APP_URL matches your deployment URL',
         '2. Verify the redirect URI in Google Console matches exactly',
