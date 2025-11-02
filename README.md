@@ -121,6 +121,10 @@ The application will be available at `http://localhost:3000`.
 
 ## 🧪 Testing the System
 
+### Testing Strategy Overview
+
+Refer to [docs/TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md) for the complete testing pyramid, tooling configuration, and CI/CD enforcement plan that keeps unit, integration, E2E, performance, and visual regression suites aligned.
+
 ### Health Check
 
 Visit `/api/health` to verify all services are connected:
