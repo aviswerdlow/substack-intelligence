@@ -1,51 +1,15 @@
-import { auth } from '@clerk/nextjs/server';
-import { clerkClient } from '@clerk/nextjs/server';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
-// Permission levels
-export enum Permission {
-  READ_EMAILS = 'emails:read',
-  WRITE_EMAILS = 'emails:write',
-  READ_COMPANIES = 'companies:read',
-  WRITE_COMPANIES = 'companies:write',
-  READ_REPORTS = 'reports:read',
-  WRITE_REPORTS = 'reports:write',
-  ADMIN_SYSTEM = 'system:admin',
-  MANAGE_USERS = 'users:manage',
-  VIEW_ANALYTICS = 'analytics:view'
-}
+import {
+  Permission,
+  ROLE_PERMISSIONS,
+  UserRole,
+  fetchUserAccessProfile,
+  getServerSecuritySession
+} from './session';
 
-// User roles with associated permissions
-export const ROLE_PERMISSIONS = {
-  admin: [
-    Permission.READ_EMAILS,
-    Permission.WRITE_EMAILS,
-    Permission.READ_COMPANIES,
-    Permission.WRITE_COMPANIES,
-    Permission.READ_REPORTS,
-    Permission.WRITE_REPORTS,
-    Permission.ADMIN_SYSTEM,
-    Permission.MANAGE_USERS,
-    Permission.VIEW_ANALYTICS
-  ],
-  analyst: [
-    Permission.READ_EMAILS,
-    Permission.READ_COMPANIES,
-    Permission.WRITE_COMPANIES,
-    Permission.READ_REPORTS,
-    Permission.WRITE_REPORTS,
-    Permission.VIEW_ANALYTICS
-  ],
-  viewer: [
-    Permission.READ_EMAILS,
-    Permission.READ_COMPANIES,
-    Permission.READ_REPORTS,
-    Permission.VIEW_ANALYTICS
-  ]
-} as const;
-
-export type UserRole = keyof typeof ROLE_PERMISSIONS;
+export { Permission, ROLE_PERMISSIONS, UserRole } from './session';
 
 export interface SecurityContext {
   userId: string;
@@ -61,24 +25,16 @@ export interface SecurityContext {
 // Enhanced authentication context
 export async function getSecurityContext(request: NextRequest): Promise<SecurityContext | null> {
   try {
-    const { userId, sessionId, orgId } = await auth();
-    
-    if (!userId || !sessionId) {
+    const session = await getServerSecuritySession();
+
+    if (!session) {
       return null;
     }
 
-    // Get user details from Clerk
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    
-    if (!user) {
-      return null;
-    }
+    const { user } = session;
+    const role = user.role;
+    const permissions = [...user.permissions];
 
-    // Extract role from user metadata or organization membership
-    const role = await getUserRole(userId, orgId);
-    const permissions = [...(ROLE_PERMISSIONS[role] || [])];
-    
     // Get client information
     const forwardedFor = request.headers.get('x-forwarded-for');
     const realIp = request.headers.get('x-real-ip');
@@ -86,16 +42,16 @@ export async function getSecurityContext(request: NextRequest): Promise<Security
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
     return {
-      userId,
-      organizationId: orgId || undefined,
+      userId: user.id,
+      organizationId: user.organizationId,
       role,
       permissions,
-      sessionId,
+      sessionId: session.sessionId,
       ipAddress,
       userAgent,
-      isVerified: !!user.emailAddresses.find(email => email.verification?.status === 'verified')
+      isVerified: user.isVerified
     };
-    
+
   } catch (error) {
     console.error('Failed to get security context:', error);
     return null;
@@ -104,30 +60,18 @@ export async function getSecurityContext(request: NextRequest): Promise<Security
 
 export async function getUserRole(userId: string, orgId?: string): Promise<UserRole> {
   try {
-    if (orgId) {
-      // Get role from organization membership
-      const client = await clerkClient();
-      const orgMemberships = await client.organizations.getOrganizationMembershipList({
-        organizationId: orgId,
-        limit: 100
+    const accessProfile = await fetchUserAccessProfile(userId);
+
+    if (orgId && accessProfile.organizationId && accessProfile.organizationId !== orgId) {
+      console.warn('Organization mismatch when resolving role', {
+        userId,
+        expectedOrganization: orgId,
+        resolvedOrganization: accessProfile.organizationId
       });
-      
-      const membership = orgMemberships.data.find(m => m.publicUserData?.userId === userId);
-      
-      if (membership?.role === 'org:admin') {
-        return 'admin';
-      } else if (membership?.role === 'org:member') {
-        return 'analyst';
-      }
     }
 
-    // Get role from user metadata
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    const role = user.publicMetadata?.role as UserRole;
-    
-    return role || 'viewer'; // Default to viewer
-    
+    return accessProfile.role;
+
   } catch (error) {
     console.error('Failed to get user role:', error);
     return 'viewer'; // Fail safe to least privileged role

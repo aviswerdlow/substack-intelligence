@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { axiomLogger } from './axiom';
+import { getServerSecuritySession } from '../security/session';
 
 // API request logging middleware
 export function withApiLogging(
@@ -8,7 +8,8 @@ export function withApiLogging(
 ) {
   return async (req: NextRequest): Promise<NextResponse> => {
     const start = Date.now();
-    const { userId } = await auth();
+    const session = await getServerSecuritySession();
+    const userId = session?.user.id;
     
     // Extract request info
     const method = req.method;
