@@ -17,7 +17,7 @@ test.describe('Data Pipeline Journey', () => {
       
       // Extract user ID
       const userInfo = await page.evaluate(() => {
-        return (window as any).Clerk?.user?.id;
+        return (window as any).NextAuth?.user?.id;
       });
       testUserId = userInfo || 'test-user-id';
       

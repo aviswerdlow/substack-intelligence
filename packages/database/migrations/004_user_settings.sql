@@ -1,7 +1,7 @@
 -- Create user_settings table for storing user-specific settings
 CREATE TABLE IF NOT EXISTS public.user_settings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id TEXT NOT NULL UNIQUE, -- Clerk user ID
+  user_id TEXT NOT NULL UNIQUE, -- NextAuth user ID
   
   -- Gmail integration
   gmail_connected BOOLEAN DEFAULT false,

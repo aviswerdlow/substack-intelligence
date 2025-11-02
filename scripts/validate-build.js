@@ -29,28 +29,28 @@ const CRITICAL_CHECKS = {
   },
 
   // Test keys must not be used in production
-  clerkKeys: {
-    name: 'Authentication Keys Check',
+  nextAuthSecret: {
+    name: 'NextAuth Configuration Check',
     validate: (env) => {
       if (env.NODE_ENV === 'production') {
-        if (env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.includes('test')) {
+        if (!env.NEXTAUTH_SECRET || env.NEXTAUTH_SECRET.length < 32) {
           return {
             passed: false,
-            message: 'Test Clerk publishable key detected in production',
+            message: 'NEXTAUTH_SECRET must be at least 32 characters in production',
             severity: 'critical'
           };
         }
-        if (env.CLERK_SECRET_KEY?.includes('test')) {
+        if (env.NEXTAUTH_URL?.includes('localhost')) {
           return {
             passed: false,
-            message: 'Test Clerk secret key detected in production',
+            message: 'NEXTAUTH_URL cannot point to localhost in production',
             severity: 'critical'
           };
         }
       }
       return {
         passed: true,
-        message: 'Authentication keys properly configured',
+        message: 'NextAuth configuration looks good',
         severity: 'info'
       };
     }

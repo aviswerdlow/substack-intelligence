@@ -13,8 +13,8 @@ Make sure the following are set in Vercel Dashboard:
 - `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
 - `SUPABASE_SERVICE_KEY` - Supabase service role key
-- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` - Clerk publishable key
-- `CLERK_SECRET_KEY` - Clerk secret key
+- `NEXTAUTH_SECRET` - Secret used to sign NextAuth sessions (min 32 chars)
+- `NEXTAUTH_URL` - Base URL for NextAuth callbacks
 
 ## Google OAuth Setup Checklist
 - [ ] Gmail API enabled in Google Cloud Console

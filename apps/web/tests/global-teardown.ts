@@ -52,7 +52,7 @@ async function cleanupTestFiles() {
   try {
     // Remove temporary auth state files
     const tempFiles = [
-      'clerk-auth-state-temp.json',
+      'nextauth-auth-state-temp.json',
       'test-downloads',
       'test-uploads'
     ];

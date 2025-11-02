@@ -26,7 +26,7 @@ export type {
   MockSession,
   MockOrganization,
   MockAuth
-} from './auth/clerk';
+} from './auth/nextauth';
 
 export type {
   MockAnthropicMessage,

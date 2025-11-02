@@ -87,16 +87,17 @@ async function auditAuthentication(): Promise<SecurityCategory> {
     {
       name: 'Multi-Factor Authentication',
       description: 'MFA is enforced for admin accounts',
-      passed: true, // Clerk provides MFA
+      passed: false,
       severity: 'high',
-      reference: 'https://clerk.com/docs/authentication/multi-factor'
+      recommendation: 'Implement MFA flow using NextAuth callbacks or external provider',
+      reference: 'https://next-auth.js.org/configuration/pages#two-factor-authentication'
     },
     {
       name: 'Password Policy',
       description: 'Strong password requirements are enforced',
-      passed: true, // Clerk enforces strong passwords
+      passed: true,
       severity: 'medium',
-      reference: 'https://clerk.com/docs/authentication/passwords'
+      reference: 'https://supabase.com/docs/guides/auth/passwords'
     },
     {
       name: 'Session Management',
@@ -107,8 +108,9 @@ async function auditAuthentication(): Promise<SecurityCategory> {
     {
       name: 'OAuth Security',
       description: 'OAuth flows are properly secured with PKCE',
-      passed: true, // Clerk handles OAuth securely
-      severity: 'high'
+      passed: true,
+      severity: 'high',
+      reference: 'https://next-auth.js.org/configuration/options#events'
     },
     {
       name: 'Brute Force Protection',
@@ -158,7 +160,8 @@ async function auditAuthorization(): Promise<SecurityCategory> {
     {
       name: 'Permission Inheritance',
       description: 'Organization-level permissions are properly inherited',
-      passed: true, // Clerk organizations
+      passed: false,
+      recommendation: 'Implement organization-level RBAC rules in Supabase or application layer',
       severity: 'medium'
     }
   ];
@@ -333,8 +336,9 @@ async function auditCompliance(): Promise<SecurityCategory> {
     {
       name: 'GDPR Compliance',
       description: 'System supports GDPR requirements',
-      passed: true, // User data control via Clerk
+      passed: false,
       severity: 'high',
+      recommendation: 'Define GDPR processes (DSAR, consent tracking) for NextAuth users',
       reference: 'https://gdpr-info.eu/'
     },
     {
@@ -346,8 +350,9 @@ async function auditCompliance(): Promise<SecurityCategory> {
     {
       name: 'Right to Deletion',
       description: 'Users can request data deletion',
-      passed: true, // Clerk supports user deletion
-      severity: 'high'
+      passed: false,
+      severity: 'high',
+      recommendation: 'Expose self-service account deletion flow for NextAuth accounts'
     },
     {
       name: 'Data Portability',

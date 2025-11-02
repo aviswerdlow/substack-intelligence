@@ -15,9 +15,8 @@ const envConfig: EnvConfig = {
     'NEXT_PUBLIC_SUPABASE_ANON_KEY',
     'SUPABASE_SERVICE_ROLE_KEY',
 
-    // Clerk Authentication
-    'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
-    'CLERK_SECRET_KEY',
+    // NextAuth Authentication
+    'NEXTAUTH_SECRET',
 
     // AI Services
     'ANTHROPIC_API_KEY',
@@ -30,11 +29,8 @@ const envConfig: EnvConfig = {
     'NODE_ENV',
     'NEXT_PUBLIC_APP_URL',
 
-    // Clerk URLs
-    'NEXT_PUBLIC_CLERK_SIGN_IN_URL',
-    'NEXT_PUBLIC_CLERK_SIGN_UP_URL',
-    'NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL',
-    'NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL',
+    // NextAuth configuration
+    'NEXTAUTH_URL',
 
     // Optional AI
     'OPENAI_API_KEY',
@@ -65,8 +61,8 @@ const envConfig: EnvConfig = {
     // Security
     'WEBHOOK_SECRET',
     'CRON_SECRET',
-    'NEXTAUTH_SECRET',
-    'NEXTAUTH_URL',
+    'GITHUB_CLIENT_ID',
+    'GITHUB_CLIENT_SECRET',
 
     // Feature Flags
     'ENABLE_MONITORING',

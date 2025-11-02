@@ -11,7 +11,7 @@ test.describe('Dashboard Simple Tests - Requires Manual Sign In First', () => {
     // This is a workaround since we can't automate Google OAuth
     await page.goto('http://localhost:3000');
     
-    // Try to inject a mock session (this may not work with Clerk's security)
+    // Try to inject a mock session (this may not work with NextAuth's security)
     await page.evaluate(() => {
       // Mock authenticated state
       localStorage.setItem('__test_mode', 'authenticated');
@@ -97,11 +97,11 @@ test.describe('Dashboard Simple Tests - Requires Manual Sign In First', () => {
 // Alternative: Test with mock authentication
 test.describe('Mock Authentication Tests', () => {
   test('should test with simulated authentication', async ({ page }) => {
-    // Override Clerk's auth check (this is a hack and may not work)
+    // Override NextAuth's auth check (this is a hack and may not work)
     await page.addInitScript(() => {
-      // Try to mock Clerk's internal state
-      window.__clerk_db_jwt = 'mock_token';
-      window.__clerk_session = {
+      // Try to mock NextAuth's internal state
+      window.__nextauth_db_jwt = 'mock_token';
+      window.__nextauth_session = {
         id: 'sess_mock',
         userId: 'user_mock',
         status: 'active'

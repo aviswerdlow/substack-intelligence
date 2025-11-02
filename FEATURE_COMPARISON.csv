@@ -1,6 +1,6 @@
 Feature Category,Feature Name,Current Status,Priority,Completeness,User Impact,Technical Complexity,Dependencies,Migration Risk,Preservation Required,Notes
 Core Features,Email Intelligence Pipeline,Production Ready,Critical,100%,High,High,Gmail API + Claude AI,Low,Yes,Automated pipeline for fetching and processing Substack emails
-Core Features,Gmail API Integration,Production Ready,Critical,100%,High,High,Google OAuth + Clerk,Low,Yes,OAuth 2.0 flow with token management and refresh
+Core Features,Gmail API Integration,Production Ready,Critical,100%,High,High,Google OAuth + NextAuth,Low,Yes,OAuth 2.0 flow with token management and refresh
 Core Features,Email Processing,Production Ready,Critical,100%,High,Medium,None,Low,Yes,HTML to text conversion with search indexing
 Core Features,Rate Limiting & Protection,Production Ready,Critical,100%,Medium,Medium,Upstash Redis,Low,Yes,Burst protection and request throttling
 Core Features,AI Company Extraction,Production Ready,Critical,100%,High,High,Claude API,Medium,Yes,95%+ accuracy target with confidence scoring
@@ -42,8 +42,8 @@ User Features,AI Settings,Production Ready,Medium,100%,Medium,Low,None,Low,Yes,M
 User Features,Report Settings,Production Ready,Medium,100%,High,Medium,None,Low,Yes,Delivery frequency and timezone
 User Features,API Key Management,Production Ready,Medium,100%,Medium,Medium,Bcrypt,Low,Yes,Create and manage API keys
 User Features,Webhook Management,Production Ready,Medium,100%,Medium,Medium,HMAC signatures,Low,Yes,Configure event webhooks
-Authentication & Security,Clerk Authentication,Production Ready,Critical,100%,High,High,Clerk SDK,Low,Yes,Enterprise-grade auth with OAuth
-Authentication & Security,Gmail OAuth,Production Ready,Critical,100%,High,High,Google OAuth + Clerk,Medium,Yes,Dedicated flow with token encryption
+Authentication & Security,NextAuth Authentication,Production Ready,Critical,100%,High,High,NextAuth SDK,Low,Yes,Enterprise-grade auth with OAuth
+Authentication & Security,Gmail OAuth,Production Ready,Critical,100%,High,High,Google OAuth + NextAuth,Medium,Yes,Dedicated flow with token encryption
 Authentication & Security,Row Level Security,Production Ready,Critical,100%,High,High,Supabase RLS,Low,Yes,User data isolation via policies
 Authentication & Security,Data Encryption,Production Ready,Critical,100%,High,High,AES-256,Low,Yes,At-rest and in-transit encryption
 Authentication & Security,Security Monitoring,Production Ready,High,100%,Medium,Medium,Axiom,Low,Yes,Audit trails and activity detection

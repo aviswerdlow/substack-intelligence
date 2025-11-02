@@ -23,7 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_report_history_generated ON report_history(genera
 -- User preferences table for report customization
 CREATE TABLE user_preferences (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id TEXT NOT NULL, -- Clerk user ID
+  user_id TEXT NOT NULL, -- NextAuth user ID
   
   -- Report preferences
   daily_reports_enabled BOOLEAN DEFAULT true,

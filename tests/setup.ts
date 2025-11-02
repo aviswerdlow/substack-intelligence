@@ -5,7 +5,7 @@ import { TextEncoder, TextDecoder } from 'util';
 import { supabaseMocks } from './mocks/database/supabase';
 import { databaseMocks } from './mocks/database/queries';
 import { nextjsMocks, headersMocks } from './mocks/nextjs/server';
-import { clerkNextjsMocks, clerkMocks } from './mocks/auth/clerk';
+import { nextauthNextjsMocks, nextauthMocks } from './mocks/auth/nextauth';
 import { securitySessionController } from './mocks/auth/security-session-controller';
 import { anthropicMocks, openaiMocks, resendMocks, externalServicesMocks } from './mocks/external/services';
 import { googleApisMocks, gmailMocks } from './mocks/external/gmail';
@@ -80,8 +80,8 @@ vi.mock('@substack-intelligence/lib/security/session', async () => {
   };
 });
 
-// Provide compatibility mocks for legacy Clerk imports used in tests
-vi.mock('@clerk/nextjs', () => clerkNextjsMocks);
+// Provide compatibility mocks for legacy NextAuth imports used in tests
+vi.mock('@nextauth/nextjs', () => nextauthNextjsMocks);
 
 // Mock Next.js server components with centralized mocks
 vi.mock('next/server', () => nextjsMocks);
@@ -188,7 +188,7 @@ afterEach(() => {
   try {
     axiomMocks.resetAllMocks();
     rateLimitingMocks.resetAllMocks();
-    clerkMocks.resetAllMocks();
+    nextauthMocks.resetAllMocks();
     securitySessionController.resetSession();
     externalServicesMocks.resetAllMocks();
     gmailMocks.resetAllMocks();
@@ -222,15 +222,15 @@ declare global {
 // Provide global test utilities for convenience
 globalThis.testUtils = {
   mockSuccessfulAuth: () => {
-    clerkMocks.mockSignedInUser();
+    nextauthMocks.mockSignedInUser();
   },
   
   mockSignedInUser: (overrides?: any) => {
-    return clerkMocks.mockSignedInUser(overrides);
+    return nextauthMocks.mockSignedInUser(overrides);
   },
   
   mockSignedOutUser: () => {
-    clerkMocks.mockSignedOutUser();
+    nextauthMocks.mockSignedOutUser();
   },
   
   mockAnthropicSuccess: (response?: string) => {
@@ -268,7 +268,7 @@ globalThis.testUtils = {
     try {
       axiomMocks.resetAllMocks();
       rateLimitingMocks.resetAllMocks();
-      clerkMocks.resetAllMocks();
+      nextauthMocks.resetAllMocks();
       externalServicesMocks.resetAllMocks();
       gmailMocks.resetAllMocks();
       puppeteerMocks.resetAllMocks();

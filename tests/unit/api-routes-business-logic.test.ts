@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // Mock environment variables
 const originalEnv = process.env;
 
-// Mock Clerk authentication functions
+// Mock NextAuth authentication functions
 const mockAuth = vi.fn(() => ({ userId: 'test-user-id' }));
 const mockCurrentUser = vi.fn(() => Promise.resolve({ 
   id: 'test-user-id', 

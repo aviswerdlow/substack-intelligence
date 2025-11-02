@@ -46,19 +46,19 @@ export const ENVIRONMENT_TEMPLATES: Record<string, EnvironmentTemplate> = {
         sensitive: true,
         validation: /^eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/
       },
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: {
+      NEXTAUTH_SECRET: {
         required: true,
-        description: 'Clerk publishable key for client-side authentication',
-        example: 'pk_test_...',
-        sensitive: false,
-        validation: /^pk_(test|live)_[A-Za-z0-9]+$/
-      },
-      CLERK_SECRET_KEY: {
-        required: true,
-        description: 'Clerk secret key for server-side authentication',
-        example: 'sk_test_...',
+        description: 'NextAuth secret for signing sessions and JWTs',
+        example: 'super-secure-development-secret',
         sensitive: true,
-        validation: /^sk_(test|live)_[A-Za-z0-9]+$/
+        validation: /^.{16,}$/
+      },
+      NEXTAUTH_URL: {
+        required: false,
+        description: 'Base URL used by NextAuth callbacks',
+        example: 'http://localhost:3000',
+        sensitive: false,
+        validation: /^https?:\/\/.+/
       },
       ANTHROPIC_API_KEY: {
         required: true,
@@ -151,19 +151,19 @@ export const ENVIRONMENT_TEMPLATES: Record<string, EnvironmentTemplate> = {
         sensitive: true,
         validation: /^eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/
       },
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: {
+      NEXTAUTH_SECRET: {
         required: true,
-        description: 'Clerk staging publishable key',
-        example: 'pk_test_...',
-        sensitive: false,
-        validation: /^pk_(test|live)_[A-Za-z0-9]+$/
-      },
-      CLERK_SECRET_KEY: {
-        required: true,
-        description: 'Clerk staging secret key',
-        example: 'sk_test_...',
+        description: 'NextAuth secret used for staging token signing',
+        example: 'super-secure-staging-secret',
         sensitive: true,
-        validation: /^sk_(test|live)_[A-Za-z0-9]+$/
+        validation: /^.{32,}$/
+      },
+      NEXTAUTH_URL: {
+        required: true,
+        description: 'Staging base URL for NextAuth callbacks',
+        example: 'https://staging-substack-intelligence.vercel.app',
+        sensitive: false,
+        validation: /^https:\/\/.+$/
       },
       ANTHROPIC_API_KEY: {
         required: true,
@@ -250,7 +250,7 @@ export const ENVIRONMENT_TEMPLATES: Record<string, EnvironmentTemplate> = {
     },
     notes: [
       'Staging should mirror production configuration as closely as possible',
-      'Use separate Supabase and Clerk projects for staging',
+      'Use separate Supabase and authentication credentials for staging',
       'Can share Anthropic API key with production (cost consideration)',
       'All integrations should be fully functional',
       'Use staging-specific datasets and Redis instances'
@@ -295,19 +295,19 @@ export const ENVIRONMENT_TEMPLATES: Record<string, EnvironmentTemplate> = {
         sensitive: true,
         validation: /^eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/
       },
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: {
+      NEXTAUTH_SECRET: {
         required: true,
-        description: 'Clerk production publishable key (must be live_)',
-        example: 'pk_live_...',
-        sensitive: false,
-        validation: /^pk_live_[A-Za-z0-9]+$/
-      },
-      CLERK_SECRET_KEY: {
-        required: true,
-        description: 'Clerk production secret key (must be sk_live_)',
-        example: 'sk_live_...',
+        description: 'NextAuth production secret (32+ random characters)',
+        example: 'super-secure-production-secret',
         sensitive: true,
-        validation: /^sk_live_[A-Za-z0-9]+$/
+        validation: /^.{32,}$/
+      },
+      NEXTAUTH_URL: {
+        required: true,
+        description: 'Production base URL for NextAuth callbacks',
+        example: 'https://substack-intelligence.vercel.app',
+        sensitive: false,
+        validation: /^https:\/\/.+$/
       },
       ANTHROPIC_API_KEY: {
         required: true,
@@ -536,10 +536,17 @@ export function validateEnvironmentTemplate(
 
     // Check for test keys in production
     if (template === 'production') {
-      if (key.includes('CLERK') && value.includes('test')) {
+      if (key === 'NEXTAUTH_SECRET' && value.length < 32) {
         invalid.push({
           key,
-          issue: 'Using test Clerk key in production'
+          issue: 'NEXTAUTH_SECRET must be at least 32 characters in production'
+        });
+      }
+
+      if (key === 'NEXTAUTH_URL' && value.includes('localhost')) {
+        invalid.push({
+          key,
+          issue: 'NEXTAUTH_URL should not point to localhost in production'
         });
       }
     }

@@ -78,13 +78,13 @@ pnpm run test:e2e:report
 1. Copy `.env.test.local.example` to `.env.test.local`
 2. Fill in your test credentials and API keys
 3. Ensure you have a test Supabase project
-4. Set up test Clerk application
+4. Set up test NextAuth application
 5. Configure test Gmail OAuth credentials
 
 ### Test User Requirements
 - **TEST_USER_EMAIL**: Valid email for test user account
 - **TEST_USER_PASSWORD**: Password for test user (must meet requirements)
-- Ensure test user exists in your Clerk test environment
+- Ensure test user exists in your NextAuth test environment
 
 ## 📊 Test Coverage
 
@@ -170,7 +170,7 @@ cat .env.test.local
 
 **Authentication failures**
 - Verify TEST_USER_EMAIL and TEST_USER_PASSWORD
-- Check Clerk test environment configuration
+- Check NextAuth test environment configuration
 - Ensure test user exists and is verified
 
 **Database connection issues**

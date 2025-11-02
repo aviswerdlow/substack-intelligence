@@ -7,7 +7,7 @@ ALTER TABLE IF EXISTS auth.users ENABLE ROW LEVEL SECURITY;
 -- User todos table
 CREATE TABLE user_todos (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id TEXT NOT NULL, -- Clerk user ID
+  user_id TEXT NOT NULL, -- NextAuth user ID
   title TEXT NOT NULL CHECK (length(title) > 0 AND length(title) <= 500),
   description TEXT CHECK (description IS NULL OR length(description) <= 2000),
   completed BOOLEAN DEFAULT FALSE NOT NULL,
@@ -179,7 +179,7 @@ GRANT EXECUTE ON FUNCTION get_user_todo_stats(TEXT) TO authenticated;
 
 -- Comments for documentation
 COMMENT ON TABLE user_todos IS 'User todo items with priority, categories, and due dates';
-COMMENT ON COLUMN user_todos.user_id IS 'Clerk user ID from auth system';
+COMMENT ON COLUMN user_todos.user_id IS 'NextAuth user ID from auth system';
 COMMENT ON COLUMN user_todos.priority IS 'Todo priority: low, medium, high, urgent';
 COMMENT ON COLUMN user_todos.position IS 'User-defined sort order within their todo list';
 COMMENT ON COLUMN user_todos.tags IS 'Array of tags for categorization and filtering';

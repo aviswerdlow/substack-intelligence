@@ -20,12 +20,10 @@ const EnvironmentSchema = z.object({
     : z.string().min(1, 'Supabase service role key required'),
   
   // Authentication - optional during build
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: isBuildTime
-    ? z.string().optional().default('pk_test_placeholder')
-    : z.string().min(1, 'Clerk publishable key required'),
-  CLERK_SECRET_KEY: isBuildTime
-    ? z.string().optional().default('sk_test_placeholder')
-    : z.string().min(1, 'Clerk secret key required'),
+  NEXTAUTH_SECRET: isBuildTime
+    ? z.string().optional().default('placeholder-nextauth-secret')
+    : z.string().min(1, 'NextAuth secret required'),
+  NEXTAUTH_URL: z.string().url('Invalid NextAuth URL').optional(),
   
   // External APIs - optional during build
   ANTHROPIC_API_KEY: z.string().optional().default('placeholder-api-key'),
@@ -67,8 +65,8 @@ export interface EnvironmentConfig {
     serviceRoleKey: string;
   };
   auth: {
-    clerkPublishableKey: string;
-    clerkSecretKey: string;
+    nextAuthSecret: string;
+    nextAuthUrl?: string;
   };
   apis: {
     anthropic: string;
@@ -119,8 +117,8 @@ export function validateEnvironment(): EnvironmentConfig {
       },
       
       auth: {
-        clerkPublishableKey: env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
-        clerkSecretKey: env.CLERK_SECRET_KEY,
+        nextAuthSecret: env.NEXTAUTH_SECRET,
+        nextAuthUrl: env.NEXTAUTH_URL,
       },
       
       apis: {
@@ -191,10 +189,10 @@ export function validateEnvironmentSecurity(): {
   
   // Check for development keys in production
   if (process.env.NODE_ENV === 'production') {
-    if (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.includes('test')) {
-      errors.push('Using test Clerk key in production');
+    if (!process.env.NEXTAUTH_SECRET || process.env.NEXTAUTH_SECRET.length < 32) {
+      errors.push('NEXTAUTH_SECRET must be at least 32 characters in production');
     }
-    
+
     if (process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('localhost')) {
       errors.push('Using localhost Supabase URL in production');
     }
@@ -206,23 +204,22 @@ export function validateEnvironmentSecurity(): {
   
   // Check for weak secrets
   const secrets = [
-    process.env.CLERK_SECRET_KEY,
+    process.env.NEXTAUTH_SECRET,
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     process.env.ANTHROPIC_API_KEY,
     process.env.AXIOM_TOKEN
   ];
-  
+
   secrets.forEach((secret, index) => {
-    const secretNames = ['CLERK_SECRET_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'ANTHROPIC_API_KEY', 'AXIOM_TOKEN'];
+    const secretNames = ['NEXTAUTH_SECRET', 'SUPABASE_SERVICE_ROLE_KEY', 'ANTHROPIC_API_KEY', 'AXIOM_TOKEN'];
     if (secret && secret.length < 20) {
       warnings.push(`${secretNames[index]} appears to be too short`);
     }
   });
-  
+
   // Check for default/example values
   const defaultValues = {
     'your-anthropic-key': 'ANTHROPIC_API_KEY',
-    'your-clerk-key': 'CLERK_SECRET_KEY',
     'your-supabase-key': 'SUPABASE_SERVICE_ROLE_KEY',
     'localhost:3000': 'NEXT_PUBLIC_APP_URL'
   };
@@ -232,7 +229,11 @@ export function validateEnvironmentSecurity(): {
       errors.push(`${envVar} contains default/example value`);
     }
   });
-  
+
+  if (process.env.NEXTAUTH_URL?.includes('localhost')) {
+    warnings.push('NEXTAUTH_URL appears to be configured for localhost');
+  }
+
   return {
     isSecure: errors.length === 0,
     warnings,
@@ -267,9 +268,9 @@ SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 # AUTHENTICATION
 # ============================================================================
 
-# Clerk Authentication
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your-clerk-publishable-key
-CLERK_SECRET_KEY=your-clerk-secret-key
+# NextAuth Authentication
+NEXTAUTH_SECRET=your-nextauth-secret
+NEXTAUTH_URL=http://localhost:3000
 
 # ============================================================================
 # EXTERNAL APIs

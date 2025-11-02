@@ -68,7 +68,7 @@ GRANT ALL ON public.user_settings TO service_role;
 
 -- 8. Create a comment on the table for documentation
 COMMENT ON TABLE public.user_settings IS 'Stores user settings including Gmail OAuth tokens and notification preferences';
-COMMENT ON COLUMN public.user_settings.user_id IS 'Clerk user ID';
+COMMENT ON COLUMN public.user_settings.user_id IS 'NextAuth user ID';
 COMMENT ON COLUMN public.user_settings.gmail_refresh_token IS 'Encrypted Gmail OAuth refresh token';
 COMMENT ON COLUMN public.user_settings.gmail_access_token IS 'Encrypted Gmail OAuth access token';
 COMMENT ON COLUMN public.user_settings.gmail_token_expiry IS 'Timestamp when the access token expires';

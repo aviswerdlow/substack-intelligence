@@ -36,7 +36,7 @@ END;
 $$;
 
 COMMENT ON TABLE public.pipeline_updates IS 'Temporary storage for pipeline progress updates consumed by SSE streams';
-COMMENT ON COLUMN public.pipeline_updates.user_id IS 'User ID from Clerk authentication';
+COMMENT ON COLUMN public.pipeline_updates.user_id IS 'User ID from NextAuth authentication';
 COMMENT ON COLUMN public.pipeline_updates.update_data IS 'JSON data containing pipeline update info (type, status, progress, message, etc.)';
 COMMENT ON COLUMN public.pipeline_updates.consumed IS 'Whether this update has been sent to the client via SSE';
 COMMENT ON COLUMN public.pipeline_updates.created_at IS 'When the update was created';

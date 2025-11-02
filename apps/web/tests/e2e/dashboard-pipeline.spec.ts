@@ -9,7 +9,7 @@ test.describe('Dashboard Pipeline Integration', () => {
 
     // Mock authentication for tests
     await page.addInitScript(() => {
-      // Mock Clerk authentication
+      // Mock NextAuth authentication
       (window as any).__test_authenticated = true;
       localStorage.setItem('__test_user_id', 'test-user-123');
     });

@@ -43,8 +43,8 @@ async function setupTestAuth(config: FullConfig) {
     // Create test authentication state
     await page.goto(baseURL + '/sign-in');
     
-    // Wait for Clerk to load
-    await page.waitForSelector('[data-clerk-sign-in-form]', { timeout: 15000 });
+    // Wait for NextAuth to load
+    await page.waitForSelector('[data-nextauth-sign-in-form]', { timeout: 15000 });
     
     // Use test credentials if provided
     if (process.env.TEST_USER_EMAIL && process.env.TEST_USER_PASSWORD) {
@@ -56,7 +56,7 @@ async function setupTestAuth(config: FullConfig) {
       await page.waitForURL('**/dashboard', { timeout: 30000 });
       
       // Save authentication state
-      await page.context().storageState({ path: 'clerk-auth-state.json' });
+      await page.context().storageState({ path: 'nextauth-auth-state.json' });
       console.log('Test authentication state saved');
     } else {
       console.log('No test credentials provided - tests will run in unauthenticated mode');

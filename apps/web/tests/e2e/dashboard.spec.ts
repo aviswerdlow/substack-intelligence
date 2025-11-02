@@ -8,7 +8,7 @@ test.describe('Dashboard Features', () => {
     const context = await browser.newContext();
     page = await context.newPage();
     
-    // Mock Clerk authentication (simplified for testing)
+    // Mock NextAuth authentication (simplified for testing)
     await page.addInitScript(() => {
       window.localStorage.setItem('__test_authenticated', 'true');
     });

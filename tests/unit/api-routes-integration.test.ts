@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // Mock environment variables
 const originalEnv = process.env;
 
-// Mock Clerk authentication
+// Mock NextAuth authentication
 const mockAuth = vi.fn(() => ({ userId: 'test-user-id' }));
 const mockCurrentUser = vi.fn(() => Promise.resolve({ 
   id: 'test-user-id', 
@@ -313,8 +313,8 @@ class APIEndpointSimulator {
         'NEXT_PUBLIC_SUPABASE_ANON_KEY',
         'SUPABASE_SERVICE_KEY',
         'ANTHROPIC_API_KEY',
-        'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
-        'CLERK_SECRET_KEY'
+        'NEXT_PUBLIC_NEXTAUTH_PUBLISHABLE_KEY',
+        'NEXTAUTH_SECRET_KEY'
       ];
 
       const missingEnvVars = requiredEnvVars.filter(
@@ -336,7 +336,7 @@ class APIEndpointSimulator {
         services: {
           supabase: !error,
           anthropic: !!process.env.ANTHROPIC_API_KEY,
-          clerk: !!process.env.CLERK_SECRET_KEY,
+          nextauth: !!process.env.NEXTAUTH_SECRET_KEY,
           gmail: !!process.env.GOOGLE_CLIENT_ID,
           resend: !!process.env.RESEND_API_KEY
         }
@@ -377,8 +377,8 @@ describe('API Routes Integration Tests', () => {
       NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',
       SUPABASE_SERVICE_KEY: 'test-service-key',
       ANTHROPIC_API_KEY: 'test-anthropic-key',
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'test-clerk-pub-key',
-      CLERK_SECRET_KEY: 'test-clerk-secret',
+      NEXT_PUBLIC_NEXTAUTH_PUBLISHABLE_KEY: 'test-nextauth-pub-key',
+      NEXTAUTH_SECRET_KEY: 'test-nextauth-secret',
       GOOGLE_CLIENT_ID: 'test-google-client-id',
       RESEND_API_KEY: 'test-resend-key'
     };
@@ -608,7 +608,7 @@ describe('API Routes Integration Tests', () => {
         services: {
           supabase: true,
           anthropic: true,
-          clerk: true,
+          nextauth: true,
           gmail: true,
           resend: true
         }
@@ -617,7 +617,7 @@ describe('API Routes Integration Tests', () => {
 
     it('should return degraded status with missing environment variables', async () => {
       delete process.env.ANTHROPIC_API_KEY;
-      delete process.env.CLERK_SECRET_KEY;
+      delete process.env.NEXTAUTH_SECRET_KEY;
 
       const response = await APIEndpointSimulator.simulateGetHealth();
       const data = await response.json();
@@ -627,10 +627,10 @@ describe('API Routes Integration Tests', () => {
         status: 'degraded',
         services: {
           anthropic: false,
-          clerk: false
+          nextauth: false
         },
         warnings: {
-          missingEnvVars: expect.arrayContaining(['ANTHROPIC_API_KEY', 'CLERK_SECRET_KEY'])
+          missingEnvVars: expect.arrayContaining(['ANTHROPIC_API_KEY', 'NEXTAUTH_SECRET_KEY'])
         }
       });
     });

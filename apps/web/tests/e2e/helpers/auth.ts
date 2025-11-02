@@ -3,15 +3,15 @@ import { Page } from '@playwright/test';
 /**
  * Helper function to authenticate a user for testing
  * This is a placeholder - in production, you would:
- * 1. Use Clerk's test mode or development keys
+ * 1. Use NextAuth's test mode or development keys
  * 2. Create test users programmatically
  * 3. Store authentication state for reuse
  */
 export async function authenticateUser(page: Page, email?: string, password?: string) {
-  // For testing with Clerk, you might use:
+  // For testing with NextAuth, you might use:
   // - Development instance with test users
   // - Mock authentication tokens
-  // - Clerk's testing utilities
+  // - NextAuth's testing utilities
   
   const testEmail = email || process.env.TEST_USER_EMAIL || 'test@example.com';
   const testPassword = password || process.env.TEST_USER_PASSWORD || 'TestPassword123!';
@@ -19,13 +19,13 @@ export async function authenticateUser(page: Page, email?: string, password?: st
   // Navigate to sign in page
   await page.goto('/sign-in');
   
-  // Wait for Clerk to load
-  await page.waitForSelector('[data-clerk-sign-in-form]', { 
+  // Wait for NextAuth to load
+  await page.waitForSelector('[data-nextauth-sign-in-form]', { 
     timeout: 10000,
     state: 'visible' 
   });
   
-  // Fill in credentials (adjust selectors based on actual Clerk UI)
+  // Fill in credentials (adjust selectors based on actual NextAuth UI)
   await page.fill('input[name="identifier"]', testEmail);
   await page.fill('input[name="password"]', testPassword);
   
@@ -50,8 +50,8 @@ export async function saveAuthState(page: Page, path: string) {
 export async function createMockAuthContext(page: Page) {
   // Add mock authentication tokens to localStorage
   await page.addInitScript(() => {
-    // Mock Clerk session
-    window.localStorage.setItem('__clerk_db_jwt', JSON.stringify({
+    // Mock NextAuth session
+    window.localStorage.setItem('__nextauth_db_jwt', JSON.stringify({
       exp: Date.now() + 3600000, // 1 hour from now
       iat: Date.now(),
       sess: 'mock_session_id',
@@ -59,7 +59,7 @@ export async function createMockAuthContext(page: Page) {
     }));
     
     // Mock user data
-    window.localStorage.setItem('__clerk_user', JSON.stringify({
+    window.localStorage.setItem('__nextauth_user', JSON.stringify({
       id: 'user_test_123',
       email: 'test@example.com',
       firstName: 'Test',

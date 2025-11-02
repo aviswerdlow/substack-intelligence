@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { createMockNextRequest } from '../mocks/nextjs/server';
-import { clerkMocks } from '../mocks/auth/clerk';
+import { nextauthMocks } from '../mocks/auth/nextauth';
 
 // Mock the settings API route
 vi.mock('../../apps/web/app/api/settings/route', () => ({
@@ -29,7 +29,7 @@ describe('Settings API Edge Cases', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    clerkMocks.mockSignedInUser({ id: 'test-user-id' });
+    nextauthMocks.mockSignedInUser({ id: 'test-user-id' });
 
     // Import after mocks are set up
     const { UserSettingsService } = await import('../../apps/web/lib/user-settings');
@@ -249,7 +249,7 @@ describe('Settings API Edge Cases', () => {
 
   describe('Authentication Edge Cases', () => {
     it('should handle expired auth tokens', async () => {
-      clerkMocks.currentUser.mockRejectedValue(new Error('Token expired'));
+      nextauthMocks.currentUser.mockRejectedValue(new Error('Token expired'));
 
       const mockRequest = createMockNextRequest('https://test.example.com/api/settings');
       const response = await getSettings(mockRequest);
@@ -258,7 +258,7 @@ describe('Settings API Edge Cases', () => {
     });
 
     it('should handle malformed user objects', async () => {
-      clerkMocks.currentUser.mockResolvedValue({ 
+      nextauthMocks.currentUser.mockResolvedValue({ 
         id: null, // Invalid user ID
         invalidProperty: 'should not crash' 
       });
@@ -270,7 +270,7 @@ describe('Settings API Edge Cases', () => {
     });
 
     it('should handle authentication service downtime', async () => {
-      clerkMocks.currentUser.mockImplementation(() => {
+      nextauthMocks.currentUser.mockImplementation(() => {
         throw new Error('Service unavailable');
       });
 

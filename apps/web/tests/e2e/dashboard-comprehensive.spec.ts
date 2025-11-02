@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // Use the saved authentication state from successful login
-test.use({ storageState: 'clerk-auth-state.json' });
+test.use({ storageState: 'nextauth-auth-state.json' });
 
 test.describe('Dashboard Main Page', () => {
   test.beforeEach(async ({ page }) => {
@@ -333,8 +333,8 @@ test.describe('Navigation and UI', () => {
   test('should test user menu', async ({ page }) => {
     await page.goto('http://localhost:3000/dashboard');
     
-    // Look for Clerk UserButton
-    const userButton = await page.locator('[data-clerk-user-button]').first();
+    // Look for NextAuth UserButton
+    const userButton = await page.locator('[data-nextauth-user-button]').first();
     if (await userButton.isVisible()) {
       await userButton.click();
       await page.waitForTimeout(1000);
@@ -364,7 +364,7 @@ test.describe('Navigation and UI', () => {
     console.log('- Intelligence page rendering');
     console.log('- Navigation between pages');
     console.log('- UI components (buttons, cards, inputs)');
-    console.log('- User menu (Clerk integration)');
+    console.log('- User menu (NextAuth integration)');
     
     console.log('\n⚠️ NEEDS CONFIGURATION:');
     console.log('- API endpoints (need backend services)');

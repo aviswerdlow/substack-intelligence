@@ -34,12 +34,12 @@ test.describe('Authentication with Stealth Mode', () => {
       await humanWait(stealthPage, 1000, 2000);
       
       // Wait for modal to appear
-      await stealthPage.waitForSelector('[data-clerk-portal]', { 
+      await stealthPage.waitForSelector('[data-nextauth-portal]', { 
         timeout: 10000,
         state: 'visible' 
       }).catch(() => {
-        // If Clerk portal doesn't appear, try the iframe approach
-        console.log('Clerk portal not found, checking for iframe...');
+        // If NextAuth portal doesn't appear, try the iframe approach
+        console.log('NextAuth portal not found, checking for iframe...');
       });
       
       // Check if Google OAuth button is available
@@ -61,9 +61,9 @@ test.describe('Authentication with Stealth Mode', () => {
     expect(pageContent).not.toContain('DDoS protection by Cloudflare');
     expect(pageContent).not.toContain('Please stand by, while we are checking your browser');
     
-    // Check for Clerk sign-in modal or page
+    // Check for NextAuth sign-in modal or page
     const hasSignInContent = 
-      (await page.$('[data-clerk-portal]')) !== null ||
+      (await page.$('[data-nextauth-portal]')) !== null ||
       (await page.$('text=/Sign in/i')) !== null ||
       (await page.$('text=/Continue with Google/i')) !== null;
     
@@ -118,7 +118,7 @@ test.describe('Manual Authentication Testing', () => {
     await humanClick(page, 'button:has-text("Sign In")');
     await humanWait(page, 2000, 3000);
     
-    // If using email/password (when Clerk is configured for it):
+    // If using email/password (when NextAuth is configured for it):
     // await humanType(page, 'input[name="identifier"]', 'test@example.com');
     // await humanType(page, 'input[name="password"]', 'TestPassword123!');
     // await humanClick(page, 'button[type="submit"]');
@@ -127,7 +127,7 @@ test.describe('Manual Authentication Testing', () => {
     // await page.waitForURL('**/dashboard', { timeout: 30000 });
     
     // Verify we're logged in
-    // const userButton = await page.$('[data-clerk-user-button]');
+    // const userButton = await page.$('[data-nextauth-user-button]');
     // expect(userButton).toBeTruthy();
   });
 });

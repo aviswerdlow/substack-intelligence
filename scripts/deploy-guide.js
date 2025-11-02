@@ -31,8 +31,8 @@ async function deploymentGuide() {
   console.log('   - ANTHROPIC_API_KEY');
   console.log('   - NEXT_PUBLIC_SUPABASE_URL');
   console.log('   - SUPABASE_SERVICE_ROLE_KEY');
-  console.log('   - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY');
-  console.log('   - CLERK_SECRET_KEY');
+  console.log('   - NEXT_PUBLIC_NEXTAUTH_PUBLISHABLE_KEY');
+  console.log('   - NEXTAUTH_SECRET_KEY');
 
   // Step 3: Create post-deployment test
   console.log('\n4️⃣  Test deployment with Puppeteer:');
@@ -45,7 +45,7 @@ async function deploymentGuide() {
   console.log('\n🎉 What Your MVP Will Do:');
   console.log('   🤖 Extract companies from newsletter content using Claude AI');
   console.log('   📊 Store and analyze company mentions in Supabase');
-  console.log('   🔐 Secure authentication with Clerk');
+  console.log('   🔐 Secure authentication with NextAuth');
   console.log('   📈 Track venture-relevant startups and funding activity');
   console.log('   🎯 Focus on consumer brands for VC deal sourcing');
   

@@ -87,7 +87,7 @@ test.describe('Homepage Performance', () => {
     
     // Filter out expected errors (e.g., third-party scripts)
     const unexpectedErrors = consoleErrors.filter(error => 
-      !error.includes('clerk') && // Clerk auth might have warnings in dev
+      !error.includes('nextauth') && // NextAuth auth might have warnings in dev
       !error.includes('Failed to load resource') // External resources
     );
     

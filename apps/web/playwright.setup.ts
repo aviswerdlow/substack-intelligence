@@ -44,7 +44,7 @@ async function globalSetup(config: FullConfig) {
     console.log('📍 Navigating to sign-in page...');
     await page.goto(`${baseURL || 'http://localhost:3000'}/sign-in`);
     
-    // Wait for Clerk to load
+    // Wait for NextAuth UI to load
     await page.waitForTimeout(3000);
     
     // Try to authenticate with test credentials
@@ -53,7 +53,7 @@ async function globalSetup(config: FullConfig) {
     
     console.log(`📧 Attempting to sign in with: ${email}`);
     
-    // Look for Clerk sign-in form
+    // Look for NextAuth sign-in form
     const emailInput = await page.locator('input[name="identifier"], input[type="email"], input[placeholder*="email" i]').first();
     const passwordInput = await page.locator('input[name="password"], input[type="password"]').first();
     
@@ -75,45 +75,8 @@ async function globalSetup(config: FullConfig) {
       await context.storageState({ path: authFile });
       console.log('💾 Authentication state saved');
     } else {
-      console.log('⚠️ Could not find sign-in form - using mock authentication');
-      
-      // Fallback: Create mock authentication
-      await page.evaluate(() => {
-        // Mock Clerk session
-        const mockSession = {
-          id: 'sess_test_123',
-          status: 'active',
-          expireAt: new Date(Date.now() + 86400000).toISOString(), // 24 hours
-          abandonAt: new Date(Date.now() + 86400000).toISOString(),
-          lastActiveAt: new Date().toISOString(),
-          user: {
-            id: 'user_test_123',
-            primaryEmailAddress: {
-              emailAddress: 'test@substackintel.com'
-            },
-            firstName: 'Test',
-            lastName: 'User',
-            fullName: 'Test User',
-            username: 'testuser',
-            profileImageUrl: null,
-            hasImage: false
-          }
-        };
-        
-        // Store in localStorage
-        localStorage.setItem('__clerk_db_jwt', JSON.stringify({
-          exp: Math.floor(Date.now() / 1000) + 3600,
-          iat: Math.floor(Date.now() / 1000),
-          sess: 'sess_test_123',
-          sub: 'user_test_123'
-        }));
-        
-        localStorage.setItem('__clerk_session', JSON.stringify(mockSession));
-      });
-      
-      // Save state
-      await context.storageState({ path: authFile });
-      console.log('💾 Mock authentication state saved');
+      console.log('⚠️ Could not find sign-in form - manual NextAuth setup required');
+      throw new Error('NextAuth sign-in form not available for automated authentication');
     }
     
   } catch (error) {
