@@ -11,6 +11,31 @@ AI-powered venture intelligence platform for consumer VC deal sourcing. Automati
 - **Vector Search**: Semantic similarity matching for company discovery
 - **Workflow Orchestration**: Reliable daily processing with Inngest
 
+## ⚡ Quick Start
+
+1. Clone the repository and install dependencies:
+   ```bash
+   git clone <repository-url>
+   cd substack-intelligence
+   pnpm install
+   ```
+2. Create your environment file:
+   ```bash
+   cp .env.example .env.local
+   ```
+3. Start Supabase locally and run migrations:
+   ```bash
+   supabase start
+   supabase db push
+   pnpm db:generate
+   ```
+4. Launch the development server:
+   ```bash
+   pnpm dev
+   ```
+
+Need more detail? Explore the full documentation suite in [`docs/`](docs/README.md).
+
 ## 🏗️ Architecture
 
 Built with modern, edge-native architecture:
