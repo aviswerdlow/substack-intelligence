@@ -157,7 +157,6 @@ apps/web/app/api/
 | `/auth/gmail/test` | GET | Test Gmail connection | JSON |
 | `/auth/gmail/mock` | GET | Mock OAuth (dev only) | JSON |
 | `/auth/gmail/debug` | GET | OAuth debug info (dev only) | JSON |
-| `/auth/gmail/clerk-status` | GET | Clerk + Gmail status | JSON |
 
 ### Token Management
 

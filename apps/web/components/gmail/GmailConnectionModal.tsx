@@ -41,77 +41,50 @@ export function GmailConnectionModal({
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [authWindow, setAuthWindow] = useState<Window | null>(null);
-  const [hasGoogleOAuth, setHasGoogleOAuth] = useState(false);
-  
-  // Check Google OAuth status when modal opens
+  const [gmailStatus, setGmailStatus] = useState<{ connected: boolean; email: string | null }>({
+    connected: false,
+    email: null
+  });
+
+  const refreshStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/gmail/status');
+      if (!response.ok) {
+        throw new Error('Failed to fetch Gmail status');
+      }
+
+      const data = await response.json();
+      setGmailStatus({
+        connected: Boolean(data.connected),
+        email: data.email ?? null
+      });
+      return data;
+    } catch (error) {
+      console.error('Failed to refresh Gmail status:', error);
+      setGmailStatus({ connected: false, email: null });
+      return null;
+    }
+  }, []);
+
+  // Check Gmail status when modal opens
   useEffect(() => {
     if (isOpen) {
-      fetch('/api/auth/gmail/clerk-status')
-        .then(res => res.json())
-        .then(data => setHasGoogleOAuth(data.hasGoogleOAuth || false))
-        .catch(() => setHasGoogleOAuth(false));
+      refreshStatus();
     }
-  }, [isOpen]);
+  }, [isOpen, refreshStatus]);
 
   const handleGmailConnect = useCallback(async () => {
     setIsConnecting(true);
     setConnectionError(null);
 
     try {
-      // Check if user has Google OAuth through Clerk
-      const clerkResponse = await fetch('/api/auth/gmail/clerk-status');
-      const clerkData = await clerkResponse.json();
-
-      if (!clerkResponse.ok) {
-        throw new Error(clerkData.error || 'Failed to check Gmail connection');
-      }
-
-      if (clerkData.hasGoogleOAuth) {
-        // User already has Google OAuth through Clerk
-        toast({
-          title: 'Gmail Connected!',
-          description: `Connected as ${clerkData.googleEmail}`,
-        });
-        
-        // Mark as connected in the database
-        await fetch('/api/auth/gmail/mark-connected', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: clerkData.googleEmail })
-        });
-        
-        setIsConnecting(false);
-        onConnectionSuccess?.();
-        onOpenChange(false);
-        return;
-      } else {
-        // User needs to sign in with Google
-        setConnectionError('To connect Gmail, please sign out and sign back in using the "Sign in with Google" button.');
-        toast({
-          title: 'Google Sign-in Required',
-          description: 'You need to use Google sign-in to connect Gmail. Please sign out and sign back in with Google.',
-          variant: 'destructive',
-        });
-        setIsConnecting(false);
-        
-        // Don't proceed to legacy OAuth - just return
-        return;
-      }
-
-      // Legacy OAuth flow - this code should not be reached anymore
-      // Keeping it for backward compatibility only
-      console.warn('Legacy OAuth flow attempted - this should not happen');
       const response = await fetch('/api/auth/gmail');
-      const data = await response.json();
-
       if (!response.ok) {
-        if (data.error === 'Configuration Error') {
-          setConnectionError(`Missing configuration: ${data.details?.join(', ') || 'Unknown'}`);
-          return;
-        }
-        throw new Error(data.message || data.error || 'Failed to initiate Gmail authentication');
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || data.message || 'Failed to initiate Gmail authentication');
       }
 
+      const data = await response.json();
       if (data.authUrl) {
         // Open OAuth flow in popup window
         const width = 600;
@@ -137,49 +110,47 @@ export function GmailConnectionModal({
 
         setAuthWindow(popup);
 
+        const verifyConnection = async () => {
+          try {
+            const status = await refreshStatus();
+
+            if (status?.connected) {
+              toast({
+                title: 'Gmail Connected!',
+                description: status.email ? `Connected as ${status.email}` : undefined,
+              });
+
+              setIsConnecting(false);
+              onConnectionSuccess?.();
+              onOpenChange(false);
+            } else {
+              setConnectionError('Gmail connection was not completed. Please try again.');
+              setIsConnecting(false);
+            }
+          } catch (error) {
+            console.error('Failed to verify Gmail connection:', error);
+            setConnectionError('Failed to verify Gmail connection. Please try again.');
+            setIsConnecting(false);
+          }
+          setAuthWindow(null);
+        };
+
         // Check for completion
         const checkInterval = setInterval(() => {
           try {
-            if (popup.closed) {
+            if (!popup || popup.closed) {
               clearInterval(checkInterval);
+              clearTimeout(timeoutId);
               setAuthWindow(null);
-              
-              // Check localStorage for success/error markers
-              const connectedEmail = localStorage.getItem('gmail_connected_email');
-              const connectionError = localStorage.getItem('gmail_connection_error');
-              
-              if (connectedEmail) {
-                // Success!
-                localStorage.removeItem('gmail_connected_email');
-                localStorage.removeItem('gmail_connection_time');
-                
-                toast({
-                  title: 'Gmail Connected Successfully!',
-                  description: `Connected account: ${connectedEmail}`,
-                });
-                
-                setIsConnecting(false);
-                onConnectionSuccess?.();
-                onOpenChange(false);
-              } else if (connectionError) {
-                // Error occurred
-                setConnectionError(connectionError);
-                localStorage.removeItem('gmail_connection_error');
-                localStorage.removeItem('gmail_connection_error_time');
-                setIsConnecting(false);
-              } else {
-                // Window closed without completion
-                setConnectionError('Connection incomplete - please try again');
-                setIsConnecting(false);
-              }
+              verifyConnection();
             }
-          } catch (e) {
-            // Cross-origin errors are expected, continue checking
+          } catch {
+            // Ignore cross-origin access errors while popup is open
           }
         }, 1000);
 
         // Timeout after 5 minutes
-        setTimeout(() => {
+        const timeoutId = window.setTimeout(() => {
           clearInterval(checkInterval);
           if (popup && !popup.closed) {
             popup.close();
@@ -194,7 +165,7 @@ export function GmailConnectionModal({
       setConnectionError(error instanceof Error ? error.message : 'Unknown error occurred');
       setIsConnecting(false);
     }
-  }, [toast, onConnectionSuccess, onOpenChange]);
+  }, [toast, onConnectionSuccess, onOpenChange, refreshStatus]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -211,12 +182,12 @@ export function GmailConnectionModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5" />
-            Connect Your Gmail Account
+            {gmailStatus.connected ? 'Reconnect Gmail Account' : 'Connect Your Gmail Account'}
           </DialogTitle>
           <DialogDescription>
-            {hasGoogleOAuth 
-              ? "Your Gmail is already connected through Google sign-in! Click the button below to activate it."
-              : "To connect Gmail, you need to sign in with Google. Please sign out and use the 'Sign in with Google' button when signing back in."
+            {gmailStatus.connected
+              ? `Your Gmail account${gmailStatus.email ? ` (${gmailStatus.email})` : ''} is connected. Reconnect if you'd like to refresh permissions.`
+              : 'Connect Gmail to automatically analyze your newsletter emails using our secure OAuth flow.'
             }
           </DialogDescription>
         </DialogHeader>
@@ -270,18 +241,6 @@ export function GmailConnectionModal({
                   <p className="text-sm text-red-600 dark:text-red-400">
                     {connectionError}
                   </p>
-                  {!hasGoogleOAuth && (
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="mt-2 h-auto p-0 text-xs text-red-600 dark:text-red-400"
-                      onClick={() => {
-                        window.location.href = '/sign-out';
-                      }}
-                    >
-                      Click here to sign out →
-                    </Button>
-                  )}
                 </div>
               </div>
             </div>
@@ -313,16 +272,11 @@ export function GmailConnectionModal({
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Connecting...
               </>
-            ) : hasGoogleOAuth ? (
-              <>
-                <Mail className="h-4 w-4" />
-                Activate Gmail
-                <ArrowRight className="h-3 w-3" />
-              </>
             ) : (
               <>
                 <Mail className="h-4 w-4" />
-                Sign in with Google First
+                {gmailStatus.connected ? 'Reconnect Gmail' : 'Connect Gmail'}
+                <ArrowRight className="h-3 w-3" />
               </>
             )}
           </Button>

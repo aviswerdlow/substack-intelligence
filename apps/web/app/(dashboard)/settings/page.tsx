@@ -207,24 +207,84 @@ function SettingsPageContent() {
   const handleEmailConnect = async () => {
     setConnectingEmail(true);
     try {
-      if (!settings?.email?.connected) {
-        // First check if user has Google OAuth through Clerk
-        const clerkResponse = await fetch('/api/auth/gmail/clerk-status');
-        const clerkData = await clerkResponse.json();
+      if (settings?.email?.connected) {
+        try {
+          const response = await fetch('/api/auth/gmail', { method: 'DELETE' });
+          const data = await response.json();
 
-        if (!clerkResponse.ok) {
-          throw new Error(clerkData.error || 'Failed to check Gmail connection');
-        }
+          if (response.ok && data.success) {
+            safeUpdateSettings((prev: any) => ({
+              ...prev,
+              email: {
+                ...(prev?.email || {}),
+                connected: false,
+                lastSync: null
+              },
+              account: {
+                ...(prev?.account || {}),
+                email: ''
+              }
+            }));
 
-        if (clerkData.hasGoogleOAuth) {
-          // User already has Google OAuth through Clerk - just mark as connected
-          const markResponse = await fetch('/api/auth/gmail/mark-connected', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: clerkData.googleEmail })
+            toast.success('Gmail Disconnected', {
+              description: 'Your Gmail account has been disconnected.'
+            });
+          } else {
+            throw new Error(data.message || data.error || 'Failed to disconnect Gmail account');
+          }
+        } catch (disconnectError) {
+          console.error('Failed to disconnect Gmail:', disconnectError);
+          toast.error('Failed to disconnect Gmail', {
+            description: disconnectError instanceof Error ? disconnectError.message : 'Unknown error occurred'
           });
+        } finally {
+          setConnectingEmail(false);
+        }
+        return;
+      }
 
-          if (markResponse.ok) {
+      const response = await fetch('/api/auth/gmail');
+      const data = await response.json();
+
+      if (!response.ok) {
+        handleConnectionError(data.error || data.message || 'oauth_initiation_failed');
+        setConnectingEmail(false);
+        return;
+      }
+
+      if (!data.authUrl) {
+        throw new Error('Missing Gmail authorization URL');
+      }
+
+      const width = 600;
+      const height = 700;
+      const left = (window.screen.width / 2) - (width / 2);
+      const top = (window.screen.height / 2) - (height / 2);
+
+      const popup = window.open(
+        data.authUrl,
+        'gmail-auth',
+        `width=${width},height=${height},left=${left},top=${top},status=yes,scrollbars=yes,resizable=yes`
+      );
+
+      if (!popup) {
+        toast.error('Popup Blocked', {
+          description: 'Please allow popups for this site to connect Gmail.'
+        });
+        setConnectingEmail(false);
+        return;
+      }
+
+      const verifyConnection = async () => {
+        try {
+          const statusResponse = await fetch('/api/auth/gmail/status');
+          if (!statusResponse.ok) {
+            throw new Error('Failed to verify Gmail connection');
+          }
+
+          const statusData = await statusResponse.json();
+
+          if (statusData.connected) {
             safeUpdateSettings((prev: any) => ({
               ...prev,
               email: {
@@ -234,233 +294,65 @@ function SettingsPageContent() {
               },
               account: {
                 ...(prev?.account || {}),
-                email: clerkData.googleEmail
+                email: statusData.email || prev?.account?.email || null
               }
             }));
-            
-            toast.success('Gmail Connected!', {
-              description: `Connected as ${clerkData.googleEmail}`,
-            });
-            setConnectingEmail(false);
-            telemetry.trackUserInteraction('email_connected_clerk', { email: clerkData.googleEmail });
-            return;
-          }
-        } else {
-          // User needs to sign in with Google
-          toast.error('Google Sign-in Required', {
-            description: 'To connect Gmail, please sign out and sign back in using the "Sign in with Google" button.',
-            duration: 10000,
-            action: {
-              label: 'Sign Out',
-              onClick: () => {
-                window.location.href = '/sign-out';
-              }
-            }
-          });
-          setConnectingEmail(false);
-          return;
-        }
 
-        // Fallback to legacy OAuth flow (shouldn't reach here normally)
-        console.warn('Falling back to legacy OAuth flow');
-        const response = await fetch('/api/auth/gmail');
-        const data = await response.json();
-        
-        if (!response.ok) {
-          // Handle configuration errors
-          if (data.error === 'Configuration Error') {
-            toast.error('Gmail Configuration Error', {
-              description: `Missing environment variables: ${data.details.join(', ')}`,
-              duration: 15000,
-              action: {
-                label: 'Show Setup Guide',
-                onClick: () => {
-                  toast.info('Setup Instructions', {
-                    description: data.instructions.join(' • '),
-                    duration: 20000,
-                  });
-                }
-              }
+            setConnectionError(null);
+            setRetryCount(0);
+
+            toast.success('Gmail Connected!', {
+              description: statusData.email
+                ? `Connected as ${statusData.email}`
+                : 'Gmail account connected successfully.'
             });
-            setConnectingEmail(false);
-            return;
-          }
-          
-          throw new Error(data.message || data.error || 'Failed to initiate Gmail authentication');
-        }
-        
-        if (data.authUrl) {
-          // Open OAuth flow in new window
-          const authWindow = window.open(
-            data.authUrl, 
-            'gmail-auth', 
-            'width=600,height=700,scrollbars=yes,resizable=yes,left=' + 
-            ((screen.width / 2) - 300) + ',top=' + ((screen.height / 2) - 350)
-          );
-          
-          if (!authWindow) {
-            toast.error('Popup Blocked', {
-              description: 'Please allow popups for this site to connect Gmail.',
-              duration: 10000,
-              action: {
-                label: 'Try Again',
-                onClick: () => handleEmailConnect()
-              }
+
+            telemetry.trackUserInteraction('email_connected_oauth', {
+              email: statusData.email
             });
-            setConnectingEmail(false);
-            return;
+          } else {
+            setConnectionError('connection_incomplete');
+            toast.error('Connection Incomplete', {
+              description: 'Gmail connection was not completed. Please try again.'
+            });
           }
-          
-          let checkCount = 0;
-          const maxChecks = 300; // 5 minutes timeout
-          
-          // Check for window close and connection status
-          const checkInterval = setInterval(() => {
-            checkCount++;
-            
-            if (authWindow.closed) {
-              clearInterval(checkInterval);
-              
-              // Check if connection was successful
-              const connectedEmail = localStorage.getItem('gmail_connected_email');
-              const connectionError = localStorage.getItem('gmail_connection_error');
-              
-              if (connectedEmail) {
-                safeUpdateSettings((prev: any) => ({
-                  ...prev,
-                  email: {
-                    ...(prev?.email || {}),
-                    connected: true,
-                    lastSync: new Date().toISOString()
-                  },
-                  account: {
-                    ...(prev?.account || {}),
-                    email: connectedEmail
-                  }
-                }));
-                localStorage.removeItem('gmail_connected_email');
-                localStorage.removeItem('gmail_connection_time');
-                setConnectionError(null);
-                setRetryCount(0);
-                toast.success(`Gmail connected successfully!`, {
-                  description: `Connected account: ${connectedEmail}`,
-                  duration: 5000,
-                });
-              } else if (connectionError) {
-                handleConnectionError(connectionError);
-                localStorage.removeItem('gmail_connection_error');
-                localStorage.removeItem('gmail_connection_error_time');
-              } else {
-                // Window closed without clear success or error
-                setConnectionError('Connection incomplete - window was closed');
-                toast.error('Gmail connection incomplete', {
-                  description: 'The authentication window was closed. Please try again and complete the full Google authorization process.',
-                  duration: 8000,
-                  action: {
-                    label: 'Retry',
-                    onClick: () => handleEmailConnect()
-                  }
-                });
-              }
-              setConnectingEmail(false);
-            } else if (checkCount >= maxChecks) {
-              // Timeout - close window and show message
-              clearInterval(checkInterval);
-              authWindow.close();
-              setConnectionError('Connection timeout');
-              toast.error('Connection timeout', {
-                description: 'The Gmail connection process took too long. Please try again and complete the authorization quickly.',
-                duration: 8000,
-                action: {
-                  label: 'Retry',
-                  onClick: () => handleEmailConnect()
-                }
-              });
-              setConnectingEmail(false);
-            }
-          }, 1000);
-        } else {
-          throw new Error('No authentication URL received from server');
+        } catch (error) {
+          console.error('Failed to verify Gmail connection:', error);
+          toast.error('Verification Failed', {
+            description: 'Unable to verify Gmail connection. Please try again.'
+          });
+        } finally {
+          setConnectingEmail(false);
         }
-      } else {
-        // Disconnect Gmail
-        const response = await fetch('/api/auth/gmail', { method: 'DELETE' });
-        const data = await response.json();
-        
-        if (response.ok && data.success) {
-          safeUpdateSettings((prev: any) => ({
-            ...prev,
-            email: {
-              ...(prev?.email || {}),
-              connected: false,
-              lastSync: null
-            },
-            account: {
-              ...(prev?.account || {}),
-              email: ''
-            }
-          }));
-          alert('✅ Gmail account disconnected successfully');
-        } else {
-          throw new Error(data.message || 'Failed to disconnect Gmail account');
+      };
+
+      const checkInterval = setInterval(() => {
+        try {
+          if (!popup || popup.closed) {
+            clearInterval(checkInterval);
+            clearTimeout(timeoutId);
+            verifyConnection();
+          }
+        } catch (error) {
+          console.error('Error monitoring Gmail connection popup:', error);
+        }
+      }, 1000);
+
+      const timeoutId = window.setTimeout(() => {
+        clearInterval(checkInterval);
+        if (popup && !popup.closed) {
+          popup.close();
         }
         setConnectingEmail(false);
-      }
+        toast.error('Connection Timeout', {
+          description: 'Gmail connection timed out. Please try again.'
+        });
+      }, 5 * 60 * 1000);
     } catch (error) {
-      console.error('Gmail connection error:', error);
-      
-      // Show user-friendly error message
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      
-      // In development, offer to use mock connection for OAuth failures
-      if (process.env.NODE_ENV === 'development' && errorMessage.includes('OAuth')) {
-        const useMock = confirm(
-          `🔧 Development Mode - OAuth Error\n\n` +
-          `Error: ${errorMessage}\n\n` +
-          `Would you like to use a mock Gmail connection for testing?\n\n` +
-          `Note: For real OAuth, you need:\n` +
-          `• Google Cloud Console setup\n` +
-          `• Proper redirect URIs configured\n` +
-          `• Environment variables set`
-        );
-        
-        if (useMock) {
-          try {
-            const mockResponse = await fetch('/api/auth/gmail/mock', { method: 'POST' });
-            const mockData = await mockResponse.json();
-            
-            if (mockData.success) {
-              setSettings((prev: any) => ({
-                ...prev,
-                email: {
-                  ...(prev.email || {}),
-                  connected: true,
-                  lastSync: new Date().toISOString()
-                },
-                account: {
-                  ...(prev.account || {}),
-                  email: mockData.email
-                }
-              }));
-              alert(`🧪 Mock Gmail connection created for: ${mockData.email}`);
-            } else {
-              alert('Failed to create mock connection.');
-            }
-          } catch (mockError) {
-            console.error('Mock connection failed:', mockError);
-            alert('Failed to create mock connection.');
-          }
-        }
-      } else {
-        alert(
-          `❌ Gmail Connection Failed\n\n` +
-          `Error: ${errorMessage}\n\n` +
-          `Please try again. If the problem persists, check:\n` +
-          `• Your internet connection\n` +
-          `• That popups are allowed\n` +
-          `• Gmail API is enabled in Google Cloud Console`
-        );
-      }
+      console.error('Error connecting Gmail:', error);
+      toast.error('Failed to connect Gmail', {
+        description: error instanceof Error ? error.message : 'Unknown error occurred'
+      });
       setConnectingEmail(false);
     }
   };

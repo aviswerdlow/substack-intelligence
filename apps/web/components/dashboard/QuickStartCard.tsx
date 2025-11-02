@@ -27,20 +27,10 @@ export function QuickStartCard({ gmailConnected, onGmailConnect }: QuickStartCar
   const { syncPipeline, pipelineStatus, isSyncing } = useIntelligence();
   const [showGmailModal, setShowGmailModal] = useState(false);
   const [hasRunPipeline, setHasRunPipeline] = useState(false);
-  const [hasGoogleOAuth, setHasGoogleOAuth] = useState(false);
-
   useEffect(() => {
     // Check if user has run pipeline before
     const lastSync = localStorage.getItem('lastPipelineSync');
     setHasRunPipeline(!!lastSync);
-    
-    // Check if user signed in with Google
-    fetch('/api/auth/gmail/clerk-status')
-      .then(res => res.json())
-      .then(data => {
-        setHasGoogleOAuth(data.hasGoogleOAuth || false);
-      })
-      .catch(() => setHasGoogleOAuth(false));
   }, [pipelineStatus]);
 
   const handleRunPipeline = async () => {
@@ -75,16 +65,11 @@ export function QuickStartCard({ gmailConnected, onGmailConnect }: QuickStartCar
   };
 
   // Calculate progress - simplified for Google OAuth users
-  const steps = hasGoogleOAuth 
-    ? [
-        { id: 'signin', label: 'Sign In with Google', completed: true },
-        { id: 'pipeline', label: 'Run Your First Pipeline', completed: hasRunPipeline }
-      ]
-    : [
-        { id: 'signin', label: 'Sign In', completed: true },
-        { id: 'gmail', label: 'Connect Gmail', completed: gmailConnected },
-        { id: 'pipeline', label: 'Run Pipeline', completed: hasRunPipeline }
-      ];
+  const steps = [
+    { id: 'signin', label: 'Sign In', completed: true },
+    { id: 'gmail', label: 'Connect Gmail', completed: gmailConnected },
+    { id: 'pipeline', label: 'Run Pipeline', completed: hasRunPipeline }
+  ];
   const completedSteps = steps.filter(s => s.completed).length;
   const progress = (completedSteps / steps.length) * 100;
 
@@ -197,23 +182,23 @@ export function QuickStartCard({ gmailConnected, onGmailConnect }: QuickStartCar
           </div>
 
           {/* Helper text */}
-          {hasGoogleOAuth && !hasRunPipeline && (
+          {gmailConnected && !hasRunPipeline && (
             <div className="rounded-lg bg-green-50 p-3 dark:bg-green-950/20">
               <div className="flex gap-2">
                 <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-600 dark:text-green-400" />
                 <p className="text-xs text-green-700 dark:text-green-300">
-                  <strong>Gmail Connected!</strong> You're all set to start analyzing your newsletters. 
+                  <strong>Gmail Connected!</strong> You're all set to start analyzing your newsletters.
                   We only read Substack emails - your personal messages remain private.
                 </p>
               </div>
             </div>
           )}
-          {!gmailConnected && !hasGoogleOAuth && (
+          {!gmailConnected && (
             <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20">
               <div className="flex gap-2">
                 <AlertCircle className="h-4 w-4 flex-shrink-0 text-blue-600 dark:text-blue-400" />
                 <p className="text-xs text-blue-700 dark:text-blue-300">
-                  <strong>Why Gmail?</strong> We analyze your newsletter subscriptions to extract 
+                  <strong>Why Gmail?</strong> We analyze your newsletter subscriptions to extract
                   valuable intelligence about companies and trends. Only Substack emails are processed.
                 </p>
               </div>
