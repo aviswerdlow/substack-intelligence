@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createServerComponentClient, listPostRevisions, getPostById } from '@substack-intelligence/database';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -10,10 +10,11 @@ export async function GET(
   { params }: { params: { postId: string } }
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = session.user.id;
 
     const supabase = createServerComponentClient();
     const post = await getPostById(supabase, userId, params.postId);

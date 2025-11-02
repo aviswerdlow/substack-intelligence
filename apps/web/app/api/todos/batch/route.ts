@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { 
-  createServerComponentClient, 
-  updateTodo, 
+import {
+  createServerComponentClient,
+  updateTodo,
   deleteTodo,
   getTodoById
 } from '@substack-intelligence/database';
 import { withRateLimit } from '@/lib/security/rate-limiting';
 import { z } from 'zod';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -34,8 +34,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Check authentication
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     for (const todoId of todoIds) {
       try {
         // First verify the todo exists and belongs to the user
-        const existingTodo = await getTodoById(supabase, userId, todoId);
+        const existingTodo = await getTodoById(supabase, session.user.id, todoId);
         if (!existingTodo) {
           results.failed.push({ id: todoId, error: 'Todo not found' });
           continue;
@@ -72,20 +72,20 @@ export async function POST(request: NextRequest) {
 
         switch (operation) {
           case 'complete':
-            await updateTodo(supabase, userId, todoId, { completed: true });
+            await updateTodo(supabase, session.user.id, todoId, { completed: true });
             break;
-            
+
           case 'uncomplete':
-            await updateTodo(supabase, userId, todoId, { completed: false });
+            await updateTodo(supabase, session.user.id, todoId, { completed: false });
             break;
-            
+
           case 'delete':
-            await deleteTodo(supabase, userId, todoId);
+            await deleteTodo(supabase, session.user.id, todoId);
             break;
-            
+
           case 'update':
             if (updateData) {
-              await updateTodo(supabase, userId, todoId, updateData);
+              await updateTodo(supabase, session.user.id, todoId, updateData);
             }
             break;
         }

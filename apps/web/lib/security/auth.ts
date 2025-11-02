@@ -7,9 +7,9 @@ import {
   UserRole,
   fetchUserAccessProfile,
   getServerSecuritySession
-} from './session';
+} from '@substack-intelligence/lib/security/session';
 
-export { Permission, ROLE_PERMISSIONS, UserRole } from './session';
+export { Permission, ROLE_PERMISSIONS, UserRole } from '@substack-intelligence/lib/security/session';
 
 export interface SecurityContext {
   userId: string;

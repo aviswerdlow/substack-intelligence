@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 import { axiomLogger } from './axiom';
-import { getServerSecuritySession } from '../security/session';
 
 // API request logging middleware
 export function withApiLogging(

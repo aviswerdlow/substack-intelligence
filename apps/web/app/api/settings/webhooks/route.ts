@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { UserSettingsService } from '@/lib/user-settings';
 import { z } from 'zod';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 const CreateWebhookSchema = z.object({
   url: z.string().url('Invalid URL format'),
@@ -19,8 +19,8 @@ const ToggleWebhookSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const { url, events } = CreateWebhookSchema.parse(body);
 
     const settingsService = new UserSettingsService();
-    const webhookId = await settingsService.createWebhook(userId, url, events);
+    const webhookId = await settingsService.createWebhook(session.user.id, url, events);
     
     if (!webhookId) {
       return NextResponse.json({
@@ -71,8 +71,8 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -83,7 +83,7 @@ export async function DELETE(request: NextRequest) {
     const { webhookId } = DeleteWebhookSchema.parse(body);
 
     const settingsService = new UserSettingsService();
-    const success = await settingsService.deleteWebhook(userId, webhookId);
+    const success = await settingsService.deleteWebhook(session.user.id, webhookId);
     
     if (!success) {
       return NextResponse.json({
@@ -116,8 +116,8 @@ export async function DELETE(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -128,7 +128,7 @@ export async function PATCH(request: NextRequest) {
     const { webhookId, enabled } = ToggleWebhookSchema.parse(body);
 
     const settingsService = new UserSettingsService();
-    const success = await settingsService.toggleWebhook(userId, webhookId, enabled);
+    const success = await settingsService.toggleWebhook(session.user.id, webhookId, enabled);
     
     if (!success) {
       return NextResponse.json({

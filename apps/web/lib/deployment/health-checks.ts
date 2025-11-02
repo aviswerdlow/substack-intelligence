@@ -37,7 +37,7 @@ export async function performDeploymentHealthCheck(request?: NextRequest): Promi
   // External service connectivity
   services.push(await checkAnthropicAPI());
   services.push(await checkAxiom());
-  services.push(await checkClerk());
+  services.push(await checkAuthentication());
   
   // Optional services
   if (process.env.UPSTASH_REDIS_REST_URL) {
@@ -229,40 +229,44 @@ async function checkAxiom(): Promise<HealthCheckResult> {
   }
 }
 
-async function checkClerk(): Promise<HealthCheckResult> {
+async function checkAuthentication(): Promise<HealthCheckResult> {
   const startTime = Date.now();
-  
+
   try {
-    if (!process.env.CLERK_SECRET_KEY || !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
-      return {
-        service: 'clerk',
-        status: 'unhealthy',
-        latency: Date.now() - startTime,
-        error: 'Clerk not configured'
-      };
+    const missing: string[] = [];
+
+    if (!process.env.NEXTAUTH_SECRET) {
+      missing.push('NEXTAUTH_SECRET');
     }
 
-    // Validate key formats
-    const secretKeyValid = process.env.CLERK_SECRET_KEY.startsWith('sk_');
-    const publishableKeyValid = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.startsWith('pk_');
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.SUPABASE_SERVICE_KEY) {
+      missing.push('SUPABASE_SERVICE_ROLE_KEY');
+    }
+
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      missing.push('GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET');
+    }
+
+    const status: HealthCheckResult['status'] = missing.length > 0 ? 'degraded' : 'healthy';
 
     return {
-      service: 'clerk',
-      status: secretKeyValid && publishableKeyValid ? 'healthy' : 'degraded',
+      service: 'authentication',
+      status,
       latency: Date.now() - startTime,
       details: {
-        secretKeyValid,
-        publishableKeyValid,
-        environment: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.includes('test') ? 'test' : 'production'
+        hasNextAuthSecret: !!process.env.NEXTAUTH_SECRET,
+        hasSupabaseServiceKey: !!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY),
+        hasGoogleOAuthConfig: !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET,
+        missingConfig: missing
       }
     };
-    
+
   } catch (error) {
     return {
-      service: 'clerk',
+      service: 'authentication',
       status: 'unhealthy',
       latency: Date.now() - startTime,
-      error: error instanceof Error ? error.message : 'Unknown Clerk error'
+      error: error instanceof Error ? error.message : 'Unknown authentication configuration error'
     };
   }
 }

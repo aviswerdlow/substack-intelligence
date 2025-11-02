@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -8,18 +9,17 @@ export const revalidate = 0;
 export async function GET(request: NextRequest) {
   try {
     // Get current user for filtering
-    const { currentUser } = await import('@clerk/nextjs/server');
-    const user = await currentUser();
     const isDevelopment = process.env.NODE_ENV === 'development';
-    
-    if (!user && !isDevelopment) {
+    const session = await getServerSecuritySession();
+
+    if (!session && !isDevelopment) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
       }, { status: 401 });
     }
-    
-    const userId = user?.id || 'development-user';
+
+    const userId = session?.user.id || 'development-user';
     
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');

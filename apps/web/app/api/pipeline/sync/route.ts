@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import type { Database } from '@substack-intelligence/database';
 import { GmailConnector } from '@substack-intelligence/ingestion';
@@ -13,6 +12,7 @@ import {
   mapToMissingUserIdColumnError,
   MissingUserIdColumnError
 } from '@/lib/supabase-errors';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Force Node.js runtime for full compatibility
 export const runtime = 'nodejs';
@@ -38,10 +38,10 @@ let pipelineStatus = {
 // GET endpoint to check pipeline status
 export async function GET(request: NextRequest) {
   try {
-    const user = await currentUser();
     const isDevelopment = process.env.NODE_ENV === 'development';
-    
-    if (!user && !isDevelopment) {
+    const session = await getServerSecuritySession();
+
+    if (!session && !isDevelopment) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -357,10 +357,10 @@ export async function POST(request: NextRequest) {
   try {
     monitor.startStep('authentication', { userAgent: request.headers.get('user-agent') });
     
-    const user = await currentUser();
+    const session = await getServerSecuritySession();
     const isDevelopment = process.env.NODE_ENV === 'development';
-    
-    if (!user && !isDevelopment) {
+
+    if (!session && !isDevelopment) {
       monitor.failStep('authentication', new Error('Unauthorized access attempt'));
       createPipelineAlert('error', 'Authentication Failed', 'Unauthorized pipeline access attempt');
 
@@ -371,8 +371,10 @@ export async function POST(request: NextRequest) {
         error: 'Unauthorized'
       }, { status: 401 });
     }
-    
-    monitor.completeStep('authentication', { userId: user?.id || 'development' });
+
+    const resolvedUserId = session?.user.id || 'dev';
+
+    monitor.completeStep('authentication', { userId: resolvedUserId });
 
     // Validate Gmail OAuth configuration
     monitor.startStep('configuration_validation');
@@ -399,21 +401,9 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
     
-    // Get user's Gmail tokens from database or Clerk
-    userId = user?.id || 'dev';
+    // Get user's Gmail tokens from the database or configured OAuth provider
+    userId = resolvedUserId;
     console.log('[Pipeline Sync] Starting Gmail configuration check for user:', userId);
-    
-    // First check if user has Google OAuth through Clerk directly
-    console.log('[Pipeline Sync] Checking Clerk external accounts:', user?.externalAccounts?.map(a => ({
-      provider: a.provider,
-      email: a.emailAddress
-    })));
-    
-    const hasClerkGoogleOAuth = user?.externalAccounts?.some(
-      account => account.provider === 'google' || account.provider === 'oauth_google'
-    ) || false;
-    
-    console.log('[Pipeline Sync] Has Clerk Google OAuth:', hasClerkGoogleOAuth);
     
     const { UserSettingsService } = await import('@/lib/user-settings');
     const userSettingsService = new UserSettingsService();
@@ -424,64 +414,15 @@ export async function POST(request: NextRequest) {
       has_refresh_token: !!settings?.gmail_refresh_token,
       gmail_email: settings?.gmail_email
     });
-    
-    // Check if user is using Clerk OAuth
-    let useClerkOAuth = false;
-    let gmailTokens = null;
-    
-    // If user has Clerk Google OAuth, use that regardless of database settings
-    if (hasClerkGoogleOAuth) {
-      console.log('[Pipeline Sync] Using Clerk OAuth - user signed in with Google');
-      useClerkOAuth = true;
-      gmailTokens = { useClerkOAuth: true };
-      
-      // Auto-update database to mark Gmail as connected if not already
-      if (!settings?.gmail_connected) {
-        const googleEmail = user?.externalAccounts?.find(
-          account => account.provider === 'google' || account.provider === 'oauth_google'
-        )?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || '';
-        
-        console.log('[Pipeline Sync] Auto-marking Gmail as connected for email:', googleEmail);
-        
-        await userSettingsService.createOrUpdateUserSettings(userId, {
-          gmail_connected: true,
-          gmail_email: googleEmail,
-          gmail_refresh_token: JSON.stringify({
-            useClerkOAuth: true,
-            connectedAt: new Date().toISOString()
-          })
-        });
-      }
-    } else if (settings?.gmail_refresh_token) {
-      console.log('[Pipeline Sync] Checking database refresh token type');
-      // Check if the refresh token is a JSON string indicating Clerk OAuth
-      try {
-        const tokenData = JSON.parse(settings.gmail_refresh_token);
-        useClerkOAuth = tokenData.useClerkOAuth === true;
-        console.log('[Pipeline Sync] Parsed token data:', tokenData);
-        if (useClerkOAuth) {
-          console.log('[Pipeline Sync] Using Clerk OAuth from database settings');
-          gmailTokens = { useClerkOAuth: true };
-        }
-      } catch {
-        // Not JSON, it's a regular refresh token
-        console.log('[Pipeline Sync] Using legacy OAuth - refresh token is not JSON');
-        useClerkOAuth = false;
-        gmailTokens = await userSettingsService.getGmailTokens(userId);
-      }
-    } else {
-      // Legacy custom OAuth flow
-      console.log('[Pipeline Sync] No Gmail configuration found - checking legacy OAuth');
-      gmailTokens = await userSettingsService.getGmailTokens(userId);
-    }
-    
-    console.log('[Pipeline Sync] Final OAuth configuration:', {
-      useClerkOAuth,
+
+    const gmailTokens = await userSettingsService.getGmailTokens(userId);
+
+    console.log('[Pipeline Sync] OAuth token status:', {
       hasGmailTokens: !!gmailTokens,
-      hasClerkGoogleOAuth
+      hasRefreshToken: !!gmailTokens?.refreshToken
     });
-    
-    if (!gmailTokens && !hasClerkGoogleOAuth) {
+
+    if (!gmailTokens?.refreshToken) {
       monitor.setHealthStatus('configuration', false, 'User has not connected Gmail');
       monitor.failStep('configuration_validation', new Error('Gmail not connected'));
 
@@ -496,7 +437,7 @@ export async function POST(request: NextRequest) {
         }
       }, { status: 400 });
     }
-    
+
     monitor.completeStep('configuration_validation', { configurationValid: true, gmailConnected: true });
     monitor.setHealthStatus('configuration', true);
 
@@ -627,9 +568,8 @@ export async function POST(request: NextRequest) {
     let fetchDuration = 0;
     try {
       console.log('[Pipeline Sync] Creating GmailConnector with:', {
-        useClerkOAuth,
         userId,
-        hasRefreshToken: useClerkOAuth ? 'N/A' : !!gmailTokens?.refreshToken
+        hasRefreshToken: !!gmailTokens?.refreshToken
       });
       
       const supabaseForEmails = createServiceRoleClient();
@@ -656,16 +596,8 @@ export async function POST(request: NextRequest) {
       } catch (incrementalError) {
         console.warn('[Pipeline Sync] Failed to compute incremental start date', incrementalError);
       }
-      if (useClerkOAuth) {
-        console.log('[Pipeline Sync] Initializing GmailConnector with Clerk OAuth for user:', userId);
-        // Use Clerk OAuth - GmailConnector will fetch tokens from Clerk as needed
-        // Pass undefined for refresh token and userId for Clerk OAuth
-        connector = new GmailConnector(undefined, userId);
-      } else {
-        console.log('[Pipeline Sync] Initializing GmailConnector with legacy OAuth');
-        // Legacy OAuth flow with refresh token
-        connector = new GmailConnector(gmailTokens.refreshToken, userId);
-      }
+      console.log('[Pipeline Sync] Initializing GmailConnector with stored OAuth credentials');
+      connector = new GmailConnector(gmailTokens.refreshToken, userId);
       const fetchStartTime = Date.now();
 
       // Add timeout to Gmail fetch to prevent hanging (40 seconds max)
@@ -841,7 +773,7 @@ export async function POST(request: NextRequest) {
           error: 'Gmail not available on this Google account',
           details: {
             message: 'The Google account you signed in with does not have Gmail enabled. Please sign out and use a Google account with Gmail access.',
-            accountEmail: user?.emailAddresses?.[0]?.emailAddress,
+            accountEmail: session?.user.email,
             suggestion: 'Use a personal Gmail account (ending in @gmail.com) or a Google Workspace account with Gmail enabled.'
           }
         }, { status: 403 });

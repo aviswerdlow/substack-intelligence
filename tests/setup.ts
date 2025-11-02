@@ -6,6 +6,7 @@ import { supabaseMocks } from './mocks/database/supabase';
 import { databaseMocks } from './mocks/database/queries';
 import { nextjsMocks, headersMocks } from './mocks/nextjs/server';
 import { clerkNextjsMocks, clerkMocks } from './mocks/auth/clerk';
+import { securitySessionController } from './mocks/auth/security-session-controller';
 import { anthropicMocks, openaiMocks, resendMocks, externalServicesMocks } from './mocks/external/services';
 import { googleApisMocks, gmailMocks } from './mocks/external/gmail';
 import { puppeteerModuleMocks, puppeteerMocks } from './mocks/external/puppeteer';
@@ -56,7 +57,30 @@ vi.mock('../apps/web/lib/monitoring/axiom', () => ({ axiomLogger }));
 // Mock rate limiting with centralized mock
 vi.mock('../apps/web/lib/security/rate-limiting', () => ({ burstProtection }));
 
-// Mock Clerk authentication with centralized mocks
+// Mock security session helper with centralized control
+vi.mock('@substack-intelligence/lib/security/session', async () => {
+  const actual = await vi.importActual<typeof import('@substack-intelligence/lib/security/session')>(
+    '@substack-intelligence/lib/security/session'
+  );
+
+  return {
+    ...actual,
+    getServerSecuritySession: vi.fn(async () => securitySessionController.getSession()),
+    fetchUserAccessProfile: vi.fn(async (userId: string) => {
+      const session = securitySessionController.getSession();
+      const baseUser = session?.user ?? securitySessionController.getDefaultUser();
+      return {
+        id: userId,
+        role: baseUser.role,
+        permissions: baseUser.permissions,
+        isVerified: baseUser.isVerified,
+        organizationId: baseUser.organizationId
+      };
+    })
+  };
+});
+
+// Provide compatibility mocks for legacy Clerk imports used in tests
 vi.mock('@clerk/nextjs', () => clerkNextjsMocks);
 
 // Mock Next.js server components with centralized mocks
@@ -165,6 +189,7 @@ afterEach(() => {
     axiomMocks.resetAllMocks();
     rateLimitingMocks.resetAllMocks();
     clerkMocks.resetAllMocks();
+    securitySessionController.resetSession();
     externalServicesMocks.resetAllMocks();
     gmailMocks.resetAllMocks();
     puppeteerMocks.resetAllMocks();
@@ -248,6 +273,7 @@ globalThis.testUtils = {
       gmailMocks.resetAllMocks();
       puppeteerMocks.resetAllMocks();
       databaseQueryMocks.resetAllMocks();
+      securitySessionController.resetSession();
     } catch (error) {
       // Silently handle any import errors
     }

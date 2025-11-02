@@ -22,11 +22,6 @@ vi.mock('../../apps/web/lib/user-settings', () => ({
   }))
 }));
 
-// Mock Clerk
-vi.mock('@clerk/nextjs/server', () => ({
-  currentUser: vi.fn()
-}));
-
 describe('Settings API Edge Cases', () => {
   let mockUserSettingsService: any;
   let getSettings: any;
@@ -34,7 +29,7 @@ describe('Settings API Edge Cases', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    clerkMocks.currentUser.mockResolvedValue({ id: 'test-user-id' });
+    clerkMocks.mockSignedInUser({ id: 'test-user-id' });
 
     // Import after mocks are set up
     const { UserSettingsService } = await import('../../apps/web/lib/user-settings');

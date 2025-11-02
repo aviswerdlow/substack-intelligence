@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { z } from 'zod';
 import { getEmailAnalytics } from '@substack-intelligence/lib/email/analytics';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 const querySchema = z.object({
   days: z.coerce.number().min(1).max(180).default(30),
@@ -9,8 +9,8 @@ const querySchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid query parameters' }, { status: 400 });
     }
 
-    const analytics = await getEmailAnalytics(user.id, query.data.days);
+    const analytics = await getEmailAnalytics(session.user.id, query.data.days);
 
     return NextResponse.json({ success: true, analytics });
   } catch (error) {

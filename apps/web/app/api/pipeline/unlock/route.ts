@@ -1,23 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { pipelineCacheManager } from '@/lib/cache/pipeline-cache';
 import { clearPipelineUpdates } from '@/lib/pipeline-updates';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await currentUser();
-    
-    if (!user) {
+    const session = await getServerSecuritySession();
+
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Not authenticated'
       }, { status: 401 });
     }
-    
-    const userId = user.id;
+
+    const userId = session.user.id;
     
     console.log(`[Pipeline Unlock] Force unlocking pipeline for user: ${userId}`);
     
@@ -49,9 +49,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await currentUser();
-    
-    if (!user) {
+    const session = await getServerSecuritySession();
+
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Not authenticated'

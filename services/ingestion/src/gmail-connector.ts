@@ -20,66 +20,115 @@ interface ProcessedEmail {
   processedAt: Date;
 }
 
+interface GmailCredentials {
+  accessToken?: string | null;
+  refreshToken?: string | null;
+  expiresAt?: string | null;
+  email?: string | null;
+}
+
 export class GmailConnector {
-  private gmail: gmail_v1.Gmail;
-  private supabase;
-  private clerkUserId?: string;
-  
-  constructor(refreshToken?: string, clerkUserId?: string) {
+  private gmail: gmail_v1.Gmail | null = null;
+  private readonly supabase;
+  private readonly userId?: string;
+  private readonly refreshToken?: string;
+
+  constructor(options: { refreshToken?: string; userId?: string } = {}) {
+    const { refreshToken, userId } = options;
+
     this.supabase = createServiceRoleClient();
-    this.clerkUserId = clerkUserId;
-    
-    if (clerkUserId) {
-      // We'll initialize the Gmail client lazily when needed for Clerk OAuth
-      // This is because we need to fetch fresh tokens from Clerk
-      this.gmail = null as any; // Will be initialized in ensureGmailClient()
-    } else {
-      // Legacy OAuth flow with refresh token
+    this.userId = userId;
+    this.refreshToken = refreshToken ?? process.env.GOOGLE_REFRESH_TOKEN ?? undefined;
+
+    if (!this.userId && !this.refreshToken) {
+      throw new Error('GmailConnector requires either a userId or a refresh token to authenticate.');
+    }
+
+    if (!this.userId) {
       const auth = new google.auth.OAuth2(
         process.env.GOOGLE_CLIENT_ID!,
         process.env.GOOGLE_CLIENT_SECRET!
       );
-      
-      // Set refresh token for persistent access
+
       auth.setCredentials({
-        refresh_token: refreshToken || process.env.GOOGLE_REFRESH_TOKEN!
+        refresh_token: this.refreshToken
       });
-      
+
       this.gmail = google.gmail({ version: 'v1', auth });
     }
   }
-  
+
   private async ensureGmailClient() {
-    if (this.gmail) return;
-    
-    console.log('[GmailConnector] Ensuring Gmail client for Clerk user:', this.clerkUserId);
-    
-    if (!this.clerkUserId) {
-      console.error('[GmailConnector] No Clerk user ID provided');
-      throw new Error('Gmail client not initialized and no Clerk user ID provided');
+    if (this.gmail) {
+      return;
     }
-    
-    try {
-      console.log('[GmailConnector] Dynamically importing clerk-oauth module');
-      // Dynamically import to avoid circular dependencies
-      const clerkOAuth = await import('../../../apps/web/lib/clerk-oauth');
-      console.log('[GmailConnector] Creating Clerk Gmail client');
-      this.gmail = await clerkOAuth.createClerkGmailClient(this.clerkUserId);
-      console.log('[GmailConnector] Successfully created Gmail client with Clerk OAuth');
-    } catch (error) {
-      console.error('[GmailConnector] Failed to create Clerk Gmail client:', error);
-      console.error('[GmailConnector] Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
-      });
-      throw new Error(`Failed to initialize Gmail client with Clerk OAuth: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
+    if (!this.userId) {
+      throw new Error('Gmail client is not initialized and no userId was provided for credential lookup.');
     }
+
+    const credentials = await this.loadUserGmailCredentials(this.userId);
+
+    if (!credentials?.refreshToken && !this.refreshToken) {
+      throw new Error('No Gmail OAuth credentials are available for this user.');
+    }
+
+    const auth = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID!,
+      process.env.GOOGLE_CLIENT_SECRET!
+    );
+
+    auth.setCredentials({
+      access_token: credentials?.accessToken ?? undefined,
+      refresh_token: credentials?.refreshToken ?? this.refreshToken,
+      expiry_date: credentials?.expiresAt ? new Date(credentials.expiresAt).getTime() : undefined
+    });
+
+    this.gmail = google.gmail({ version: 'v1', auth });
+  }
+
+  private async loadUserGmailCredentials(userId: string): Promise<GmailCredentials | null> {
+    if (!this.supabase) {
+      return null;
+    }
+
+    const { data, error } = await this.supabase
+      .from('user_settings')
+      .select('gmail_access_token, gmail_refresh_token, gmail_token_expiry, gmail_email')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[GmailConnector] Failed to load Gmail credentials from Supabase:', error);
+      throw new Error(`Unable to load Gmail credentials for user ${userId}`);
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    return {
+      accessToken: data.gmail_access_token ?? null,
+      refreshToken: data.gmail_refresh_token ?? null,
+      expiresAt: data.gmail_token_expiry ?? null,
+      email: data.gmail_email ?? null
+    };
+  }
+
+  private async getGmailClient(): Promise<gmail_v1.Gmail> {
+    await this.ensureGmailClient();
+
+    if (!this.gmail) {
+      throw new Error('Gmail client could not be initialized.');
+    }
+
+    return this.gmail;
   }
 
   async fetchDailySubstacks(daysBack: number = 30, userId?: string, options?: { startDate?: Date; endDate?: Date }): Promise<ProcessedEmail[]> {
     const startTime = Date.now();
     
-    // Ensure Gmail client is initialized (for Clerk OAuth)
+    // Ensure Gmail client is initialized for user-scoped credentials
     await this.ensureGmailClient();
     
     try {
@@ -167,7 +216,7 @@ export class GmailConnector {
       
       // Store in Supabase with conflict handling
       if (successful.length > 0) {
-        await this.storeEmails(successful, userId || this.clerkUserId);
+        await this.storeEmails(successful, userId || this.userId);
       }
       
       await axiomLogger.logEmailEvent('fetch_completed', {
@@ -193,10 +242,11 @@ export class GmailConnector {
     const messages: gmail_v1.Schema$Message[] = [];
     let nextPageToken: string | undefined;
     let pageCount = 0;
-    
+    const gmail = await this.getGmailClient();
+
     do {
       try {
-        const response = await this.gmail.users.messages.list({
+        const response = await gmail.users.messages.list({
           userId: 'me',
           q: query,
           maxResults: 100,
@@ -250,7 +300,8 @@ export class GmailConnector {
       }
       
       // Fetch full message details
-      const fullMessage = await this.gmail.users.messages.get({
+      const gmail = await this.getGmailClient();
+      const fullMessage = await gmail.users.messages.get({
         userId: 'me',
         id: message.id,
         format: 'full'
@@ -506,8 +557,9 @@ export class GmailConnector {
   // Health check method
   async testConnection(): Promise<boolean> {
     try {
-      const response = await this.gmail.users.getProfile({ userId: 'me' });
-      
+      const gmail = await this.getGmailClient();
+      const response = await gmail.users.getProfile({ userId: 'me' });
+
       await axiomLogger.logHealthCheck('gmail', 'healthy', {
         emailAddress: response.data.emailAddress
       });
@@ -532,7 +584,7 @@ export class GmailConnector {
   }> {
     try {
       // Use userId from parameter or instance
-      const userIdToUse = userId || this.clerkUserId;
+      const userIdToUse = userId || this.userId;
       
       // Build queries with optional user filtering
       let totalQuery = this.supabase

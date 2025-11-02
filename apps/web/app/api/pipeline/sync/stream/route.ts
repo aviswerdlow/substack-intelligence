@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { getPipelineUpdates, markUpdatesConsumed, clearPipelineUpdates } from '@/lib/pipeline-updates';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Store active connections for pushing updates
 export const runtime = 'nodejs';
@@ -10,21 +10,21 @@ export async function GET(request: NextRequest) {
   try {
     console.log('[SSE-STREAM:DEBUG] New SSE connection request received');
 
-    const user = await currentUser();
+    const session = await getServerSecuritySession();
     const isDevelopment = process.env.NODE_ENV === 'development';
 
     console.log('[SSE-STREAM:DEBUG] Authentication check:', {
-      hasUser: !!user,
+      hasUser: !!session,
       isDevelopment,
-      userId: user?.id
+      userId: session?.user.id
     });
 
-    if (!user && !isDevelopment) {
+    if (!session && !isDevelopment) {
       console.log('[SSE-STREAM:DEBUG] Unauthorized access attempt - no user and not in development');
       return new Response('Unauthorized', { status: 401 });
     }
 
-    const userId = user?.id || 'dev';
+    const userId = session?.user.id || 'dev';
     console.log('[SSE-STREAM:DEBUG] Establishing SSE stream for userId:', userId);
 
     const encoder = new TextEncoder();

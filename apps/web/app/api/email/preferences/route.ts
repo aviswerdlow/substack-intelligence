@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
-import { currentUser } from '@clerk/nextjs/server';
 import { z } from 'zod';
 import { createServiceRoleClient } from '@substack-intelligence/database';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 const preferenceSchema = z.object({
   newsletter: z.boolean().optional(),
@@ -30,15 +30,15 @@ const supabase = createServiceRoleClient();
 
 export async function GET() {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const { data, error } = await supabase
       .from('email_preferences')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', session.user.id)
       .single();
 
     if (error && error.code !== 'PGRST116') {
@@ -49,7 +49,7 @@ export async function GET() {
     if (!data) {
       const unsubscribeToken = randomUUID();
       await supabase.from('email_preferences').upsert({
-        user_id: user.id,
+        user_id: session.user.id,
         ...DEFAULT_PREFERENCES,
         unsubscribe_token: unsubscribeToken,
       });
@@ -78,8 +78,8 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -97,13 +97,13 @@ export async function PUT(request: NextRequest) {
     const { data: existing } = await supabase
       .from('email_preferences')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', session.user.id)
       .single();
 
     const unsubscribeToken = existing?.unsubscribe_token ?? randomUUID();
 
     const updatePayload = {
-      user_id: user.id,
+      user_id: session.user.id,
       ...DEFAULT_PREFERENCES,
       ...existing,
       ...result.data,

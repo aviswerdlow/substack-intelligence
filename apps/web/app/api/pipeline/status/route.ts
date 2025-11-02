@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { createServiceRoleClient } from '@substack-intelligence/database';
 import { pipelineCacheManager, performanceUtils, requestDeduplicator } from '@/lib/cache/pipeline-cache';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Disable caching
 export const dynamic = 'force-dynamic';
@@ -20,17 +20,17 @@ interface PipelineMetrics {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await currentUser();
     const isDevelopment = process.env.NODE_ENV === 'development';
-    
-    if (!user && !isDevelopment) {
+    const session = await getServerSecuritySession();
+
+    if (!session && !isDevelopment) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
       }, { status: 401 });
     }
-    
-    const userId = user?.id || 'development-user';
+
+    const userId = session?.user.id || 'development-user';
 
     // Check cache first
     const cacheKey = `metrics:${userId}`;

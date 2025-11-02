@@ -14,8 +14,24 @@ import { toast } from '../../apps/web/hooks/use-toast';
 // Mock dependencies
 jest.mock('axios');
 jest.mock('../../apps/web/hooks/use-toast');
-jest.mock('@clerk/nextjs/server', () => ({
-  currentUser: jest.fn(() => Promise.resolve({ id: 'test-user-id' }))
+jest.mock('@substack-intelligence/lib/security/session', () => ({
+  getServerSecuritySession: jest.fn(() => Promise.resolve({
+    session: {
+      user: {
+        id: 'test-user-id',
+        email: 'test@example.com'
+      }
+    },
+    user: {
+      id: 'test-user-id',
+      email: 'test@example.com',
+      role: 'viewer',
+      permissions: ['emails:read', 'companies:read', 'reports:read', 'analytics:view'],
+      isVerified: true
+    },
+    rememberMe: false,
+    sessionId: 'session-test'
+  }))
 }));
 
 // Mock UI components that might not be available in test environment

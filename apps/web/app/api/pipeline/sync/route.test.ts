@@ -17,9 +17,9 @@ describe('Pipeline Sync Route Integration Tests', () => {
     process.env.GOOGLE_CLIENT_SECRET = 'test-client-secret';
     process.env.GOOGLE_REFRESH_TOKEN = 'test-refresh-token';
 
-    // Mock Clerk authentication to return null (development mode)
-    vi.mock('@clerk/nextjs/server', () => ({
-      currentUser: vi.fn().mockResolvedValue(null)
+    // Mock session helper to return null (development mode)
+    vi.mock('@substack-intelligence/lib/security/session', () => ({
+      getServerSecuritySession: vi.fn().mockResolvedValue(null)
     }));
 
     // Mock the Gmail connector to prevent actual API calls

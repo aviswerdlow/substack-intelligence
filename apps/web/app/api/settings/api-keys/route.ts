@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { UserSettingsService } from '@/lib/user-settings';
 import { z } from 'zod';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 const CreateApiKeySchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name too long')
@@ -13,8 +13,8 @@ const DeleteApiKeySchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     const { name } = CreateApiKeySchema.parse(body);
 
     const settingsService = new UserSettingsService();
-    const result = await settingsService.generateApiKey(userId, name);
+    const result = await settingsService.generateApiKey(session.user.id, name);
     
     if (!result) {
       return NextResponse.json({
@@ -64,8 +64,8 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -76,7 +76,7 @@ export async function DELETE(request: NextRequest) {
     const { keyId } = DeleteApiKeySchema.parse(body);
 
     const settingsService = new UserSettingsService();
-    const success = await settingsService.deleteApiKey(userId, keyId);
+    const success = await settingsService.deleteApiKey(session.user.id, keyId);
     
     if (!success) {
       return NextResponse.json({

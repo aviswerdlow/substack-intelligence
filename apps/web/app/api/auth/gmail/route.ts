@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { createServiceRoleClient } from '@substack-intelligence/database';
-import { currentUser } from '@clerk/nextjs/server';
 import { validateOAuthConfig } from '@/lib/oauth-health-check';
 import { logOAuthInitiated, logOAuthFailure } from '@/lib/oauth-monitoring';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
+import { UserSettingsService } from '@/lib/user-settings';
 
 // Environment variable validation
 function validateEnvironment() {
@@ -56,19 +56,19 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    const user = await currentUser();
-    if (!user) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       await logOAuthFailure('authentication_required', 'User not authenticated', undefined, undefined, {
         userAgent: request.headers.get('user-agent') || 'unknown'
       });
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: 'Authentication required',
         message: 'Please sign in to connect your Gmail account'
       }, { status: 401 });
     }
 
     // Log OAuth initiation
-    await logOAuthInitiated(user.id, {
+    await logOAuthInitiated(session.user.id, {
       userAgent: request.headers.get('user-agent') || 'unknown',
       referer: request.headers.get('referer') || 'unknown'
     });
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: scopes,
-      state: user.id, // Pass user ID in state for callback security
+      state: session.user.id, // Pass user ID in state for callback security
       prompt: 'consent', // Force consent to get refresh token
       include_granted_scopes: true
     });
@@ -128,30 +128,29 @@ export async function GET(request: NextRequest) {
 // DELETE - Disconnect Gmail
 export async function DELETE() {
   try {
-    const user = await currentUser();
-    if (!user) {
-      return NextResponse.json({ 
+    const session = await getServerSecuritySession();
+    if (!session) {
+      return NextResponse.json({
         error: 'Authentication required',
         message: 'Please sign in to disconnect your Gmail account'
       }, { status: 401 });
     }
 
     // Disconnect Gmail in database
-    const { UserSettingsService } = await import('@/lib/user-settings');
     const userSettingsService = new UserSettingsService();
-    const success = await userSettingsService.disconnectGmail(user.id);
+    const success = await userSettingsService.disconnectGmail(session.user.id);
     
     if (success) {
       return NextResponse.json({ 
         success: true, 
         message: 'Gmail account disconnected successfully',
-        userId: user.id
+        userId: session.user.id
       });
     } else {
       return NextResponse.json({
         error: 'Disconnection Failed',
         message: 'Unable to disconnect Gmail account. Please try again.',
-        userId: user.id
+        userId: session.user.id
       }, { status: 500 });
     }
   } catch (error) {

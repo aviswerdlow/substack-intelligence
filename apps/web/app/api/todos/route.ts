@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createServerComponentClient, getTodos, createTodo, TodoFilters } from '@substack-intelligence/database';
 import { withRateLimit } from '@/lib/security/rate-limiting';
 import { z } from 'zod';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -50,8 +50,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Check authentication
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
 
     // Get todos from database
     const supabase = createServerComponentClient();
-    const result = await getTodos(supabase, userId, {
+    const result = await getTodos(supabase, session.user.id, {
       limit: params.limit,
       offset: params.offset,
       orderBy: params.orderBy,
@@ -136,8 +136,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Check authentication
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
 
     // Create todo in database
     const supabase = createServerComponentClient();
-    const newTodo = await createTodo(supabase, userId, todoData as { title: string; description?: string; priority?: "low" | "medium" | "high" | "urgent"; due_date?: string; category?: string; tags?: string[] });
+    const newTodo = await createTodo(supabase, session.user.id, todoData as { title: string; description?: string; priority?: "low" | "medium" | "high" | "urgent"; due_date?: string; category?: string; tags?: string[] });
 
     return NextResponse.json({
       success: true,

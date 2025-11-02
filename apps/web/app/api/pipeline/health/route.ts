@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Force Node.js runtime for full compatibility
 export const runtime = 'nodejs';
@@ -31,10 +31,10 @@ export async function GET(request: NextRequest) {
   const checks: HealthCheckResult[] = [];
   
   try {
-    const user = await currentUser();
     const isDevelopment = process.env.NODE_ENV === 'development';
-    
-    if (!user && !isDevelopment) {
+    const session = await getServerSecuritySession();
+
+    if (!session && !isDevelopment) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'

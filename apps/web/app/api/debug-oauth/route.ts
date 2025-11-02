@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -7,7 +7,8 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   try {
     // Check if user is authenticated
-    const user = await currentUser();
+    const session = await getServerSecuritySession();
+    const user = session?.user ?? null;
     
     // Get environment variables (sanitized)
     const config = {
@@ -15,8 +16,8 @@ export async function GET(request: NextRequest) {
       GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID?.substring(0, 20) + '...',
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? '***configured***' : 'missing',
       redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`,
-      user: user ? { id: user.id, email: user.emailAddresses?.[0]?.emailAddress } : null,
-      clerkAuth: user ? 'authenticated' : 'not authenticated',
+      user: user ? { id: user.id, email: user.email } : null,
+      auth: user ? 'authenticated' : 'not authenticated',
       headers: {
         host: request.headers.get('host'),
         origin: request.headers.get('origin'),

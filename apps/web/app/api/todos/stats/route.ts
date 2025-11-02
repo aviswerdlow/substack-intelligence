@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createServerComponentClient, getTodoStats } from '@substack-intelligence/database';
 import { withRateLimit } from '@/lib/security/rate-limiting';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -16,8 +16,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Check authentication
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     // Get todo statistics from database
     const supabase = createServerComponentClient();
-    const stats = await getTodoStats(supabase, userId);
+    const stats = await getTodoStats(supabase, session.user.id);
 
     // If no stats available, return zeros
     if (!stats) {
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
         },
         metadata: {
           generatedAt: new Date().toISOString(),
-          userId: userId,
+          userId: session.user.id,
         }
       }
     });

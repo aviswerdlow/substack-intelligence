@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createServerComponentClient, getPostAnalytics, PostFilters } from '@substack-intelligence/database';
 import { z } from 'zod';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -13,10 +13,11 @@ const AnalyticsQuerySchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = session.user.id;
 
     const { searchParams } = new URL(request.url);
     const parsed = AnalyticsQuerySchema.safeParse({

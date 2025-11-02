@@ -5,8 +5,19 @@ import { GET as pipelineMetricsGET } from '../pipeline/status/route';
 import { GET as gmailHealthGET } from '../auth/gmail/health/route';
 
 // Mock external dependencies
-vi.mock('@clerk/nextjs/server', () => ({
-  currentUser: vi.fn(() => Promise.resolve({ id: 'test-user-123' }))
+vi.mock('@substack-intelligence/lib/security/session', () => ({
+  getServerSecuritySession: vi.fn(() => Promise.resolve({
+    session: { user: { id: 'test-user-123' }, expires: new Date().toISOString() } as any,
+    user: {
+      id: 'test-user-123',
+      email: 'test@example.com',
+      role: 'admin',
+      permissions: [],
+      isVerified: true
+    },
+    rememberMe: false,
+    sessionId: 'test-session'
+  }))
 }));
 
 vi.mock('@substack-intelligence/database', () => ({
@@ -350,7 +361,7 @@ describe('Pipeline API Integration Tests', () => {
       process.env.NODE_ENV = 'production';
       
       // Mock no authenticated user
-      vi.mocked(require('@clerk/nextjs/server').currentUser)
+      vi.mocked(require('@substack-intelligence/lib/security/session').getServerSecuritySession)
         .mockResolvedValue(null);
 
       const request = new NextRequest('http://localhost/api/pipeline/status');
@@ -365,7 +376,7 @@ describe('Pipeline API Integration Tests', () => {
     it('allows access in development environment without auth', async () => {
       process.env.NODE_ENV = 'development';
       
-      vi.mocked(require('@clerk/nextjs/server').currentUser)
+      vi.mocked(require('@substack-intelligence/lib/security/session').getServerSecuritySession)
         .mockResolvedValue(null);
 
       const request = new NextRequest('http://localhost/api/pipeline/status');

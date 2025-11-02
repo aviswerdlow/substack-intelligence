@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { google } from 'googleapis';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // Disable caching for health checks
 export const dynamic = 'force-dynamic';
@@ -25,13 +25,13 @@ function validateGmailOAuthConfig(): { isValid: boolean; missingVars: string[] }
 // GET - Check Gmail connection health
 export async function GET() {
   try {
-    const user = await currentUser();
     const isDevelopment = process.env.NODE_ENV === 'development';
-    
-    if (!user && !isDevelopment) {
-      return NextResponse.json({ 
+    const session = await getServerSecuritySession();
+
+    if (!session && !isDevelopment) {
+      return NextResponse.json({
         success: false,
-        error: 'Unauthorized' 
+        error: 'Unauthorized'
       }, { status: 401 });
     }
 

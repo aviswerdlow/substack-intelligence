@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { oauthMonitor } from '@/lib/oauth-monitoring';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 // GET - OAuth Monitoring Dashboard
 export async function GET(request: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Basic admin check - in production, you'd want proper role-based access
-    if (!user.emailAddresses.some(email => 
-      email.emailAddress.includes('@terragonlabs.com') || 
-      email.emailAddress.includes('@admin.') ||
-      process.env.NODE_ENV === 'development'
-    )) {
+    const userEmail = session.user.email ?? '';
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const hasPrivilegedEmail = userEmail.includes('@terragonlabs.com') || userEmail.includes('@admin.');
+    const isAdminRole = session.user.role === 'admin';
+
+    if (!isAdminRole && !hasPrivilegedEmail && !isDevelopment) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 
@@ -121,17 +122,18 @@ export async function GET(request: NextRequest) {
 // POST - Trigger manual health check and metrics refresh
 export async function POST(request: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await getServerSecuritySession();
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Basic admin check
-    if (!user.emailAddresses.some(email => 
-      email.emailAddress.includes('@terragonlabs.com') || 
-      email.emailAddress.includes('@admin.') ||
-      process.env.NODE_ENV === 'development'
-    )) {
+    const userEmail = session.user.email ?? '';
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const hasPrivilegedEmail = userEmail.includes('@terragonlabs.com') || userEmail.includes('@admin.');
+    const isAdminRole = session.user.role === 'admin';
+
+    if (!isAdminRole && !hasPrivilegedEmail && !isDevelopment) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 

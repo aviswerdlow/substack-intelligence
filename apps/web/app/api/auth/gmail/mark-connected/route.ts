@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
 import { UserSettingsService } from '@/lib/user-settings';
 import { buildMissingUserIdColumnResponse, isMissingUserIdColumnError, MissingUserIdColumnError } from '@/lib/supabase-errors';
+import { getServerSecuritySession } from '@substack-intelligence/lib/security/session';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await currentUser();
-    
-    if (!user) {
-      return NextResponse.json({ 
-        error: 'Not authenticated' 
+    const session = await getServerSecuritySession();
+
+    if (!session) {
+      return NextResponse.json({
+        error: 'Not authenticated'
       }, { status: 401 });
     }
 
@@ -21,15 +21,10 @@ export async function POST(request: NextRequest) {
     // Mark user as having Gmail connected using UserSettingsService
     const userSettingsService = new UserSettingsService();
     
-    // Update settings to mark Gmail as connected via Clerk OAuth
-    const updated = await userSettingsService.createOrUpdateUserSettings(user.id, {
+    // Update settings to mark Gmail as connected via Supabase-managed OAuth
+    const updated = await userSettingsService.createOrUpdateUserSettings(session.user.id, {
       gmail_connected: true,
-      gmail_email: email,
-      // Store tokens as a JSON string to indicate Clerk OAuth
-      gmail_refresh_token: JSON.stringify({
-        useClerkOAuth: true,
-        connectedAt: new Date().toISOString()
-      })
+      gmail_email: email
     });
 
     if (!updated) {
