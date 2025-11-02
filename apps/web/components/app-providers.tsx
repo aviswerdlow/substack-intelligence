@@ -2,6 +2,8 @@
 
 import type { ReactNode } from 'react';
 
+import { SessionProvider } from 'next-auth/react';
+
 import { AnalyticsConsentBanner } from '@/components/analytics/AnalyticsConsentBanner';
 import { MonitoringProvider } from '@/components/monitoring-provider';
 import { Providers as QueryProviders } from '@/components/providers';
@@ -14,12 +16,14 @@ interface AppProvidersProps {
 
 export function AppProviders({ children }: AppProvidersProps) {
   return (
-    <MonitoringProvider>
-      <AnalyticsProvider>
-        <QueryProviders>{children}</QueryProviders>
-        <AnalyticsConsentBanner />
-        <Toaster />
-      </AnalyticsProvider>
-    </MonitoringProvider>
+    <SessionProvider>
+      <MonitoringProvider>
+        <AnalyticsProvider>
+          <QueryProviders>{children}</QueryProviders>
+          <AnalyticsConsentBanner />
+          <Toaster />
+        </AnalyticsProvider>
+      </MonitoringProvider>
+    </SessionProvider>
   );
 }
