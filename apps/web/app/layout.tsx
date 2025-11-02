@@ -4,6 +4,8 @@ import './globals.css'
 import { ClerkProvider } from '@clerk/nextjs'
 import { Toaster } from '@/components/ui/toaster'
 import { MonitoringProvider } from '@/components/monitoring-provider'
+import { AnalyticsConsentBanner } from '@/components/analytics/AnalyticsConsentBanner'
+import { AnalyticsProvider } from '@/lib/analytics'
 import { ErrorBoundary } from '@/lib/monitoring/error-boundary'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -65,10 +67,13 @@ export default function RootLayout({
         <body className={inter.className}>
           <ErrorBoundary>
             <MonitoringProvider>
-              <main className="min-h-screen bg-background">
-                {children}
-              </main>
-              <Toaster />
+              <AnalyticsProvider>
+                <main className="min-h-screen bg-background">
+                  {children}
+                </main>
+                <AnalyticsConsentBanner />
+                <Toaster />
+              </AnalyticsProvider>
             </MonitoringProvider>
           </ErrorBoundary>
         </body>

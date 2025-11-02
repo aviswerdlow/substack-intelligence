@@ -1,59 +1,121 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { currentUser } from '@clerk/nextjs/server';
+import { createServiceRoleClient } from '@substack-intelligence/database';
+
+interface TrendPoint {
+  date: string;
+  companies: number;
+  mentions: number;
+  confidence: number;
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const days = parseInt(searchParams.get('days') || '7');
-    
-    // Generate mock trend data
-    const trends = [];
-    const today = new Date();
-    
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      
-      // Generate realistic looking data with some variation
-      const baseCompanies = 8;
-      const baseMentions = 15;
-      const baseConfidence = 0.75;
-      
-      trends.push({
-        date: date.toISOString().split('T')[0],
-        companies: baseCompanies + Math.floor(Math.random() * 5) - 2,
-        mentions: baseMentions + Math.floor(Math.random() * 10) - 5,
-        confidence: Math.min(1, Math.max(0, baseConfidence + (Math.random() * 0.2 - 0.1)))
-      });
+    const user = await currentUser();
+    const isDevelopment = process.env.NODE_ENV === 'development';
+
+    if (!user && !isDevelopment) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    
+
+    const userId = user?.id || 'development-user';
+    const searchParams = request.nextUrl.searchParams;
+    const days = Math.max(1, parseInt(searchParams.get('days') || '7', 10));
+
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - (days - 1));
+
+    const supabase = createServiceRoleClient();
+
+    const [mentionsRes, companiesRes] = await Promise.all([
+      supabase
+        .from('company_mentions')
+        .select('created_at, confidence, company_id')
+        .eq('user_id', userId)
+        .gte('created_at', startDate.toISOString())
+        .lte('created_at', endDate.toISOString()),
+      supabase
+        .from('companies')
+        .select('id, first_seen_at')
+        .eq('user_id', userId)
+        .gte('first_seen_at', startDate.toISOString())
+        .lte('first_seen_at', endDate.toISOString()),
+    ]);
+
+    if (mentionsRes.error) {
+      console.error('Failed to fetch mentions for trends:', mentionsRes.error);
+    }
+    if (companiesRes.error) {
+      console.error('Failed to fetch companies for trends:', companiesRes.error);
+    }
+
+    const trendMap = new Map<string, {
+      companySet: Set<string>;
+      mentions: number;
+      confidenceTotal: number;
+    }>();
+
+    const daysList: TrendPoint[] = [];
+    const cursor = new Date(startDate);
+    for (let i = 0; i < days; i++) {
+      const dateKey = cursor.toISOString().split('T')[0];
+      trendMap.set(dateKey, {
+        companySet: new Set<string>(),
+        mentions: 0,
+        confidenceTotal: 0,
+      });
+      daysList.push({ date: dateKey, companies: 0, mentions: 0, confidence: 0 });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    (mentionsRes.data ?? []).forEach((mention) => {
+      const dateKey = new Date(mention.created_at).toISOString().split('T')[0];
+      const entry = trendMap.get(dateKey);
+      if (!entry) {
+        return;
+      }
+      if (mention.company_id) {
+        entry.companySet.add(mention.company_id);
+      }
+      entry.mentions += 1;
+      if (typeof mention.confidence === 'number') {
+        entry.confidenceTotal += mention.confidence;
+      }
+    });
+
+    (companiesRes.data ?? []).forEach((company) => {
+      const dateKey = new Date(company.first_seen_at).toISOString().split('T')[0];
+      const entry = trendMap.get(dateKey);
+      if (!entry) {
+        return;
+      }
+      entry.companySet.add(company.id);
+    });
+
+    const trends = daysList.map((point) => {
+      const entry = trendMap.get(point.date);
+      if (!entry) {
+        return point;
+      }
+      const avgConfidence = entry.mentions > 0 ? Number((entry.confidenceTotal / entry.mentions).toFixed(3)) : 0;
+      return {
+        date: point.date,
+        companies: entry.companySet.size,
+        mentions: entry.mentions,
+        confidence: avgConfidence,
+      };
+    });
+
     return NextResponse.json({
       success: true,
-      trends
+      trends,
     });
-    
   } catch (error) {
     console.error('Failed to fetch trends:', error);
-    
-    // Return mock data even on error
-    const trends = [];
-    const days = 7;
-    const today = new Date();
-    
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      
-      trends.push({
-        date: date.toISOString().split('T')[0],
-        companies: 5 + Math.floor(Math.random() * 8),
-        mentions: 10 + Math.floor(Math.random() * 15),
-        confidence: 0.6 + Math.random() * 0.3
-      });
-    }
-    
-    return NextResponse.json({
-      success: true,
-      trends
-    });
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch trends' },
+      { status: 500 }
+    );
   }
 }
