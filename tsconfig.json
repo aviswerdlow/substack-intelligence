@@ -25,7 +25,8 @@
       "@/components/*": ["./apps/web/components/*"],
       "@/lib/*": ["./apps/web/lib/*"],
       "@/hooks/*": ["./apps/web/hooks/*"],
-      "@substack-intelligence/*": ["./packages/*/src", "./services/*/src"]
+      "@substack-intelligence/*": ["./packages/*/src", "./services/*/src"],
+      "@substack-intelligence/lib/*": ["./lib/*"]
     }
   },
   "include": [

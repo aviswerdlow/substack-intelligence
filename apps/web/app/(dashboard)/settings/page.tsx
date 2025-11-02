@@ -33,6 +33,7 @@ import { TabSaveControls } from '@/components/settings/TabSaveControls';
 import { ApiKeyValidator } from '@/components/settings/ApiKeyValidator';
 import { SettingsOnboardingTour } from '@/components/settings/SettingsOnboardingTour';
 import { SettingsImportExport } from '@/components/settings/SettingsImportExport';
+import { EmailPreferencesCard } from '@/components/settings/EmailPreferencesCard';
 
 // AI Model mappings for each provider
 const AI_MODELS = {
@@ -1548,12 +1549,14 @@ function SettingsPageContent() {
 
               {/* Notifications Settings */}
               <TabsContent value="notifications">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Notification Settings</CardTitle>
-                    <CardDescription>Configure how and when you receive alerts</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
+                <div className="grid gap-6">
+                  <EmailPreferencesCard />
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Notification Settings</CardTitle>
+                      <CardDescription>Configure how and when you receive alerts</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
                     <div className="space-y-4">
                       <h3 className="font-medium">Email Notifications</h3>
                       <div className="space-y-2">
@@ -1696,7 +1699,8 @@ function SettingsPageContent() {
                       </div>
                     </div>
                   </CardContent>
-                </Card>
+                  </Card>
+                </div>
               </TabsContent>
 
               {/* API Settings */}
