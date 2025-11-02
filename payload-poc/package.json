@@ -1,0 +1,36 @@
+{
+  "name": "payload-poc",
+  "version": "1.0.0",
+  "description": "Proof of concept for Payload CMS evaluation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts nodemon",
+    "build": "tsc",
+    "serve": "cross-env PAYLOAD_CONFIG_PATH=dist/payload.config.js NODE_ENV=production node dist/server.js",
+    "seed": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts ts-node src/seed.ts",
+    "benchmark": "cross-env PAYLOAD_CONFIG_PATH=src/payload.config.ts ts-node src/benchmark.ts"
+  },
+  "dependencies": {
+    "@payloadcms/db-postgres": "^3.0.0",
+    "@payloadcms/email-resend": "^3.0.0",
+    "@payloadcms/richtext-lexical": "^3.0.0",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "payload": "^3.37.0",
+    "payloadcms-vectorize": "^1.0.0",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.1",
+    "nodemon": "^3.1.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
