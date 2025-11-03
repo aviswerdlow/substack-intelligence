@@ -43,6 +43,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/setup/(.*)',
   '/api/auth/gmail',
   '/api/auth/gmail/(.*)',
+  '/api/auth/_log',
   '/api/auth/(.*)'
 ]);
 
