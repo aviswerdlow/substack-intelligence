@@ -16,6 +16,48 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
+const AUTH_DEBUG_ENABLED = process.env.AUTH_DEBUG === 'true';
+const authDebugLog = (...messages: unknown[]) => {
+  if (AUTH_DEBUG_ENABLED) {
+    console.log('[auth][debug]', ...messages);
+  }
+};
+
+const isPlaceholderValue = (value?: string | null) => {
+  if (!value) {
+    return true;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return true;
+  }
+
+  return /placeholder/i.test(trimmed);
+};
+
+const vercelEnv = process.env.VERCEL_ENV;
+const isNonProductionRuntime =
+  process.env.NODE_ENV !== 'production' || (vercelEnv && vercelEnv !== 'production');
+
+const DEVELOPMENT_AUTH_ENABLED =
+  isNonProductionRuntime &&
+  (isPlaceholderValue(SUPABASE_URL) ||
+    isPlaceholderValue(SUPABASE_ANON_KEY) ||
+    isPlaceholderValue(SUPABASE_SERVICE_ROLE_KEY));
+
+let hasLoggedDevelopmentAuthFallback = false;
+
+authDebugLog('Auth configuration detected', {
+  nodeEnv: process.env.NODE_ENV,
+  vercelEnv: vercelEnv || 'local',
+  hasSupabaseUrl: Boolean(SUPABASE_URL) && !isPlaceholderValue(SUPABASE_URL),
+  hasSupabaseAnonKey: Boolean(SUPABASE_ANON_KEY) && !isPlaceholderValue(SUPABASE_ANON_KEY),
+  hasSupabaseServiceKey:
+    Boolean(SUPABASE_SERVICE_ROLE_KEY) && !isPlaceholderValue(SUPABASE_SERVICE_ROLE_KEY),
+  developmentAuthEnabled: DEVELOPMENT_AUTH_ENABLED
+});
+
 const DEFAULT_SESSION_MAX_AGE = 60 * 60 * 24; // 24 hours
 const REMEMBER_ME_SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
@@ -46,6 +88,10 @@ const passwordResetSchema = z.object({
 
 const createSupabaseClient = (key?: string, options?: Parameters<typeof createClient>[2]) => {
   if (!SUPABASE_URL || !key) {
+    return null;
+  }
+
+  if (isPlaceholderValue(SUPABASE_URL) || isPlaceholderValue(key)) {
     return null;
   }
 
@@ -85,6 +131,46 @@ function parseRememberValue(value: unknown): boolean {
     return value === 'true' || value === '1' || value.toLowerCase() === 'on';
   }
   return false;
+}
+
+function resolveDevelopmentUser(email: string, password: string, remember: boolean): AuthenticatedUser | null {
+  if (!DEVELOPMENT_AUTH_ENABLED) {
+    return null;
+  }
+
+  const devEmail = (process.env.TEST_USER_EMAIL || 'test@example.com').toLowerCase();
+  const devPassword = process.env.TEST_USER_PASSWORD || 'TestPassword123!';
+
+  if (email.toLowerCase() !== devEmail || password !== devPassword) {
+    authDebugLog('Development auth attempt rejected', {
+      email: email.toLowerCase()
+    });
+    return null;
+  }
+
+  if (!hasLoggedDevelopmentAuthFallback) {
+    console.warn(
+      '[auth] Using development fallback authentication. Configure Supabase credentials to disable this pathway.'
+    );
+    authDebugLog('Development fallback authentication activated', {
+      email: devEmail
+    });
+    hasLoggedDevelopmentAuthFallback = true;
+  }
+
+  const availableRoles = supportedRoles as readonly string[];
+  const requestedRole = (process.env.TEST_USER_ROLE || 'admin').toLowerCase();
+  const role = availableRoles.includes(requestedRole)
+    ? (requestedRole as (typeof supportedRoles)[number])
+    : 'admin';
+
+  return {
+    id: process.env.TEST_USER_ID || 'dev-user-0001',
+    email: devEmail,
+    name: process.env.TEST_USER_NAME || 'Local Development User',
+    role,
+    rememberMe: remember,
+  };
 }
 
 async function persistGmailTokensFromAccount(user: NextAuthUser, account?: Account | null): Promise<void> {
@@ -152,10 +238,21 @@ async function enforceAuthRateLimit(request?: Request, endpoint: string = 'auth/
 }
 
 const buildAdapter = (): Adapter | undefined => {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  if (
+    !SUPABASE_URL ||
+    !SUPABASE_SERVICE_ROLE_KEY ||
+    isPlaceholderValue(SUPABASE_URL) ||
+    isPlaceholderValue(SUPABASE_SERVICE_ROLE_KEY)
+  ) {
     console.warn('[auth] Supabase adapter disabled: missing credentials');
+    authDebugLog('Supabase adapter disabled', {
+      hasSupabaseUrl: Boolean(SUPABASE_URL) && !isPlaceholderValue(SUPABASE_URL),
+      hasServiceRoleKey: Boolean(SUPABASE_SERVICE_ROLE_KEY) && !isPlaceholderValue(SUPABASE_SERVICE_ROLE_KEY)
+    });
     return undefined;
   }
+
+  authDebugLog('Supabase adapter enabled');
 
   return SupabaseAdapter({
     url: SUPABASE_URL,
@@ -217,6 +314,13 @@ const credentialsProvider = CredentialsProvider({
       return null;
     }
 
+    const { email, password, remember } = parsed.data;
+    const rememberValue = parseRememberValue(remember);
+
+    authDebugLog('Credentials sign-in attempt', {
+      email: email.toLowerCase()
+    });
+
     try {
       await enforceAuthRateLimit(req, 'auth/signin');
     } catch (error) {
@@ -226,32 +330,62 @@ const credentialsProvider = CredentialsProvider({
       throw error;
     }
 
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (!error && data.user) {
+          const user = data.user;
+          const role = (user.user_metadata?.role as string) ?? 'reader';
+
+          authDebugLog('Supabase authentication succeeded', {
+            userId: user.id,
+            role
+          });
+
+          return {
+            id: user.id,
+            email: user.email ?? undefined,
+            name: (user.user_metadata?.full_name as string) ?? user.email ?? undefined,
+            role,
+            rememberMe: rememberValue,
+          } satisfies AuthenticatedUser;
+        }
+
+        console.warn('[auth] Supabase rejected credentials', error);
+        authDebugLog('Supabase authentication rejected credentials', {
+          email: email.toLowerCase(),
+          error: error?.message
+        });
+      } catch (error) {
+        console.error('[auth] Supabase authentication failed', error);
+        authDebugLog('Supabase authentication threw error', {
+          email: email.toLowerCase(),
+          error: error instanceof Error ? error.message : 'unknown'
+        });
+      }
+    }
+
+    const devUser = resolveDevelopmentUser(email, password, rememberValue);
+    if (devUser) {
+      authDebugLog('Using development fallback user', {
+        email: devUser.email,
+        role: devUser.role
+      });
+      return devUser;
+    }
+
     if (!supabaseClient) {
+      authDebugLog('Supabase client unavailable during sign-in attempt', {
+        email: email.toLowerCase()
+      });
       throw new AuthConfigurationError('Supabase client is not configured');
     }
 
-    const { email, password, remember } = parsed.data;
-
-    const { data, error } = await supabaseClient.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error || !data.user) {
-      console.warn('[auth] Invalid credentials provided', error);
-      return null;
-    }
-
-    const user = data.user;
-    const role = (user.user_metadata?.role as string) ?? 'reader';
-
-    return {
-      id: user.id,
-      email: user.email ?? undefined,
-      name: (user.user_metadata?.full_name as string) ?? user.email ?? undefined,
-      role,
-      rememberMe: parseRememberValue(remember),
-    } satisfies AuthenticatedUser;
+    return null;
   },
 });
 
@@ -435,4 +569,3 @@ export function getEnabledSocialProviders(): string[] {
     .filter((provider) => provider.id !== 'credentials')
     .map((provider) => provider.id);
 }
-

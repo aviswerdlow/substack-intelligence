@@ -3,6 +3,13 @@ import { getToken } from 'next-auth/jwt';
 
 type RouteMatcher = (req: NextRequest) => boolean;
 
+const AUTH_DEBUG_ENABLED = process.env.AUTH_DEBUG === 'true';
+const authDebug = (...messages: unknown[]) => {
+  if (AUTH_DEBUG_ENABLED) {
+    console.log('[auth][middleware]', ...messages);
+  }
+};
+
 const createRouteMatcher = (patterns: string[]): RouteMatcher => {
   const matchers = patterns.map(pattern => {
     const normalized = pattern
@@ -43,21 +50,56 @@ const isPublicRoute = createRouteMatcher([
  * Enhanced security middleware with debug mode protection
  */
 export async function middleware(req: NextRequest) {
+  authDebug('Incoming request', {
+    pathname: req.nextUrl.pathname,
+    method: req.method,
+    vercelEnv: process.env.VERCEL_ENV || 'local',
+    nodeEnv: process.env.NODE_ENV
+  });
+
   const securityResponse = applySecurityPolicies(req);
   if (securityResponse) {
+    authDebug('Security policy intercepted request', {
+      pathname: req.nextUrl.pathname
+    });
     return securityResponse;
   }
 
-  if (!isPublicRoute(req)) {
+  const isRoutePublic = isPublicRoute(req);
+  authDebug('Route evaluation', {
+    pathname: req.nextUrl.pathname,
+    isPublic: isRoutePublic
+  });
+
+  if (!isRoutePublic) {
+    const sessionCookie =
+      req.cookies.get('__Secure-next-auth.session-token') ??
+      req.cookies.get('next-auth.session-token');
+
+    authDebug('Attempting to resolve token', {
+      pathname: req.nextUrl.pathname,
+      hasSessionCookie: Boolean(sessionCookie),
+      cookieName: sessionCookie?.name
+    });
+
     const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
     if (!token) {
+      authDebug('No session token found via getToken', {
+        pathname: req.nextUrl.pathname,
+        cookiePresent: Boolean(sessionCookie)
+      });
+
       if (req.nextUrl.pathname.startsWith('/api')) {
         const response = NextResponse.json(
           { error: 'Unauthorized', message: 'Authentication is required to access this resource.' },
           { status: 401 }
         );
         applySecurityHeaders(response, req);
+        authDebug('Blocking API request due to missing authentication', {
+          pathname: req.nextUrl.pathname,
+          method: req.method
+        });
         return response;
       }
 
@@ -65,12 +107,30 @@ export async function middleware(req: NextRequest) {
       signInUrl.searchParams.set('redirect_url', req.url);
       const response = NextResponse.redirect(signInUrl);
       applySecurityHeaders(response, req);
+      authDebug('Redirecting browser to sign-in', {
+        pathname: req.nextUrl.pathname,
+        redirect: signInUrl.toString()
+      });
       return response;
     }
+
+    authDebug('Valid session token detected', {
+      pathname: req.nextUrl.pathname,
+      userId: token.sub,
+      role: (token as { role?: string }).role,
+      rememberMe: (token as { rememberMe?: boolean }).rememberMe
+    });
+  } else {
+    authDebug('Public route bypass', {
+      pathname: req.nextUrl.pathname
+    });
   }
 
   const response = NextResponse.next();
   applySecurityHeaders(response, req);
+  authDebug('Continuing request pipeline', {
+    pathname: req.nextUrl.pathname
+  });
   return response;
 }
 
