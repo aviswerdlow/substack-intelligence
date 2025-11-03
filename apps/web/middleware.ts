@@ -28,23 +28,22 @@ const createRouteMatcher = (patterns: string[]): RouteMatcher => {
 
 const isPublicRoute = createRouteMatcher([
   '/',
-  '/sign-in(.*)',
-  '/sign-up(.*)',
+  '/sign-in*',
+  '/sign-up*',
   '/login',
   '/register',
   '/forgot-password',
   '/api/health',
-  '/api/monitoring/(.*)',
-  '/api/analytics/(.*)',
+  '/api/monitoring/*',
+  '/api/analytics/*',
   '/api/test-metrics',
-  '/api/test/(.*)',
-  '/api/emails/(.*)',
-  '/api/admin/(.*)',
-  '/api/setup/(.*)',
-  '/api/auth/gmail',
-  '/api/auth/gmail/(.*)',
+  '/api/test/*',
+  '/api/emails/*',
+  '/api/admin/*',
+  '/api/setup/*',
+  '/api/auth/gmail*',
   '/api/auth/_log',
-  '/api/auth/(.*)'
+  '/api/auth/*'
 ]);
 
 /**
