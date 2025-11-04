@@ -257,6 +257,7 @@ const buildAdapter = (): Adapter | undefined => {
   return SupabaseAdapter({
     url: SUPABASE_URL,
     secret: SUPABASE_SERVICE_ROLE_KEY,
+    schema: 'public',
   });
 };
 
