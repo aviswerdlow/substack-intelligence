@@ -100,6 +100,9 @@ const createSupabaseClient = (key?: string, options?: Parameters<typeof createCl
       autoRefreshToken: false,
       persistSession: false,
     },
+    db: {
+      schema: 'public',
+    },
     ...options,
   });
 };
