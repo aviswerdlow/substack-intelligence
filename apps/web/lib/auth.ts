@@ -268,6 +268,8 @@ const buildSocialProviders = (): Provider[] => {
       GoogleProvider({
         clientId: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        checks: ['pkce'],
+        state: false,
         allowDangerousEmailAccountLinking: false,
         authorization: {
           params: {
