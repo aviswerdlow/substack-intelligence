@@ -578,7 +578,7 @@ data: {"type":"complete","total":15}
   },
   "ai_settings": {
     "provider": "anthropic",
-    "model": "claude-3-5-sonnet-20241022"
+    "model": "claude-sonnet-4-5"
   },
   "report_settings": {
     "defaultFormat": "pdf",

@@ -337,7 +337,7 @@ expect(axiomMocks.assertLoggedEvent('user.signup')).toBe(true);
 expect(gmailMocks.listMessages).toHaveBeenCalledTimes(1);
 expect(externalServicesMocks.createAnthropicMessage).toHaveBeenCalledWith(
   expect.objectContaining({
-    model: 'claude-3-5-sonnet-20241022'
+    model: 'claude-sonnet-4-5'
   })
 );
 ```

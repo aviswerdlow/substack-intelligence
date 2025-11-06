@@ -76,7 +76,7 @@ export const tooltipContent: Record<string, {
   'ai.model': {
     title: 'AI Model',
     description: 'Specific model version to use for processing',
-    examples: ['Claude 3.5 Sonnet = Fast & smart', 'GPT-4 Turbo = Latest OpenAI'],
+    examples: ['Claude Sonnet 4.5 = Fast & smart', 'GPT-4 Turbo = Latest OpenAI'],
     warning: 'Different models have different capabilities and costs',
     learnMore: '/docs/ai-models',
   },

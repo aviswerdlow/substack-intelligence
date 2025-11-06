@@ -43,7 +43,7 @@ export async function GET() {
     try {
       console.log('[Test] Making test API call to Claude...');
       const response = await client.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5',
         max_tokens: 100,
         temperature: 0,
         system: 'You are a helpful assistant. Respond with exactly: "API connection successful"',
@@ -92,7 +92,7 @@ export async function GET() {
         `;
         
         const extractionResponse = await client.messages.create({
-          model: 'claude-3-5-sonnet-20241022',
+          model: 'claude-sonnet-4-5',
           max_tokens: 500,
           temperature: 0.2,
           system: 'Extract company names from the text and return as JSON array.',
@@ -175,7 +175,7 @@ export async function POST(request: Request) {
     console.log(`[Test] Testing extraction with content length: ${content.length}`);
     
     const response = await client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-5',
       max_tokens: 2000,
       temperature: 0.2,
       system: `Extract company names from newsletter content. Return as JSON with this structure:

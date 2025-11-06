@@ -201,7 +201,7 @@ This is the primary data flow that powers the entire platform.
 │  │    → If cached: Return cached companies (skip AI)   │    │
 │  │                                                     │    │
 │  │ 4. Call Anthropic Claude API:                       │    │
-│  │    Model: claude-3-5-sonnet-20241022                │    │
+│  │    Model: claude-sonnet-4-5                │    │
 │  │    System: [Extraction prompt with rules]           │    │
 │  │    User: clean_text from email                      │    │
 │  │    Temperature: 0.3 (deterministic)                 │    │

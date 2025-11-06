@@ -6,6 +6,18 @@ import { ExtractionResultSchema, hashContent } from '@substack-intelligence/shar
 
 const REDIS_PLACEHOLDER_MARKERS = ['your-redis', 'example', 'localhost', 'changeme'];
 
+const DEFAULT_CLAUDE_MODEL =
+  (process.env.ANTHROPIC_MODEL && process.env.ANTHROPIC_MODEL.trim()) || 'claude-sonnet-4-5';
+
+const CLAUDE_MODEL_ALIASES = new Map<string, string>(
+  Object.entries({
+    'claude-3-5-sonnet-20241022': 'claude-sonnet-4-5',
+    'claude-3-5-sonnet-latest': 'claude-sonnet-4-5',
+    'claude-3-sonnet-latest': 'claude-3-sonnet-20240229',
+    'claude-3-opus-latest': 'claude-3-opus-20240229',
+  }),
+);
+
 export class ClaudeExtractor {
   private client!: Anthropic;
   private ratelimit: Ratelimit | null = null;
@@ -16,6 +28,7 @@ export class ClaudeExtractor {
   private rateLimitDisabled: boolean = false;
   private cacheDisabled: boolean = false;
   private isInitialized: boolean = false;
+  private readonly model: string;
   
   constructor(client?: Anthropic) {
     try {
@@ -31,6 +44,8 @@ export class ClaudeExtractor {
       
       // Initialize optional services
       this.initializeOptionalServices();
+      this.model = this.resolveModel(DEFAULT_CLAUDE_MODEL);
+      console.log('[ClaudeExtractor] 🎯 Preferred model resolved to', this.model);
       
     } catch (error) {
       console.error('[ClaudeExtractor] ❌ Constructor failed:', error);
@@ -79,6 +94,18 @@ export class ClaudeExtractor {
     }
     this.cache = null;
     this.cacheDisabled = true;
+  }
+
+  private resolveModel(preferred?: string | null): string {
+    const raw = preferred?.trim() || DEFAULT_CLAUDE_MODEL;
+    const normalized = raw.toLowerCase();
+    const mapped = CLAUDE_MODEL_ALIASES.get(normalized) || raw;
+
+    if (mapped !== raw) {
+      console.warn('[ClaudeExtractor] ℹ️ Mapping deprecated Claude model', raw, '→', mapped);
+    }
+
+    return mapped;
   }
 
   private initializeProductionClient() {
@@ -203,7 +230,7 @@ export class ClaudeExtractor {
     try {
       console.log('[ClaudeExtractor] 🚀 Making API call to Claude...');
       console.log('[ClaudeExtractor] 📊 Request details:', {
-        model: 'claude-3-5-sonnet-20241022',
+        model: this.model,
         max_tokens: 4000,
         temperature: 0.2,
         content_preview: content.slice(0, 100) + '...',
@@ -224,7 +251,7 @@ export class ClaudeExtractor {
           console.log(`[ClaudeExtractor] 🔄 Attempt ${attempt}/${this.maxRetries}`);
           
           response = await this.client.messages.create({
-            model: 'claude-3-5-sonnet-20241022',
+            model: this.model,
             max_tokens: 4000,
             temperature: 0.2,
             system: this.getSystemPrompt(),
@@ -332,7 +359,7 @@ export class ClaudeExtractor {
           ...parsedResponse.metadata,
           processingTime: Date.now() - startTime,
           tokenCount: response.usage?.input_tokens || 0,
-          modelVersion: 'claude-3-5-sonnet-20241022'
+          modelVersion: this.model
         }
       };
       
@@ -406,7 +433,7 @@ export class ClaudeExtractor {
         metadata: {
           processingTime,
           tokenCount: 0,
-          modelVersion: 'claude-3-5-sonnet-20241022',
+          modelVersion: this.model,
           error: error instanceof Error ? error.message : 'Unknown error',
           errorType: error?.constructor?.name || 'UnknownError',
           errorStatus: error?.status || null,
@@ -460,7 +487,7 @@ You must return ONLY a valid JSON object with this exact structure:
   "metadata": {
     "processingTime": 0,
     "tokenCount": 0,
-    "modelVersion": "claude-3-5-sonnet-20241022"
+    "modelVersion": "${this.model}"
   }
 }
 
@@ -487,7 +514,7 @@ EXTRACTION RULES:
   "metadata": {
     "processingTime": 0,
     "tokenCount": 0,
-    "modelVersion": "claude-3-5-sonnet-20241022"
+    "modelVersion": "${this.model}"
   }
 }
 

@@ -86,7 +86,7 @@ This document outlines the comprehensive improvements made to the test infrastru
 ```typescript
 const anthropic = new Anthropic({ apiKey: 'test-key' });
 const response = await anthropic.messages.create({
-  model: 'claude-3-5-sonnet-20241022',
+  model: 'claude-sonnet-4-5',
   messages: [{ role: 'user', content: 'Extract companies' }]
 });
 // Returns realistic mock response with JSON company data

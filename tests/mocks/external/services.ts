@@ -192,7 +192,7 @@ class ExternalServicesMocks {
       id: 'msg_test_id',
       type: 'message' as const,
       role: 'assistant' as const,
-      model: params.model || 'claude-3-5-sonnet-20241022',
+      model: params.model || 'claude-sonnet-4-5',
       content: [{
         type: 'text' as const,
         text: JSON.stringify({
@@ -200,7 +200,7 @@ class ExternalServicesMocks {
           metadata: {
             processingTime: 1000,
             tokenCount: 100,
-            modelVersion: params.model || 'claude-3-5-sonnet-20241022'
+            modelVersion: params.model || 'claude-sonnet-4-5'
           }
         })
       }],
@@ -294,7 +294,7 @@ class ExternalServicesMocks {
         id: 'msg_test_success',
         type: 'message',
         role: 'assistant',
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5',
         content: [{
           type: 'text',
           text: responseText || JSON.stringify({
@@ -309,7 +309,7 @@ class ExternalServicesMocks {
             metadata: {
               processingTime: 1200,
               tokenCount: 150,
-              modelVersion: 'claude-3-5-sonnet-20241022'
+              modelVersion: 'claude-sonnet-4-5'
             }
           })
         }],

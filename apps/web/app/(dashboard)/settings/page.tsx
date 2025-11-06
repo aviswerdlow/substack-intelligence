@@ -39,7 +39,7 @@ import { EmailPreferencesCard } from '@/components/settings/EmailPreferencesCard
 // AI Model mappings for each provider
 const AI_MODELS = {
   anthropic: [
-    { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+    { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
     { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
     { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' },
   ],
@@ -962,7 +962,7 @@ function SettingsPageContent() {
                       <div>
                         <Label>Model</Label>
                         <Select
-                          value={settings?.ai?.model || 'claude-3-5-sonnet-20241022'}
+                          value={settings?.ai?.model || 'claude-sonnet-4-5'}
                           onValueChange={(value) => setSettings((prev: any) => ({
                             ...prev,
                             ai: { ...prev.ai, model: value }

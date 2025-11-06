@@ -38,7 +38,7 @@ test.describe('Settings - Add Company E2E', () => {
               },
               ai: {
                 provider: 'anthropic',
-                model: 'claude-3-5-sonnet-20241022',
+                model: 'claude-sonnet-4-5',
                 temperature: 0.7,
                 maxTokens: 4096,
                 enableEnrichment: true,
@@ -312,7 +312,7 @@ test.describe('Settings - Add Company E2E', () => {
               account: { name: 'Test User', email: 'test@example.com', role: 'User', timezone: 'UTC' },
               companies: { tracking: [], autoDetect: true, minimumMentions: 3 },
               newsletters: { sources: [], autoSubscribe: true, digestFrequency: 'weekly' },
-              ai: { provider: 'anthropic', model: 'claude-3-5-sonnet-20241022', temperature: 0.7, maxTokens: 4096, enableEnrichment: true, apiKey: '', anthropicApiKey: '', openaiApiKey: '' },
+              ai: { provider: 'anthropic', model: 'claude-sonnet-4-5', temperature: 0.7, maxTokens: 4096, enableEnrichment: true, apiKey: '', anthropicApiKey: '', openaiApiKey: '' },
               email: { provider: 'gmail', connected: false, syncFrequency: '15min', lastSync: null, autoProcess: true, retentionDays: 90 },
               reports: { defaultFormat: 'pdf', includeCharts: true, includeSentiment: true, autoGenerate: { daily: false, weekly: false, monthly: false }, deliveryTime: '09:00', recipients: [] },
               notifications: { email: { enabled: true, criticalOnly: false, dailyDigest: true }, inApp: { enabled: true, soundEnabled: false }, thresholds: { negativeSentiment: -0.5, mentionVolume: 10, competitorMentions: true } },

@@ -2,6 +2,28 @@ import { createServiceRoleClient } from '@substack-intelligence/database';
 import { clearGmailTokens, fetchGmailTokenState, persistGmailTokens } from '@substack-intelligence/lib/gmail-tokens';
 import { mapToMissingUserIdColumnError, MissingUserIdColumnError } from './supabase-errors';
 
+const CLAUDE_MODEL_ALIASES: Record<string, string> = {
+  'claude-3-5-sonnet-20241022': 'claude-sonnet-4-5',
+  'claude-3-5-sonnet-latest': 'claude-sonnet-4-5',
+};
+
+const normalizeAiSettings = (ai: any | undefined | null) => {
+  if (!ai) {
+    return ai;
+  }
+
+  if (ai.provider === 'anthropic') {
+    const rawModel = ai.model || 'claude-sonnet-4-5';
+    const normalizedModel = CLAUDE_MODEL_ALIASES[rawModel] || rawModel;
+    return {
+      ...ai,
+      model: normalizedModel,
+    };
+  }
+
+  return ai;
+};
+
 export interface UserSettings {
   id?: string;
   user_id: string;
@@ -245,9 +267,9 @@ export class UserSettingsService {
           })) || [],
           ...(settings?.company_settings || { autoDetect: true, minimumMentions: 3 })
         },
-        ai: settings?.ai_settings || {
+        ai: normalizeAiSettings(settings?.ai_settings) || {
           provider: 'anthropic',
-          model: 'claude-3-5-sonnet-20241022',
+          model: 'claude-sonnet-4-5',
           apiKey: '',
           anthropicApiKey: '',
           openaiApiKey: '',
@@ -313,7 +335,7 @@ export class UserSettingsService {
       const updates: any = {};
       
       if (settings.account) updates.account_settings = settings.account;
-      if (settings.ai) updates.ai_settings = settings.ai;
+      if (settings.ai) updates.ai_settings = normalizeAiSettings(settings.ai);
       if (settings.email) updates.email_settings = settings.email;
       if (settings.reports) updates.report_settings = settings.reports;
       if (settings.notifications) updates.notification_settings = settings.notifications;

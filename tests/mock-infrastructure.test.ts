@@ -97,13 +97,13 @@ describe('Centralized Mock Infrastructure', () => {
       externalServicesMocks.mockAnthropicSuccess(testResponse);
 
       const result = await externalServicesMocks.createAnthropicMessage({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5',
         max_tokens: 1000,
         messages: [{ role: 'user', content: 'Extract companies from this text' }]
       });
 
       expect(result.content[0].text).toBe(testResponse);
-      expect(result.model).toBe('claude-3-5-sonnet-20241022');
+      expect(result.model).toBe('claude-sonnet-4-5');
     });
 
     it('should mock OpenAI embeddings', async () => {
@@ -143,7 +143,7 @@ describe('Centralized Mock Infrastructure', () => {
 
       await expect(
         externalServicesMocks.createAnthropicMessage({
-          model: 'claude-3-5-sonnet-20241022',
+          model: 'claude-sonnet-4-5',
           max_tokens: 1000,
           messages: [{ role: 'user', content: 'test' }]
         })
@@ -442,7 +442,7 @@ describe('Centralized Mock Infrastructure', () => {
       expect(companies).toHaveLength(2);
 
       const aiResult = await externalServicesMocks.createAnthropicMessage({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5',
         max_tokens: 1000,
         messages: [{ role: 'user', content: 'Analyze companies' }]
       });

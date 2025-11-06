@@ -167,7 +167,7 @@ export function ApiKeyValidator({
         color: 'purple',
         docsUrl: 'https://console.anthropic.com/account/keys',
         keyFormat: 'sk-ant-api03-...',
-        models: ['Claude 3.5 Sonnet', 'Claude 3 Opus', 'Claude 3 Haiku'],
+        models: ['Claude Sonnet 4.5', 'Claude 3 Opus', 'Claude 3 Haiku'],
       };
     } else {
       return {
@@ -442,7 +442,7 @@ export function ApiCostEstimator({
   const calculateCost = () => {
     const pricing = {
       anthropic: {
-        'claude-3-5-sonnet': { input: 0.003, output: 0.015 },
+        'claude-sonnet-4-5': { input: 0.003, output: 0.015 },
         'claude-3-opus': { input: 0.015, output: 0.075 },
         'claude-3-haiku': { input: 0.00025, output: 0.00125 },
       },

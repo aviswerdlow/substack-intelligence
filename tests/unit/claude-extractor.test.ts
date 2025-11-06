@@ -27,7 +27,7 @@ describe('ClaudeExtractor', () => {
     id: 'msg_test_id',
     type: 'message',
     role: 'assistant',
-    model: 'claude-3-5-sonnet-20241022',
+    model: 'claude-sonnet-4-5',
     content: [{
       type: 'text',
       text: JSON.stringify({
@@ -96,7 +96,7 @@ describe('ClaudeExtractor', () => {
       });
       
       expect(result.metadata).toBeDefined();
-      expect(result.metadata.modelVersion).toBe('claude-3-5-sonnet-20241022');
+      expect(result.metadata.modelVersion).toBe('claude-sonnet-4-5');
       expect(typeof result.metadata.processingTime).toBe('number');
     });
 
@@ -106,7 +106,7 @@ describe('ClaudeExtractor', () => {
         id: 'msg_test_empty',
         type: 'message',
         role: 'assistant',
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5',
         content: [{
           type: 'text',
           text: JSON.stringify({
@@ -114,7 +114,7 @@ describe('ClaudeExtractor', () => {
             metadata: {
               processingTime: 500,
               tokenCount: 50,
-              modelVersion: 'claude-3-5-sonnet-20241022'
+              modelVersion: 'claude-sonnet-4-5'
             }
           })
         }],
@@ -147,7 +147,7 @@ describe('ClaudeExtractor', () => {
         id: 'test-message-id',
         type: 'message',
         role: 'assistant',
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5',
         content: [{
           type: 'text',
           text: 'Invalid JSON response'
@@ -172,7 +172,7 @@ describe('ClaudeExtractor', () => {
         id: 'msg_test_validation',
         type: 'message',
         role: 'assistant',
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5',
         content: [{
           type: 'text',
           text: JSON.stringify({
@@ -188,7 +188,7 @@ describe('ClaudeExtractor', () => {
             metadata: {
               processingTime: 1000,
               tokenCount: 100,
-              modelVersion: 'claude-3-5-sonnet-20241022'
+              modelVersion: 'claude-sonnet-4-5'
             }
           })
         }],

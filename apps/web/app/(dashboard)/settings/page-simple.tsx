@@ -27,7 +27,7 @@ import {
 // AI Model mappings for each provider
 const AI_MODELS = {
   anthropic: [
-    { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+    { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
     { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
     { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' },
   ],
@@ -52,7 +52,7 @@ export default function SettingsPage() {
     },
     ai: {
       provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-5',
       apiKey: '',
       temperature: 0.7,
       maxTokens: 4096,

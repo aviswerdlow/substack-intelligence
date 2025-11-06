@@ -66,7 +66,7 @@
 #### Sub-features:
 
 - **Claude Integration**
-  - Claude 3.5 Sonnet model for high-accuracy extraction
+  - Claude Sonnet 4.5 model for high-accuracy extraction
   - Structured JSON output with validation
   - Configurable timeout (default 60s)
   - Retry logic with exponential backoff (max 5 retries)
@@ -852,7 +852,7 @@
 
 - **Claude SDK**
   - Official Anthropic SDK
-  - Claude 3.5 Sonnet model
+  - Claude Sonnet 4.5 model
   - Streaming support (if needed)
   - Timeout configuration
 
