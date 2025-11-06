@@ -1,6 +1,6 @@
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
-import { SupabaseAdapter } from '@auth/supabase-adapter';
 import type { Adapter } from 'next-auth/adapters';
+import { SupabaseAdapter } from '@auth/supabase-adapter';
 import type { Account, NextAuthOptions, User as NextAuthUser } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
@@ -9,12 +9,14 @@ import type { Provider } from 'next-auth/providers';
 import { NextRequest } from 'next/server';
 import { persistGmailTokens } from '@substack-intelligence/lib/gmail-tokens';
 import { checkRateLimit } from '@/lib/security/rate-limiting';
+import { createSupabaseEdgeAdapter } from '@/lib/auth/supabase-edge-adapter';
 import { z } from 'zod';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+const SUPABASE_EDGE_SECRET = process.env.NEXTAUTH_SUPABASE_EDGE_SECRET;
 
 const AUTH_DEBUG_ENABLED = process.env.AUTH_DEBUG === 'true';
 const authDebugLog = (...messages: unknown[]) => {
@@ -47,6 +49,8 @@ const DEVELOPMENT_AUTH_ENABLED =
     isPlaceholderValue(SUPABASE_SERVICE_ROLE_KEY));
 
 let hasLoggedDevelopmentAuthFallback = false;
+let lastAdapterSource: 'edge' | 'postgrest' | 'disabled' = 'disabled';
+export const getAuthAdapterSource = () => lastAdapterSource;
 
 authDebugLog('Auth configuration detected', {
   nodeEnv: process.env.NODE_ENV,
@@ -241,6 +245,33 @@ async function enforceAuthRateLimit(request?: Request, endpoint: string = 'auth/
 }
 
 const buildAdapter = (): Adapter | undefined => {
+  const hasEdgeSecret = Boolean(SUPABASE_EDGE_SECRET);
+  const edgeSecretValid = hasEdgeSecret && !isPlaceholderValue(SUPABASE_EDGE_SECRET);
+
+  authDebugLog('Supabase edge adapter check', {
+    hasEdgeSecret,
+    edgeSecretValid,
+    edgeSecretLength: SUPABASE_EDGE_SECRET?.length ?? 0,
+  });
+
+  if (edgeSecretValid) {
+    authDebugLog('Supabase edge adapter enabled');
+    try {
+      lastAdapterSource = 'edge';
+      return createSupabaseEdgeAdapter();
+    } catch (error) {
+      console.error('[auth] Failed to configure Supabase edge adapter', error);
+    }
+  } else {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(
+        '[auth] Supabase edge adapter disabled: NEXTAUTH_SUPABASE_EDGE_SECRET missing or invalid in production environment',
+      );
+    } else {
+      authDebugLog('Supabase edge adapter disabled: missing secret in non-production');
+    }
+  }
+
   if (
     !SUPABASE_URL ||
     !SUPABASE_SERVICE_ROLE_KEY ||
@@ -250,11 +281,14 @@ const buildAdapter = (): Adapter | undefined => {
     console.warn('[auth] Supabase adapter disabled: missing credentials');
     authDebugLog('Supabase adapter disabled', {
       hasSupabaseUrl: Boolean(SUPABASE_URL) && !isPlaceholderValue(SUPABASE_URL),
-      hasServiceRoleKey: Boolean(SUPABASE_SERVICE_ROLE_KEY) && !isPlaceholderValue(SUPABASE_SERVICE_ROLE_KEY)
+      hasServiceRoleKey: Boolean(SUPABASE_SERVICE_ROLE_KEY) && !isPlaceholderValue(SUPABASE_SERVICE_ROLE_KEY),
+      hasEdgeSecret: Boolean(SUPABASE_EDGE_SECRET) && !isPlaceholderValue(SUPABASE_EDGE_SECRET)
     });
+    lastAdapterSource = 'disabled';
     return undefined;
   }
 
+  lastAdapterSource = 'postgrest';
   authDebugLog('Supabase adapter enabled');
 
   return SupabaseAdapter({

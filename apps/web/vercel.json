@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "installCommand": "pnpm install --no-frozen-lockfile --registry https://r.cnpmjs.org",
+  "installCommand": "corepack enable pnpm && corepack use pnpm@8.15.6 && cd ../.. && pnpm install --no-frozen-lockfile",
   "buildCommand": "cd ../.. && pnpm run build --filter=web",
   "outputDirectory": ".next",
   "devCommand": "pnpm run dev",

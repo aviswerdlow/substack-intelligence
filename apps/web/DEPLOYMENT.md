@@ -15,6 +15,9 @@ Make sure the following are set in Vercel Dashboard:
 - `SUPABASE_SERVICE_KEY` - Supabase service role key
 - `NEXTAUTH_SECRET` - Secret used to sign NextAuth sessions (min 32 chars)
 - `NEXTAUTH_URL` - Base URL for NextAuth callbacks
+- `NEXTAUTH_SUPABASE_EDGE_SECRET` - Shared secret used by the Supabase Edge proxy for NextAuth
+- `NEXTAUTH_SUPABASE_EDGE_URL` *(optional)* - Override URL for the NextAuth Edge proxy (defaults to `<project>.functions.supabase.co/nextauth-proxy`)
+- `NEXTAUTH_SUPABASE_EDGE_FUNCTION_NAME` *(optional)* - Override the deployed function name if it differs from `nextauth-proxy`
 
 ## Google OAuth Setup Checklist
 - [ ] Gmail API enabled in Google Cloud Console
