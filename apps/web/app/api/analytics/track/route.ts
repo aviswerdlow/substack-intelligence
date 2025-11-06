@@ -19,6 +19,9 @@ const MAX_PAYLOAD_SIZE = 1024 * 32; // 32kb
 
 export async function POST(request: NextRequest) {
   try {
+    if (!process.env.ENABLE_ANALYTICS || process.env.ENABLE_ANALYTICS !== 'true') {
+      return NextResponse.json({ success: true, skipped: true, reason: 'Analytics disabled' }, { status: 202 });
+    }
     const rawBody = await request.text();
 
     if (rawBody.length > MAX_PAYLOAD_SIZE) {

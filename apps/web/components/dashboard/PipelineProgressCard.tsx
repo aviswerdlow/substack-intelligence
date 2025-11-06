@@ -54,6 +54,8 @@ interface PipelineUpdate {
   companiesExtracted?: number;
 }
 
+const RUNNING_PIPELINE_STATUSES = new Set(['connecting', 'fetching', 'extracting', 'processing', 'processing_email']);
+
 export function PipelineProgressCard() {
   const { toast } = useToast();
   const [isRunning, setIsRunning] = useState(false);
@@ -222,7 +224,56 @@ export function PipelineProgressCard() {
     setActivityLog(prev => [message, ...prev].slice(0, 50));
   };
 
+  const ensureStreamConnected = useCallback(() => {
+    if (!eventSource) {
+      connectToStream();
+    }
+  }, [eventSource, connectToStream]);
+
+  const applyPipelineSnapshot = useCallback((snapshot: any) => {
+    setIsRunning(true);
+    setProgress(snapshot?.progress ?? 5);
+    setStatusMessage(snapshot?.message || 'Pipeline already running…');
+    if (snapshot?.stats) {
+      setStats({
+        emailsFetched: snapshot.stats.emailsFetched ?? 0,
+        companiesExtracted: snapshot.stats.companiesExtracted ?? 0,
+        newCompanies: snapshot.stats.newCompanies ?? 0,
+        totalMentions: snapshot.stats.totalMentions ?? 0,
+        failedEmails: snapshot.stats.failedEmails ?? 0,
+      });
+    }
+    addActivityLog('ℹ️ Pipeline already running, streaming updates instead of starting a new run.');
+  }, [addActivityLog]);
+
+  const checkExistingPipelineRun = useCallback(async () => {
+    try {
+      const response = await fetch('/api/pipeline/status', { cache: 'no-store' });
+      if (!response.ok) {
+        return false;
+      }
+      const json = await response.json();
+      const snapshot = json?.data;
+      if (snapshot && RUNNING_PIPELINE_STATUSES.has(snapshot.status)) {
+        applyPipelineSnapshot(snapshot);
+        ensureStreamConnected();
+        toast({
+          title: 'Pipeline Already Running',
+          description: 'We are already processing your inbox. Streaming live updates instead.',
+        });
+        return true;
+      }
+    } catch (error) {
+      console.warn('[PipelineProgressCard] Unable to check pipeline status before start', error);
+    }
+    return false;
+  }, [applyPipelineSnapshot, ensureStreamConnected, toast]);
+
   const runPipeline = async () => {
+    if (await checkExistingPipelineRun()) {
+      return;
+    }
+
     setIsRunning(true);
     setProgress(5);
     setStatusMessage('Starting pipeline...');
