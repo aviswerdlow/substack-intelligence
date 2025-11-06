@@ -32,4 +32,3 @@ CREATE TABLE IF NOT EXISTS analytics_page_views (
 CREATE INDEX IF NOT EXISTS analytics_page_views_user_idx ON analytics_page_views (user_id);
 CREATE INDEX IF NOT EXISTS analytics_page_views_path_idx ON analytics_page_views (path);
 CREATE INDEX IF NOT EXISTS analytics_page_views_created_idx ON analytics_page_views (created_at DESC);
-
