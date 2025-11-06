@@ -163,8 +163,14 @@ export class GmailConnector {
       }
       
       // Build Gmail search query
+      const sourceFilters = [
+        'from:(substack.com OR substackmail.com)',
+        'list:substack.com',
+        '"via Substack"'
+      ];
+
       const query = [
-        'from:substack.com',
+        `(${sourceFilters.join(' OR ')})`,
         `after:${this.formatGmailDate(startDate)}`,
         `before:${this.formatGmailDate(endDate)}`,
         '-in:spam',
@@ -317,7 +323,8 @@ export class GmailConnector {
       }
       
       // Extract newsletter name from sender
-      const newsletterName = this.extractNewsletterName(sender);
+      const listId = this.getHeader(parsed, 'List-Id') || '';
+      const newsletterName = this.extractNewsletterName(sender, listId);
       
       // Extract HTML and convert to text
       const html = await this.extractHTML(parsed);
@@ -510,7 +517,26 @@ export class GmailConnector {
     return header?.value || null;
   }
 
-  private extractNewsletterName(sender: string): string {
+  private extractNewsletterName(sender: string, listId?: string): string {
+    if (listId) {
+      const listMatch = listId.match(/<([^>]+)>/);
+      if (listMatch) {
+        const rawList = listMatch[1];
+        const domainPart = rawList.includes('@') ? rawList.split('@')[1] : rawList;
+
+        if (domainPart.includes('substack.com')) {
+          const listValue = domainPart
+            .replace('.substack.com', '')
+            .replace(/[-_.]/g, ' ')
+            .trim();
+
+          if (listValue) {
+            return this.titleCase(listValue);
+          }
+        }
+      }
+    }
+
     // Extract newsletter name from sender email
     // e.g., "Morning Brew <crew@morningbrew.com>" -> "Morning Brew"
     const match = sender.match(/^(.+?)\s*<.*@.*substack\.com>/);

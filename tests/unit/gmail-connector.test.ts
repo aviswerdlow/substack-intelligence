@@ -166,7 +166,7 @@ describe('GmailConnector', () => {
       // Verify the Gmail list method was called
       expect(gmailMocks.listMessages).toHaveBeenCalledWith({
         userId: 'me',
-        q: expect.stringContaining('from:substack.com'),
+        q: expect.stringContaining('(from:(substack.com OR substackmail.com)'),
         maxResults: 100,
         pageToken: undefined
       });

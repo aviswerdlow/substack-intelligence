@@ -189,7 +189,7 @@ describe('Centralized Mock Infrastructure', () => {
 
       const listResult = await gmailMocks.listMessages({
         userId: 'me',
-        q: 'from:substack.com'
+        q: '(from:(substack.com OR substackmail.com) OR list:substack.com OR "via Substack")'
       });
 
       expect(listResult.data.messages).toHaveLength(2);
